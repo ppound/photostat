@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PhotoVault - EXIF Image Search Desktop Application.
+"""PhotoStat - EXIF Image Search Desktop Application.
 
 A Windows 11 desktop application that indexes EXIF metadata from image files
 into OpenSearch and provides a searchable GUI with faceted results.

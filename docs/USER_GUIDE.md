@@ -1,6 +1,6 @@
-# PhotoVault User Guide
+# PhotoStat User Guide
 
-A complete guide to using PhotoVault for indexing and searching your image collection.
+A complete guide to using PhotoStat for indexing and searching your image collection.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ A complete guide to using PhotoVault for indexing and searching your image colle
 
 ### First Launch
 
-1. Start PhotoVault by running:
+1. Start PhotoStat by running:
    ```bash
    python3 main.py
    ```
@@ -43,7 +43,7 @@ A complete guide to using PhotoVault for indexing and searching your image colle
 
 ## Main Interface
 
-PhotoVault has three main tabs:
+PhotoStat has three main tabs:
 
 ### Search Tab
 The primary interface for finding images. Contains:
@@ -134,7 +134,7 @@ The progress bar shows:
 
 ### What Gets Indexed
 
-PhotoVault extracts and indexes:
+PhotoStat extracts and indexes:
 
 | Field | Description | Example |
 |-------|-------------|---------|
@@ -355,7 +355,7 @@ Access settings via **File → Settings**.
 | Use SSL | Unchecked | Enable for HTTPS connections |
 | Username | (empty) | Authentication username if required |
 | Password | (empty) | Authentication password if required |
-| Index Name | `photovault-images` | Name of the search index |
+| Index Name | `photostat-images` | Name of the search index |
 
 ### Testing Connection
 
@@ -433,7 +433,7 @@ If you move image files:
 
 ### Q: Why are some thumbnails not showing?
 
-**A:** PhotoVault extracts embedded thumbnails for RAW files. If no embedded preview exists, the thumbnail will show a placeholder. The full image can still be opened.
+**A:** PhotoStat extracts embedded thumbnails for RAW files. If no embedded preview exists, the thumbnail will show a placeholder. The full image can still be opened.
 
 ### Q: Can I index network drives?
 
@@ -448,7 +448,7 @@ sudo mount -t drvfs '\\server\share' /mnt/network
 
 ### Q: Does indexing modify my original images?
 
-**A:** No, PhotoVault only reads EXIF data. Your original images are never modified.
+**A:** No, PhotoStat only reads EXIF data. Your original images are never modified.
 
 ### Q: How much disk space does the index use?
 

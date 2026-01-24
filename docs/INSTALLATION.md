@@ -1,6 +1,6 @@
-# PhotoVault Installation Guide
+# PhotoStat Installation Guide
 
-This guide provides complete installation instructions for PhotoVault and all its dependencies.
+This guide provides complete installation instructions for PhotoStat and all its dependencies.
 
 ## Table of Contents
 
@@ -8,7 +8,7 @@ This guide provides complete installation instructions for PhotoVault and all it
 2. [Installing Python](#installing-python)
 3. [Installing ExifTool](#installing-exiftool)
 4. [Installing OpenSearch](#installing-opensearch)
-5. [Installing PhotoVault](#installing-photovault)
+5. [Installing PhotoStat](#installing-photostat)
 6. [Verifying Installation](#verifying-installation)
 7. [Troubleshooting](#troubleshooting)
 
@@ -272,14 +272,14 @@ To run OpenSearch automatically on Windows startup:
 
 ---
 
-## Installing PhotoVault
+## Installing PhotoStat
 
 ### Step 1: Clone or Download
 
 ```bash
 # Clone the repository
-git clone <repository-url> photovault
-cd photovault
+git clone <repository-url> photostat
+cd photostat
 
 # Or download and extract the ZIP file
 ```
@@ -310,7 +310,7 @@ pip install -r requirements.txt
 - `pyexiftool>=0.5.0` - ExifTool wrapper
 - `matplotlib>=3.7.0` - Charts and graphs
 
-### Step 4: Run PhotoVault
+### Step 4: Run PhotoStat
 
 ```bash
 python3 main.py
@@ -343,7 +343,7 @@ curl http://localhost:9200
 ```
 Should return JSON with cluster information
 
-### Run PhotoVault
+### Run PhotoStat
 
 ```bash
 python3 main.py
@@ -374,7 +374,7 @@ The application should start and show "Connected" in the status bar.
    curl http://localhost:9200
    ```
 2. Check if another service is using port 9200
-3. Verify OpenSearch configuration in PhotoVault settings
+3. Verify OpenSearch configuration in PhotoStat settings
 
 ### PyQt6 Display Issues on WSL
 
@@ -423,7 +423,7 @@ chmod -R 755 src/
 
 ---
 
-## Updating PhotoVault
+## Updating PhotoStat
 
 ```bash
 # Pull latest changes
@@ -440,10 +440,10 @@ python3 main.py
 
 ## Uninstalling
 
-### Remove PhotoVault
+### Remove PhotoStat
 ```bash
-# Delete the photovault directory
-rm -rf photovault/
+# Delete the photostat directory
+rm -rf photostat/
 
 # Or if using virtual environment, just delete the folder
 ```

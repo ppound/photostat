@@ -1,4 +1,4 @@
-"""Main application class for PhotoVault."""
+"""Main application class for PhotoStat."""
 
 import sys
 import os
@@ -8,14 +8,14 @@ from PyQt6.QtCore import Qt
 from .ui.main_window import MainWindow
 
 
-class PhotoVaultApp:
+class PhotoStatApp:
     """Main application class."""
 
     def __init__(self):
         """Initialize the application."""
         self.app = QApplication(sys.argv)
-        self.app.setApplicationName("PhotoVault")
-        self.app.setOrganizationName("PhotoVault")
+        self.app.setApplicationName("PhotoStat")
+        self.app.setOrganizationName("PhotoStat")
 
         # Load stylesheet
         self._load_stylesheet()
@@ -47,7 +47,7 @@ class PhotoVaultApp:
 
 def main():
     """Application entry point."""
-    app = PhotoVaultApp()
+    app = PhotoStatApp()
     sys.exit(app.run())
 
 

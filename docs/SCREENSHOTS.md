@@ -12,7 +12,7 @@ This document lists all screenshots referenced in the documentation. Use Windows
 5. Save as PNG in `docs/images/`
 
 ### Alternative: Full Window
-1. Click on the PhotoVault window
+1. Click on the PhotoStat window
 2. Press `Alt + Print Screen`
 3. Paste into Paint
 4. Save as PNG
@@ -25,7 +25,7 @@ This document lists all screenshots referenced in the documentation. Use Windows
 
 | Filename | Description | How to Capture |
 |----------|-------------|----------------|
-| `main-window.png` | Main PhotoVault window showing Search tab with results | Open app, perform a search, capture full window |
+| `main-window.png` | Main PhotoStat window showing Search tab with results | Open app, perform a search, capture full window |
 
 ### User Guide Screenshots
 
@@ -59,7 +59,7 @@ This document lists all screenshots referenced in the documentation. Use Windows
 
 Run through this checklist to capture all screenshots:
 
-1. [ ] Start PhotoVault with OpenSearch running
+1. [ ] Start PhotoStat with OpenSearch running
 2. [ ] Index some images if not already done
 3. [ ] **main-window.png**: Search tab with results
 4. [ ] **status-connected.png**: Crop status bar

@@ -81,7 +81,7 @@ class SettingsDialog(QDialog):
 
         # Index name
         self.index_edit = QLineEdit()
-        self.index_edit.setPlaceholderText("photovault-images")
+        self.index_edit.setPlaceholderText("photostat-images")
         index_layout.addRow("Index Name:", self.index_edit)
 
         layout.addWidget(index_group)
@@ -110,7 +110,7 @@ class SettingsDialog(QDialog):
         self.ssl_check.setChecked(os_config.get('use_ssl', False))
         self.username_edit.setText(os_config.get('username', ''))
         self.password_edit.setText(os_config.get('password', ''))
-        self.index_edit.setText(os_config.get('index_name', 'photovault-images'))
+        self.index_edit.setText(os_config.get('index_name', 'photostat-images'))
 
     def _save_and_accept(self):
         """Save configuration and close dialog."""
@@ -152,7 +152,7 @@ class SettingsDialog(QDialog):
                 username=self.username_edit.text().strip() or None,
                 password=self.password_edit.text() or None,
                 use_ssl=self.ssl_check.isChecked(),
-                index_name=self.index_edit.text().strip() or 'photovault-images'
+                index_name=self.index_edit.text().strip() or 'photostat-images'
             )
 
             success, message = service.test_connection()

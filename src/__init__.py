@@ -1,1 +1,1 @@
-# PhotoVault - EXIF Image Search Desktop App
+# PhotoStat - EXIF Image Search Desktop App

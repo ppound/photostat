@@ -1,4 +1,4 @@
-"""OpenSearch client wrapper for PhotoVault."""
+"""OpenSearch client wrapper for PhotoStat."""
 
 from typing import Dict, List, Any, Optional, Tuple
 from opensearchpy import OpenSearch, RequestsHttpConnection
@@ -57,7 +57,7 @@ class OpenSearchService:
         username: Optional[str] = None,
         password: Optional[str] = None,
         use_ssl: bool = False,
-        index_name: str = "photovault-images"
+        index_name: str = "photostat-images"
     ):
         """Initialize the OpenSearch service."""
         self.host = host

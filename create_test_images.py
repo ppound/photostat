@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create test images with EXIF metadata for testing PhotoVault."""
+"""Create test images with EXIF metadata for testing PhotoStat."""
 
 import os
 import subprocess

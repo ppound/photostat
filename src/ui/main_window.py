@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         """Set up the main window UI."""
-        self.setWindowTitle("PhotoVault - EXIF Image Search")
+        self.setWindowTitle("PhotoStat - EXIF Image Search")
         self.setMinimumSize(800, 600)
 
         # Restore window geometry from settings, or use default size
@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
                 'use_ssl': False,
                 'username': '',
                 'password': '',
-                'index_name': 'photovault-images'
+                'index_name': 'photostat-images'
             },
             'directories': []
         }
@@ -207,7 +207,7 @@ class MainWindow(QMainWindow):
             username=os_config.get('username') or None,
             password=os_config.get('password') or None,
             use_ssl=os_config.get('use_ssl', False),
-            index_name=os_config.get('index_name', 'photovault-images')
+            index_name=os_config.get('index_name', 'photostat-images')
         )
 
         # Update index panel's service reference
@@ -243,8 +243,8 @@ class MainWindow(QMainWindow):
         """Show the about dialog."""
         QMessageBox.about(
             self,
-            "About PhotoVault",
-            "PhotoVault - EXIF Image Search\n\n"
+            "About PhotoStat",
+            "PhotoStat - EXIF Image Search\n\n"
             "A desktop application for indexing and searching\n"
             "image EXIF metadata using OpenSearch.\n\n"
             "Built with PyQt6, pyexiftool, and opensearch-py."
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
 
     def _restore_window_geometry(self):
         """Restore window size and position from settings."""
-        settings = QSettings("PhotoVault", "PhotoVault")
+        settings = QSettings("PhotoStat", "PhotoStat")
         geometry = settings.value("window/geometry")
         state = settings.value("window/state")
 
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
 
     def _save_window_geometry(self):
         """Save window size and position to settings."""
-        settings = QSettings("PhotoVault", "PhotoVault")
+        settings = QSettings("PhotoStat", "PhotoStat")
         settings.setValue("window/geometry", self.saveGeometry())
         settings.setValue("window/state", self.saveState())
 

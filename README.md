@@ -1,8 +1,8 @@
-# PhotoVault - EXIF Image Search
+# PhotoStat - EXIF Image Search
 
 A desktop application for indexing and searching image EXIF metadata using OpenSearch.
 
-![PhotoVault Main Window](docs/images/main-window.png)
+![PhotoStat Main Window](docs/images/main-window.png)
 
 ## Features
 
@@ -34,7 +34,7 @@ A desktop application for indexing and searching image EXIF metadata using OpenS
 ## Documentation
 
 - [Installation Guide](docs/INSTALLATION.md) - Complete setup instructions
-- [User Guide](docs/USER_GUIDE.md) - How to use PhotoVault
+- [User Guide](docs/USER_GUIDE.md) - How to use PhotoStat
 
 ## Technology Stack
 
