@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QTabWidget, QStatusBar, QMenuBar, QMenu,
     QMessageBox, QSplitter, QLabel, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QByteArray, QSettings
 from PyQt6.QtGui import QAction
 
 from .search_panel import SearchPanel
@@ -41,7 +41,10 @@ class MainWindow(QMainWindow):
     def _setup_ui(self):
         """Set up the main window UI."""
         self.setWindowTitle("PhotoVault - EXIF Image Search")
-        self.setMinimumSize(1200, 800)
+        self.setMinimumSize(800, 600)
+
+        # Restore window geometry from settings, or use default size
+        self._restore_window_geometry()
 
         # Central widget
         central = QWidget()
@@ -348,8 +351,35 @@ class MainWindow(QMainWindow):
         """Update charts panel with data."""
         self.charts_panel.update_charts(aggregations, hits)
 
+    def _restore_window_geometry(self):
+        """Restore window size and position from settings."""
+        settings = QSettings("PhotoVault", "PhotoVault")
+        geometry = settings.value("window/geometry")
+        state = settings.value("window/state")
+
+        if geometry:
+            self.restoreGeometry(geometry)
+        else:
+            # Default size if no saved geometry
+            self.resize(1200, 800)
+            # Center on screen
+            screen = self.screen().availableGeometry()
+            x = (screen.width() - self.width()) // 2
+            y = (screen.height() - self.height()) // 2
+            self.move(x, y)
+
+        if state:
+            self.restoreState(state)
+
+    def _save_window_geometry(self):
+        """Save window size and position to settings."""
+        settings = QSettings("PhotoVault", "PhotoVault")
+        settings.setValue("window/geometry", self.saveGeometry())
+        settings.setValue("window/state", self.saveState())
+
     def closeEvent(self, event):
         """Handle window close."""
+        self._save_window_geometry()
         self._save_config()
         if self.opensearch_service:
             self.opensearch_service.disconnect()
