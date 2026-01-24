@@ -245,8 +245,7 @@ class FacetsSidebar(QWidget):
     def __init__(self, parent=None):
         """Initialize the facets sidebar."""
         super().__init__(parent)
-        self.setMinimumWidth(200)
-        self.setMaximumWidth(300)
+        self.setMinimumWidth(150)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -263,6 +262,7 @@ class FacetsSidebar(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         facets_widget = QWidget()
         self.facets_layout = QVBoxLayout(facets_widget)
@@ -326,8 +326,7 @@ class DetailPanel(QWidget):
     def __init__(self, parent=None):
         """Initialize the detail panel."""
         super().__init__(parent)
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(400)
+        self.setMinimumWidth(200)
         self.current_metadata: Optional[ImageMetadata] = None
         self._setup_ui()
 
@@ -693,8 +692,22 @@ class ResultsPanel(QWidget):
         self.detail_panel = DetailPanel()
         splitter.addWidget(self.detail_panel)
 
-        # Set splitter proportions
+        # Set splitter proportions and stretch factors
         splitter.setSizes([200, 600, 300])
+        splitter.setStretchFactor(0, 0)  # Facets sidebar doesn't stretch by default
+        splitter.setStretchFactor(1, 1)  # Results table stretches most
+        splitter.setStretchFactor(2, 0)  # Detail panel doesn't stretch by default
+
+        # Make splitter handles more visible
+        splitter.setHandleWidth(5)
+        splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #d1d1d1;
+            }
+            QSplitter::handle:hover {
+                background-color: #0078d4;
+            }
+        """)
 
         layout.addWidget(splitter)
 

@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTabWidget, QStatusBar, QMenuBar, QMenu,
-    QMessageBox, QSplitter, QLabel
+    QMessageBox, QSplitter, QLabel, QSizePolicy
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction
@@ -52,21 +52,24 @@ class MainWindow(QMainWindow):
         # Tab widget
         self.tabs = QTabWidget()
 
-        # Search & Results tab
-        search_results_widget = QWidget()
-        search_results_layout = QHBoxLayout(search_results_widget)
-        search_results_layout.setContentsMargins(0, 0, 0, 0)
+        # Search & Results tab with resizable splitter
+        search_results_splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left: Search panel
         self.search_panel = SearchPanel()
-        self.search_panel.setMaximumWidth(350)
-        search_results_layout.addWidget(self.search_panel)
+        self.search_panel.setMinimumWidth(200)
+        search_results_splitter.addWidget(self.search_panel)
 
         # Right: Results panel
         self.results_panel = ResultsPanel()
-        search_results_layout.addWidget(self.results_panel, 1)
+        search_results_splitter.addWidget(self.results_panel)
 
-        self.tabs.addTab(search_results_widget, "Search")
+        # Set initial proportions (search panel smaller, results larger)
+        search_results_splitter.setSizes([300, 900])
+        search_results_splitter.setStretchFactor(0, 0)  # Search panel doesn't stretch
+        search_results_splitter.setStretchFactor(1, 1)  # Results panel stretches
+
+        self.tabs.addTab(search_results_splitter, "Search")
 
         # Index tab
         self.index_panel = IndexPanel(self.opensearch_service)

@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QProgressBar, QLabel, QFileDialog, QGroupBox,
     QCheckBox, QMessageBox, QFrame, QDialog, QLineEdit, QComboBox,
-    QTreeView, QHeaderView, QDialogButtonBox, QGridLayout, QInputDialog
+    QTreeView, QHeaderView, QDialogButtonBox, QGridLayout, QInputDialog,
+    QSplitter, QSizePolicy
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDir
 from PyQt6.QtGui import QFileSystemModel, QIcon
@@ -229,13 +230,25 @@ class IndexPanel(QWidget):
     def _setup_ui(self):
         """Set up the panel UI."""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
 
         # Header
         header = QLabel("Manage Indexed Directories")
         header.setStyleSheet("font-size: 18px; font-weight: bold;")
         layout.addWidget(header)
+
+        # Main splitter to separate directory list from other sections
+        main_splitter = QSplitter(Qt.Orientation.Vertical)
+        main_splitter.setHandleWidth(5)
+        main_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #d1d1d1;
+            }
+            QSplitter::handle:hover {
+                background-color: #0078d4;
+            }
+        """)
 
         # Directory list group
         dir_group = QGroupBox("Directories to Index")
@@ -280,7 +293,13 @@ class IndexPanel(QWidget):
         quick_access_layout.addStretch()
         dir_layout.addLayout(quick_access_layout)
 
-        layout.addWidget(dir_group)
+        main_splitter.addWidget(dir_group)
+
+        # Bottom section container
+        bottom_container = QWidget()
+        bottom_layout = QVBoxLayout(bottom_container)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(10)
 
         # Indexing options
         options_group = QGroupBox("Indexing Options")
@@ -290,7 +309,7 @@ class IndexPanel(QWidget):
         self.recursive_check.setChecked(True)
         options_layout.addWidget(self.recursive_check)
 
-        layout.addWidget(options_group)
+        bottom_layout.addWidget(options_group)
 
         # Progress section
         progress_group = QGroupBox("Indexing Progress")
@@ -328,7 +347,7 @@ class IndexPanel(QWidget):
 
         progress_layout.addLayout(index_btn_layout)
 
-        layout.addWidget(progress_group)
+        bottom_layout.addWidget(progress_group)
 
         # Statistics section
         stats_group = QGroupBox("Index Statistics")
@@ -341,9 +360,17 @@ class IndexPanel(QWidget):
         refresh_btn.clicked.connect(self.refresh_stats)
         stats_layout.addWidget(refresh_btn)
 
-        layout.addWidget(stats_group)
+        bottom_layout.addWidget(stats_group)
+        bottom_layout.addStretch()
 
-        layout.addStretch()
+        main_splitter.addWidget(bottom_container)
+
+        # Set initial splitter sizes (directory list gets more space)
+        main_splitter.setSizes([400, 300])
+        main_splitter.setStretchFactor(0, 1)  # Directory list stretches
+        main_splitter.setStretchFactor(1, 0)  # Bottom section doesn't stretch by default
+
+        layout.addWidget(main_splitter)
 
     def _create_drive_buttons(self, layout):
         """Create quick access buttons for detected drives."""
