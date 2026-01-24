@@ -13,9 +13,10 @@ import numpy as np
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QComboBox,
     QPushButton, QLabel, QGroupBox, QScrollArea,
-    QSplitter, QFrame, QGridLayout, QSizePolicy
+    QSplitter, QFrame, QGridLayout, QSizePolicy,
+    QButtonGroup, QToolButton
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
 
 
 class ChartCanvas(FigureCanvas):
@@ -265,28 +266,68 @@ class ChartsPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
 
-        # Toolbar
-        toolbar = QHBoxLayout()
+        # View selection buttons
+        view_group = QGroupBox("Select Chart View")
+        view_layout = QHBoxLayout(view_group)
+        view_layout.setSpacing(5)
 
-        toolbar.addWidget(QLabel("Chart View:"))
+        # Create button group for exclusive selection
+        self.view_button_group = QButtonGroup(self)
+        self.view_button_group.setExclusive(True)
 
-        self.view_combo = QComboBox()
-        self.view_combo.addItem("Overview (All Charts)", "overview")
-        self.view_combo.addItem("Camera Statistics", "camera")
-        self.view_combo.addItem("Lens Statistics", "lens")
-        self.view_combo.addItem("Exposure Settings", "exposure")
-        self.view_combo.addItem("Timeline", "timeline")
-        self.view_combo.addItem("Locations", "locations")
-        self.view_combo.currentIndexChanged.connect(self._on_view_changed)
-        toolbar.addWidget(self.view_combo)
+        # Define views with icons/labels
+        views = [
+            ("overview", "Overview", "All charts overview"),
+            ("camera", "Camera", "Camera make & model stats"),
+            ("lens", "Lens", "Lens & focal length stats"),
+            ("exposure", "Exposure", "ISO & aperture stats"),
+            ("timeline", "Timeline", "Photos over time"),
+            ("locations", "Locations", "Photo locations map"),
+        ]
 
-        toolbar.addStretch()
+        self.view_buttons = {}
+        for view_id, label, tooltip in views:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setToolTip(tooltip)
+            btn.setMinimumWidth(80)
+            btn.setMinimumHeight(32)
+            btn.setStyleSheet("""
+                QPushButton {
+                    border: 1px solid #d1d1d1;
+                    border-radius: 4px;
+                    padding: 6px 12px;
+                    background-color: #f0f0f0;
+                    font-weight: normal;
+                }
+                QPushButton:hover {
+                    background-color: #e5e5e5;
+                    border-color: #0078d4;
+                }
+                QPushButton:checked {
+                    background-color: #0078d4;
+                    color: white;
+                    border-color: #0078d4;
+                    font-weight: bold;
+                }
+                QPushButton:checked:hover {
+                    background-color: #1984d8;
+                }
+            """)
+            btn.clicked.connect(lambda checked, v=view_id: self._on_view_button_clicked(v))
+            self.view_button_group.addButton(btn)
+            view_layout.addWidget(btn)
+            self.view_buttons[view_id] = btn
 
-        self.refresh_btn = QPushButton("Refresh")
+        view_layout.addStretch()
+
+        # Refresh button
+        self.refresh_btn = QPushButton("Refresh Data")
+        self.refresh_btn.setMinimumHeight(32)
         self.refresh_btn.clicked.connect(self.refresh_requested.emit)
-        toolbar.addWidget(self.refresh_btn)
+        view_layout.addWidget(self.refresh_btn)
 
-        layout.addLayout(toolbar)
+        layout.addWidget(view_group)
 
         # Scroll area for charts
         scroll = QScrollArea()
@@ -328,6 +369,7 @@ class ChartsPanel(QWidget):
         self.map_chart = MapWidget("Photo Locations")
 
         # Default to overview
+        self._select_view_button("overview")
         self._show_overview()
 
     def _clear_layout(self):
@@ -337,10 +379,8 @@ class ChartsPanel(QWidget):
             if item.widget():
                 item.widget().setParent(None)
 
-    def _on_view_changed(self):
-        """Handle view selection change."""
-        view = self.view_combo.currentData()
-
+    def _on_view_button_clicked(self, view: str):
+        """Handle view button click."""
         if view == "overview":
             self._show_overview()
         elif view == "camera":
@@ -353,6 +393,11 @@ class ChartsPanel(QWidget):
             self._show_timeline_view()
         elif view == "locations":
             self._show_locations_view()
+
+    def _select_view_button(self, view: str):
+        """Select a view button programmatically."""
+        if view in self.view_buttons:
+            self.view_buttons[view].setChecked(True)
 
     def _show_overview(self):
         """Show overview with main charts."""

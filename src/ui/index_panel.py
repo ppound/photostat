@@ -207,6 +207,7 @@ class IndexPanel(QWidget):
 
     indexing_started = pyqtSignal()
     indexing_finished = pyqtSignal()
+    directories_changed = pyqtSignal()  # Emitted when directories list changes
 
     def __init__(self, opensearch_service: OpenSearchService, parent=None):
         """
@@ -383,6 +384,7 @@ class IndexPanel(QWidget):
                 self.directories.append(directory)
                 self.dir_list.addItem(directory)
                 self._update_buttons_state()
+                self.directories_changed.emit()
 
     def _update_buttons_state(self):
         """Update button enabled states based on selection."""
@@ -411,6 +413,7 @@ class IndexPanel(QWidget):
                 self.directories.append(directory)
                 self.dir_list.addItem(directory)
                 self._update_buttons_state()
+                self.directories_changed.emit()
 
     def _add_directory_manual(self):
         """Add a directory by entering path manually."""
@@ -456,6 +459,7 @@ class IndexPanel(QWidget):
                 self.directories.append(path)
                 self.dir_list.addItem(path)
                 self._update_buttons_state()
+                self.directories_changed.emit()
 
     def _remove_directory(self):
         """Remove the selected directory."""
@@ -476,6 +480,7 @@ class IndexPanel(QWidget):
                 self.directories.remove(directory)
                 self.dir_list.takeItem(self.dir_list.currentRow())
                 self._update_buttons_state()
+                self.directories_changed.emit()
 
     def _scan_directory(self):
         """Scan selected directory to count files."""

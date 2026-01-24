@@ -139,6 +139,7 @@ class MainWindow(QMainWindow):
 
         # Index panel signals
         self.index_panel.indexing_finished.connect(self._on_indexing_finished)
+        self.index_panel.directories_changed.connect(self._save_config)
 
         # Charts panel signals
         self.charts_panel.refresh_requested.connect(self._refresh_charts)
