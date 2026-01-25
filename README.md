@@ -29,16 +29,28 @@ mvn test
 
 ## Running
 
-### Option 1: Using Maven
+### Option 1: Using Maven (Recommended)
 
 ```bash
 mvn javafx:run
 ```
 
-### Option 2: Using the JAR
+### Option 2: Using the packaged JAR
+
+After building with `mvn package`, run from the target directory:
 
 ```bash
-java -jar target/photostat-java-1.0.0.jar
+# On Linux
+java --module-path target/lib --add-modules javafx.controls,javafx.fxml,javafx.swing -jar target/photostat-java-1.0.0.jar
+
+# On Windows (PowerShell)
+java --module-path target\lib --add-modules javafx.controls,javafx.fxml,javafx.swing -jar target\photostat-java-1.0.0.jar
+```
+
+### Option 3: Using exec-maven-plugin
+
+```bash
+mvn exec:java
 ```
 
 ## Configuration
