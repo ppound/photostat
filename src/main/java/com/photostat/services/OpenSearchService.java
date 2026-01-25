@@ -494,6 +494,12 @@ public class OpenSearchService {
         // Camera makes
         searchBuilder.aggregations("camera_make", Aggregation.of(a -> a.terms(t -> t.field("camera_make").size(20))));
 
+        // Camera models
+        searchBuilder.aggregations("camera_model", Aggregation.of(a -> a.terms(t -> t.field("camera_model").size(20))));
+
+        // Lens models
+        searchBuilder.aggregations("lens_model", Aggregation.of(a -> a.terms(t -> t.field("lens_model").size(20))));
+
         // File types
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
 

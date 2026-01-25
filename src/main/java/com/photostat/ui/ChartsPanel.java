@@ -28,6 +28,8 @@ public class ChartsPanel extends BorderPane {
 
     private TabPane chartTabs;
     private BarChart<String, Number> cameraMakeChart;
+    private BarChart<String, Number> cameraModelChart;
+    private BarChart<String, Number> lensChart;
     private PieChart fileTypeChart;
     private LineChart<String, Number> timelineChart;
     private BarChart<String, Number> isoChart;
@@ -49,6 +51,10 @@ public class ChartsPanel extends BorderPane {
         Tab overviewTab = new Tab("Overview");
         overviewTab.setContent(createOverviewTab());
 
+        // Equipment tab
+        Tab equipmentTab = new Tab("Equipment");
+        equipmentTab.setContent(createEquipmentTab());
+
         // Timeline tab
         Tab timelineTab = new Tab("Timeline");
         timelineTab.setContent(createTimelineTab());
@@ -57,7 +63,7 @@ public class ChartsPanel extends BorderPane {
         Tab exposureTab = new Tab("Exposure");
         exposureTab.setContent(createExposureTab());
 
-        chartTabs.getTabs().addAll(overviewTab, timelineTab, exposureTab);
+        chartTabs.getTabs().addAll(overviewTab, equipmentTab, timelineTab, exposureTab);
 
         setCenter(chartTabs);
     }
@@ -86,6 +92,39 @@ public class ChartsPanel extends BorderPane {
         content.getChildren().addAll(cameraMakeChart, fileTypeChart);
         VBox.setVgrow(cameraMakeChart, Priority.ALWAYS);
         VBox.setVgrow(fileTypeChart, Priority.ALWAYS);
+
+        return content;
+    }
+
+    private VBox createEquipmentTab() {
+        VBox content = new VBox(20);
+        content.setPadding(new Insets(10));
+
+        // Camera model bar chart
+        CategoryAxis cameraModelXAxis = new CategoryAxis();
+        cameraModelXAxis.setLabel("Camera Model");
+        NumberAxis cameraModelYAxis = new NumberAxis();
+        cameraModelYAxis.setLabel("Photo Count");
+
+        cameraModelChart = new BarChart<>(cameraModelXAxis, cameraModelYAxis);
+        cameraModelChart.setTitle("Photos by Camera Model");
+        cameraModelChart.setLegendVisible(false);
+        cameraModelChart.setPrefHeight(300);
+
+        // Lens bar chart
+        CategoryAxis lensXAxis = new CategoryAxis();
+        lensXAxis.setLabel("Lens");
+        NumberAxis lensYAxis = new NumberAxis();
+        lensYAxis.setLabel("Photo Count");
+
+        lensChart = new BarChart<>(lensXAxis, lensYAxis);
+        lensChart.setTitle("Photos by Lens");
+        lensChart.setLegendVisible(false);
+        lensChart.setPrefHeight(300);
+
+        content.getChildren().addAll(cameraModelChart, lensChart);
+        VBox.setVgrow(cameraModelChart, Priority.ALWAYS);
+        VBox.setVgrow(lensChart, Priority.ALWAYS);
 
         return content;
     }
@@ -167,6 +206,8 @@ public class ChartsPanel extends BorderPane {
 
                 Platform.runLater(() -> {
                     updateCameraMakeChart(chartData.get("camera_make"));
+                    updateCameraModelChart(chartData.get("camera_model"));
+                    updateLensChart(chartData.get("lens_model"));
                     updateFileTypeChart(chartData.get("file_type"));
                     updateTimelineChart(chartData.get("monthly"));
                     updateIsoChart(chartData.get("iso"));
@@ -200,6 +241,51 @@ public class ChartsPanel extends BorderPane {
                 });
 
         cameraMakeChart.getData().add(series);
+    }
+
+    private void updateCameraModelChart(Map<String, Long> data) {
+        cameraModelChart.getData().clear();
+
+        if (data == null || data.isEmpty()) {
+            return;
+        }
+
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+
+        // Sort by count and take top 10
+        data.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(10)
+                .forEach(entry -> {
+                    series.getData().add(new XYChart.Data<>(entry.getKey(), entry.getValue()));
+                });
+
+        cameraModelChart.getData().add(series);
+    }
+
+    private void updateLensChart(Map<String, Long> data) {
+        lensChart.getData().clear();
+
+        if (data == null || data.isEmpty()) {
+            return;
+        }
+
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+
+        // Sort by count and take top 10
+        data.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(10)
+                .forEach(entry -> {
+                    // Truncate long lens names for display
+                    String label = entry.getKey();
+                    if (label.length() > 25) {
+                        label = label.substring(0, 22) + "...";
+                    }
+                    series.getData().add(new XYChart.Data<>(label, entry.getValue()));
+                });
+
+        lensChart.getData().add(series);
     }
 
     private void updateFileTypeChart(Map<String, Long> data) {
