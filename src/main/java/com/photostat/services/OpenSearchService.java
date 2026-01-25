@@ -1,0 +1,543 @@
+package com.photostat.services;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.photostat.models.ImageMetadata;
+import org.apache.hc.client5.http.auth.AuthScope;
+import org.apache.hc.client5.http.auth.UsernamePasswordCredentials;
+import org.apache.hc.client5.http.impl.auth.BasicCredentialsProvider;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManager;
+import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.opensearch.client.json.jackson.JacksonJsonpMapper;
+import org.opensearch.client.opensearch.OpenSearchClient;
+import org.opensearch.client.opensearch._types.FieldValue;
+import org.opensearch.client.opensearch._types.SortOrder;
+import org.opensearch.client.opensearch._types.aggregations.Aggregation;
+import org.opensearch.client.opensearch._types.aggregations.StringTermsBucket;
+import org.opensearch.client.opensearch._types.mapping.Property;
+import org.opensearch.client.opensearch._types.mapping.TypeMapping;
+import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
+import org.opensearch.client.opensearch._types.query_dsl.Query;
+import org.opensearch.client.opensearch._types.query_dsl.RangeQuery;
+import org.opensearch.client.opensearch.core.*;
+import org.opensearch.client.opensearch.core.bulk.BulkOperation;
+import org.opensearch.client.opensearch.core.bulk.IndexOperation;
+import org.opensearch.client.opensearch.core.search.Hit;
+import org.opensearch.client.opensearch.indices.CreateIndexRequest;
+import org.opensearch.client.opensearch.indices.ExistsRequest;
+import org.opensearch.client.transport.httpclient5.ApacheHttpClient5TransportBuilder;
+
+import javax.net.ssl.SSLContext;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Service for interacting with OpenSearch.
+ */
+public class OpenSearchService {
+
+    private static OpenSearchService instance;
+    private OpenSearchClient client;
+    private final ConfigService configService;
+    private final ObjectMapper objectMapper;
+    private boolean connected = false;
+
+    private OpenSearchService() {
+        this.configService = ConfigService.getInstance();
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.registerModule(new JavaTimeModule());
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    }
+
+    public static synchronized OpenSearchService getInstance() {
+        if (instance == null) {
+            instance = new OpenSearchService();
+        }
+        return instance;
+    }
+
+    /**
+     * Connect to OpenSearch using configuration settings.
+     */
+    public void connect() throws Exception {
+        String host = configService.getOpenSearchHost();
+        int port = configService.getOpenSearchPort();
+        boolean ssl = configService.isOpenSearchSsl();
+        String username = configService.getOpenSearchUsername();
+        String password = configService.getOpenSearchPassword();
+
+        connect(host, port, ssl, username, password);
+    }
+
+    /**
+     * Connect to OpenSearch with explicit parameters.
+     */
+    public void connect(String host, int port, boolean ssl, String username, String password) throws Exception {
+        String scheme = ssl ? "https" : "http";
+        HttpHost httpHost = new HttpHost(scheme, host, port);
+
+        ApacheHttpClient5TransportBuilder transportBuilder = ApacheHttpClient5TransportBuilder.builder(httpHost);
+
+        // Configure SSL if needed
+        if (ssl) {
+            SSLContext sslContext = SSLContextBuilder.create()
+                    .loadTrustMaterial(null, (chains, authType) -> true)  // Trust all certs (for dev)
+                    .build();
+
+            PoolingAsyncClientConnectionManager connectionManager = PoolingAsyncClientConnectionManagerBuilder.create()
+                    .setTlsStrategy(ClientTlsStrategyBuilder.create()
+                            .setSslContext(sslContext)
+                            .build())
+                    .build();
+
+            transportBuilder.setHttpClientConfigCallback(httpClientBuilder ->
+                    httpClientBuilder.setConnectionManager(connectionManager));
+        }
+
+        // Configure authentication if provided
+        if (username != null && !username.isEmpty()) {
+            BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+            credentialsProvider.setCredentials(
+                    new AuthScope(httpHost),
+                    new UsernamePasswordCredentials(username, password.toCharArray())
+            );
+
+            transportBuilder.setHttpClientConfigCallback(httpClientBuilder ->
+                    httpClientBuilder.setDefaultCredentialsProvider(credentialsProvider));
+        }
+
+        // Configure JSON mapper
+        transportBuilder.setMapper(new JacksonJsonpMapper(objectMapper));
+
+        client = new OpenSearchClient(transportBuilder.build());
+        connected = true;
+    }
+
+    /**
+     * Check if connected to OpenSearch.
+     */
+    public boolean isConnected() {
+        if (!connected || client == null) {
+            return false;
+        }
+        try {
+            client.info();
+            return true;
+        } catch (Exception e) {
+            connected = false;
+            return false;
+        }
+    }
+
+    /**
+     * Test connection to OpenSearch.
+     */
+    public boolean testConnection() {
+        try {
+            if (client == null) {
+                connect();
+            }
+            client.info();
+            return true;
+        } catch (Exception e) {
+            System.err.println("Connection test failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Create the index with proper mappings if it doesn't exist.
+     */
+    public void createIndexIfNotExists() throws IOException {
+        String indexName = configService.getIndexName();
+
+        ExistsRequest existsRequest = new ExistsRequest.Builder().index(indexName).build();
+        boolean exists = client.indices().exists(existsRequest).value();
+
+        if (!exists) {
+            Map<String, Property> properties = new HashMap<>();
+
+            // File properties
+            properties.put("file_path", Property.of(p -> p.keyword(k -> k)));
+            properties.put("file_name", Property.of(p -> p.text(t -> t)));
+            properties.put("file_size", Property.of(p -> p.long_(l -> l)));
+            properties.put("file_type", Property.of(p -> p.keyword(k -> k)));
+
+            // Camera properties
+            properties.put("camera_make", Property.of(p -> p.keyword(k -> k)));
+            properties.put("camera_model", Property.of(p -> p.keyword(k -> k)));
+            properties.put("lens_model", Property.of(p -> p.keyword(k -> k)));
+
+            // Date properties
+            properties.put("date_taken", Property.of(p -> p.date(d -> d)));
+            properties.put("date_indexed", Property.of(p -> p.date(d -> d)));
+
+            // Exposure properties
+            properties.put("iso", Property.of(p -> p.integer(i -> i)));
+            properties.put("aperture", Property.of(p -> p.float_(f -> f)));
+            properties.put("shutter_speed", Property.of(p -> p.keyword(k -> k)));
+            properties.put("focal_length", Property.of(p -> p.float_(f -> f)));
+
+            // Image dimensions
+            properties.put("image_width", Property.of(p -> p.integer(i -> i)));
+            properties.put("image_height", Property.of(p -> p.integer(i -> i)));
+            properties.put("orientation", Property.of(p -> p.keyword(k -> k)));
+
+            // GPS properties
+            properties.put("gps_location", Property.of(p -> p.geoPoint(g -> g)));
+            properties.put("gps_latitude", Property.of(p -> p.float_(f -> f)));
+            properties.put("gps_longitude", Property.of(p -> p.float_(f -> f)));
+
+            // Other metadata
+            properties.put("artist", Property.of(p -> p.text(t -> t)));
+            properties.put("copyright", Property.of(p -> p.text(t -> t)));
+            properties.put("software", Property.of(p -> p.keyword(k -> k)));
+
+            // Raw EXIF data (not indexed)
+            properties.put("all_exif", Property.of(p -> p.object(o -> o.enabled(false))));
+
+            TypeMapping mapping = new TypeMapping.Builder().properties(properties).build();
+
+            CreateIndexRequest createRequest = new CreateIndexRequest.Builder()
+                    .index(indexName)
+                    .mappings(mapping)
+                    .build();
+
+            client.indices().create(createRequest);
+            System.out.println("Created index: " + indexName);
+        }
+    }
+
+    /**
+     * Index a single image metadata document.
+     */
+    public void indexDocument(ImageMetadata metadata) throws IOException {
+        String indexName = configService.getIndexName();
+        String docId = generateDocumentId(metadata.getFilePath());
+
+        IndexRequest<ImageMetadata> request = new IndexRequest.Builder<ImageMetadata>()
+                .index(indexName)
+                .id(docId)
+                .document(metadata)
+                .build();
+
+        client.index(request);
+    }
+
+    /**
+     * Bulk index multiple documents.
+     */
+    public int bulkIndex(List<ImageMetadata> documents) throws IOException {
+        if (documents.isEmpty()) {
+            return 0;
+        }
+
+        String indexName = configService.getIndexName();
+        List<BulkOperation> operations = new ArrayList<>();
+
+        for (ImageMetadata metadata : documents) {
+            String docId = generateDocumentId(metadata.getFilePath());
+            operations.add(new BulkOperation.Builder()
+                    .index(new IndexOperation.Builder<ImageMetadata>()
+                            .index(indexName)
+                            .id(docId)
+                            .document(metadata)
+                            .build())
+                    .build());
+        }
+
+        BulkRequest bulkRequest = new BulkRequest.Builder().operations(operations).build();
+        BulkResponse response = client.bulk(bulkRequest);
+
+        if (response.errors()) {
+            response.items().forEach(item -> {
+                if (item.error() != null) {
+                    System.err.println("Bulk index error: " + item.error().reason());
+                }
+            });
+        }
+
+        return documents.size() - (int) response.items().stream()
+                .filter(item -> item.error() != null)
+                .count();
+    }
+
+    /**
+     * Search for images with optional filters and text query.
+     */
+    public SearchResult search(String queryText, Map<String, Object> filters, int from, int size) throws IOException {
+        String indexName = configService.getIndexName();
+
+        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+
+        // Add text search if provided
+        if (queryText != null && !queryText.trim().isEmpty()) {
+            boolQuery.must(Query.of(q -> q.multiMatch(mm -> mm
+                    .query(queryText)
+                    .fields("file_name", "camera_make", "camera_model", "lens_model", "artist", "copyright")
+            )));
+        }
+
+        // Add filters
+        if (filters != null) {
+            addFilters(boolQuery, filters);
+        }
+
+        // Build search request with aggregations
+        SearchRequest.Builder searchBuilder = new SearchRequest.Builder()
+                .index(indexName)
+                .query(Query.of(q -> q.bool(boolQuery.build())))
+                .from(from)
+                .size(size)
+                .sort(s -> s.field(f -> f.field("date_taken").order(SortOrder.Desc)));
+
+        // Add aggregations for facets
+        searchBuilder.aggregations("camera_make", Aggregation.of(a -> a.terms(t -> t.field("camera_make").size(20))));
+        searchBuilder.aggregations("camera_model", Aggregation.of(a -> a.terms(t -> t.field("camera_model").size(50))));
+        searchBuilder.aggregations("lens_model", Aggregation.of(a -> a.terms(t -> t.field("lens_model").size(50))));
+        searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
+        searchBuilder.aggregations("iso_ranges", Aggregation.of(a -> a.range(r -> r
+                .field("iso")
+                .ranges(
+                        rr -> rr.key("ISO 100-200").from("100").to("201"),
+                        rr -> rr.key("ISO 200-400").from("200").to("401"),
+                        rr -> rr.key("ISO 400-800").from("400").to("801"),
+                        rr -> rr.key("ISO 800-1600").from("800").to("1601"),
+                        rr -> rr.key("ISO 1600-3200").from("1600").to("3201"),
+                        rr -> rr.key("ISO 3200+").from("3200")
+                ))));
+        searchBuilder.aggregations("year", Aggregation.of(a -> a.dateHistogram(dh -> dh
+                .field("date_taken")
+                .calendarInterval(ci -> ci.year()))));
+
+        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+
+        // Extract results
+        List<ImageMetadata> results = response.hits().hits().stream()
+                .map(Hit::source)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        long total = response.hits().total() != null ? response.hits().total().value() : 0;
+
+        // Extract aggregations
+        Map<String, Map<String, Long>> aggregations = extractAggregations(response);
+
+        return new SearchResult(results, total, aggregations);
+    }
+
+    private void addFilters(BoolQuery.Builder boolQuery, Map<String, Object> filters) {
+        for (Map.Entry<String, Object> entry : filters.entrySet()) {
+            String field = entry.getKey();
+            Object value = entry.getValue();
+
+            if (value == null) continue;
+
+            if (value instanceof String && !((String) value).isEmpty()) {
+                boolQuery.filter(Query.of(q -> q.term(t -> t
+                        .field(field)
+                        .value(FieldValue.of((String) value)))));
+            } else if (value instanceof List) {
+                @SuppressWarnings("unchecked")
+                List<String> values = (List<String>) value;
+                if (!values.isEmpty()) {
+                    boolQuery.filter(Query.of(q -> q.terms(t -> t
+                            .field(field)
+                            .terms(tv -> tv.value(values.stream()
+                                    .map(FieldValue::of)
+                                    .collect(Collectors.toList()))))));
+                }
+            } else if (field.endsWith("_min") || field.endsWith("_max")) {
+                // Range filter
+                String actualField = field.replace("_min", "").replace("_max", "");
+                RangeQuery.Builder rangeBuilder = new RangeQuery.Builder().field(actualField);
+                if (field.endsWith("_min")) {
+                    rangeBuilder.gte(value.toString());
+                } else {
+                    rangeBuilder.lte(value.toString());
+                }
+                boolQuery.filter(Query.of(q -> q.range(rangeBuilder.build())));
+            } else if (field.equals("date_from") || field.equals("date_to")) {
+                String dateField = "date_taken";
+                RangeQuery.Builder rangeBuilder = new RangeQuery.Builder().field(dateField);
+                if (field.equals("date_from")) {
+                    rangeBuilder.gte(formatDate(value));
+                } else {
+                    rangeBuilder.lte(formatDate(value));
+                }
+                boolQuery.filter(Query.of(q -> q.range(rangeBuilder.build())));
+            }
+        }
+    }
+
+    private String formatDate(Object date) {
+        if (date instanceof LocalDateTime) {
+            return ((LocalDateTime) date).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        }
+        return date.toString();
+    }
+
+    private Map<String, Map<String, Long>> extractAggregations(SearchResponse<ImageMetadata> response) {
+        Map<String, Map<String, Long>> result = new HashMap<>();
+
+        if (response.aggregations() == null) return result;
+
+        response.aggregations().forEach((name, agg) -> {
+            Map<String, Long> buckets = new LinkedHashMap<>();
+
+            if (agg.isSterms()) {
+                agg.sterms().buckets().array().forEach(bucket -> {
+                    buckets.put(bucket.key().stringValue(), bucket.docCount());
+                });
+            } else if (agg.isDateHistogram()) {
+                agg.dateHistogram().buckets().array().forEach(bucket -> {
+                    buckets.put(bucket.keyAsString(), bucket.docCount());
+                });
+            } else if (agg.isRange()) {
+                agg.range().buckets().array().forEach(bucket -> {
+                    if (bucket.docCount() > 0) {
+                        buckets.put(bucket.key(), bucket.docCount());
+                    }
+                });
+            }
+
+            if (!buckets.isEmpty()) {
+                result.put(name, buckets);
+            }
+        });
+
+        return result;
+    }
+
+    /**
+     * Delete all documents from a specific directory.
+     */
+    public long deleteByDirectory(String directoryPath) throws IOException {
+        String indexName = configService.getIndexName();
+
+        DeleteByQueryRequest request = new DeleteByQueryRequest.Builder()
+                .index(indexName)
+                .query(Query.of(q -> q.prefix(p -> p
+                        .field("file_path")
+                        .value(directoryPath))))
+                .build();
+
+        DeleteByQueryResponse response = client.deleteByQuery(request);
+        return response.deleted() != null ? response.deleted() : 0;
+    }
+
+    /**
+     * Check if a file is already indexed.
+     */
+    public boolean isFileIndexed(String filePath) throws IOException {
+        String indexName = configService.getIndexName();
+        String docId = generateDocumentId(filePath);
+
+        try {
+            GetRequest request = new GetRequest.Builder()
+                    .index(indexName)
+                    .id(docId)
+                    .build();
+            GetResponse<ImageMetadata> response = client.get(request, ImageMetadata.class);
+            return response.found();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get total document count in the index.
+     */
+    public long getDocumentCount() throws IOException {
+        String indexName = configService.getIndexName();
+
+        CountRequest request = new CountRequest.Builder()
+                .index(indexName)
+                .build();
+
+        CountResponse response = client.count(request);
+        return response.count();
+    }
+
+    /**
+     * Get aggregation data for charts.
+     */
+    public Map<String, Map<String, Long>> getChartData() throws IOException {
+        String indexName = configService.getIndexName();
+
+        SearchRequest.Builder searchBuilder = new SearchRequest.Builder()
+                .index(indexName)
+                .size(0);  // We only want aggregations
+
+        // Camera makes
+        searchBuilder.aggregations("camera_make", Aggregation.of(a -> a.terms(t -> t.field("camera_make").size(20))));
+
+        // File types
+        searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
+
+        // Monthly timeline
+        searchBuilder.aggregations("monthly", Aggregation.of(a -> a.dateHistogram(dh -> dh
+                .field("date_taken")
+                .calendarInterval(ci -> ci.month()))));
+
+        // ISO distribution
+        searchBuilder.aggregations("iso", Aggregation.of(a -> a.terms(t -> t.field("iso").size(50))));
+
+        // Aperture distribution
+        searchBuilder.aggregations("aperture", Aggregation.of(a -> a.histogram(h -> h
+                .field("aperture")
+                .interval(1.0))));
+
+        // Focal length distribution
+        searchBuilder.aggregations("focal_length", Aggregation.of(a -> a.histogram(h -> h
+                .field("focal_length")
+                .interval(25.0))));
+
+        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+
+        return extractAggregations(response);
+    }
+
+    /**
+     * Generate a consistent document ID from file path.
+     */
+    private String generateDocumentId(String filePath) {
+        return Base64.getEncoder().encodeToString(filePath.getBytes())
+                .replace("/", "_")
+                .replace("+", "-");
+    }
+
+    /**
+     * Search result container class.
+     */
+    public static class SearchResult {
+        private final List<ImageMetadata> results;
+        private final long total;
+        private final Map<String, Map<String, Long>> aggregations;
+
+        public SearchResult(List<ImageMetadata> results, long total, Map<String, Map<String, Long>> aggregations) {
+            this.results = results;
+            this.total = total;
+            this.aggregations = aggregations;
+        }
+
+        public List<ImageMetadata> getResults() {
+            return results;
+        }
+
+        public long getTotal() {
+            return total;
+        }
+
+        public Map<String, Map<String, Long>> getAggregations() {
+            return aggregations;
+        }
+    }
+}

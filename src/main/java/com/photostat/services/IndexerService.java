@@ -1,0 +1,360 @@
+package com.photostat.services;
+
+import com.photostat.models.ImageMetadata;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
+
+import java.io.IOException;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+/**
+ * Service for indexing image files in the background.
+ */
+public class IndexerService {
+
+    private static IndexerService instance;
+    private final ConfigService configService;
+    private final ExifService exifService;
+    private final OpenSearchService openSearchService;
+
+    private Task<Void> currentTask;
+    private final AtomicBoolean isIndexing = new AtomicBoolean(false);
+
+    // Progress callbacks
+    private Consumer<String> statusCallback;
+    private Consumer<Double> progressCallback;
+    private Consumer<IndexingStats> completionCallback;
+
+    private IndexerService() {
+        this.configService = ConfigService.getInstance();
+        this.exifService = ExifService.getInstance();
+        this.openSearchService = OpenSearchService.getInstance();
+    }
+
+    public static synchronized IndexerService getInstance() {
+        if (instance == null) {
+            instance = new IndexerService();
+        }
+        return instance;
+    }
+
+    /**
+     * Set callbacks for progress reporting.
+     */
+    public void setCallbacks(Consumer<String> statusCallback,
+                            Consumer<Double> progressCallback,
+                            Consumer<IndexingStats> completionCallback) {
+        this.statusCallback = statusCallback;
+        this.progressCallback = progressCallback;
+        this.completionCallback = completionCallback;
+    }
+
+    /**
+     * Start indexing configured directories.
+     */
+    public void startIndexing() {
+        if (isIndexing.get()) {
+            updateStatus("Indexing already in progress");
+            return;
+        }
+
+        List<String> directories = configService.getDirectories();
+        if (directories.isEmpty()) {
+            updateStatus("No directories configured");
+            return;
+        }
+
+        startIndexing(directories);
+    }
+
+    /**
+     * Start indexing specific directories.
+     */
+    public void startIndexing(List<String> directories) {
+        if (isIndexing.get()) {
+            updateStatus("Indexing already in progress");
+            return;
+        }
+
+        currentTask = createIndexingTask(directories, false);
+        Thread thread = new Thread(currentTask);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Re-index all files, ignoring previously indexed status.
+     */
+    public void reindexAll() {
+        if (isIndexing.get()) {
+            updateStatus("Indexing already in progress");
+            return;
+        }
+
+        List<String> directories = configService.getDirectories();
+        if (directories.isEmpty()) {
+            updateStatus("No directories configured");
+            return;
+        }
+
+        currentTask = createIndexingTask(directories, true);
+        Thread thread = new Thread(currentTask);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Stop the current indexing task.
+     */
+    public void stopIndexing() {
+        if (currentTask != null && isIndexing.get()) {
+            currentTask.cancel();
+            updateStatus("Indexing cancelled");
+        }
+    }
+
+    /**
+     * Check if indexing is in progress.
+     */
+    public boolean isIndexing() {
+        return isIndexing.get();
+    }
+
+    /**
+     * Create the indexing task.
+     */
+    private Task<Void> createIndexingTask(List<String> directories, boolean forceReindex) {
+        return new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                isIndexing.set(true);
+                IndexingStats stats = new IndexingStats();
+
+                try {
+                    // Ensure OpenSearch is connected and index exists
+                    if (!openSearchService.isConnected()) {
+                        openSearchService.connect();
+                    }
+                    openSearchService.createIndexIfNotExists();
+
+                    // Get file extensions to process
+                    Set<String> extensions = configService.getFileExtensions().stream()
+                            .map(String::toLowerCase)
+                            .collect(Collectors.toSet());
+
+                    int batchSize = configService.getBatchSize();
+
+                    // First, count total files
+                    updateStatus("Scanning directories...");
+                    AtomicLong totalFiles = new AtomicLong(0);
+
+                    for (String dirPath : directories) {
+                        if (isCancelled()) break;
+
+                        Path dir = Paths.get(dirPath);
+                        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+                            continue;
+                        }
+
+                        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+                            @Override
+                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                                if (isCancelled()) return FileVisitResult.TERMINATE;
+
+                                String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
+                                if (extensions.contains(ext)) {
+                                    totalFiles.incrementAndGet();
+                                }
+                                return FileVisitResult.CONTINUE;
+                            }
+
+                            @Override
+                            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                                return FileVisitResult.CONTINUE;
+                            }
+                        });
+                    }
+
+                    stats.totalFiles = totalFiles.get();
+                    updateStatus("Found " + stats.totalFiles + " image files");
+
+                    if (stats.totalFiles == 0) {
+                        updateProgress(1.0);
+                        notifyCompletion(stats);
+                        return null;
+                    }
+
+                    // Process files
+                    AtomicInteger processedCount = new AtomicInteger(0);
+                    List<ImageMetadata> batch = new ArrayList<>();
+
+                    for (String dirPath : directories) {
+                        if (isCancelled()) break;
+
+                        Path dir = Paths.get(dirPath);
+                        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+                            continue;
+                        }
+
+                        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+                            @Override
+                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                                if (isCancelled()) return FileVisitResult.TERMINATE;
+
+                                String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
+                                if (!extensions.contains(ext)) {
+                                    return FileVisitResult.CONTINUE;
+                                }
+
+                                try {
+                                    String filePath = file.toAbsolutePath().toString();
+
+                                    // Check if already indexed (unless force reindex)
+                                    if (!forceReindex && openSearchService.isFileIndexed(filePath)) {
+                                        stats.skippedFiles++;
+                                        processedCount.incrementAndGet();
+                                        updateProgressSafe(processedCount.get(), stats.totalFiles);
+                                        return FileVisitResult.CONTINUE;
+                                    }
+
+                                    // Extract metadata
+                                    ImageMetadata metadata = exifService.extractMetadata(file);
+                                    batch.add(metadata);
+                                    stats.processedFiles++;
+
+                                    // Bulk index when batch is full
+                                    if (batch.size() >= batchSize) {
+                                        int indexed = openSearchService.bulkIndex(new ArrayList<>(batch));
+                                        stats.indexedFiles += indexed;
+                                        batch.clear();
+                                    }
+
+                                } catch (Exception e) {
+                                    stats.errorFiles++;
+                                    System.err.println("Error processing " + file + ": " + e.getMessage());
+                                }
+
+                                int current = processedCount.incrementAndGet();
+                                updateStatusSafe("Processing: " + file.getFileName() +
+                                        " (" + current + "/" + stats.totalFiles + ")");
+                                updateProgressSafe(current, stats.totalFiles);
+
+                                return FileVisitResult.CONTINUE;
+                            }
+
+                            @Override
+                            public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                                stats.errorFiles++;
+                                return FileVisitResult.CONTINUE;
+                            }
+                        });
+                    }
+
+                    // Index remaining batch
+                    if (!batch.isEmpty() && !isCancelled()) {
+                        int indexed = openSearchService.bulkIndex(batch);
+                        stats.indexedFiles += indexed;
+                    }
+
+                    if (isCancelled()) {
+                        updateStatus("Indexing cancelled. Indexed " + stats.indexedFiles + " files.");
+                    } else {
+                        updateStatus("Indexing complete. Indexed " + stats.indexedFiles + " files.");
+                    }
+
+                    notifyCompletion(stats);
+
+                } catch (Exception e) {
+                    updateStatus("Indexing error: " + e.getMessage());
+                    e.printStackTrace();
+                } finally {
+                    isIndexing.set(false);
+                }
+
+                return null;
+            }
+        };
+    }
+
+    /**
+     * Delete all documents for a specific directory.
+     */
+    public long deleteDirectory(String directoryPath) {
+        try {
+            if (!openSearchService.isConnected()) {
+                openSearchService.connect();
+            }
+            return openSearchService.deleteByDirectory(directoryPath);
+        } catch (Exception e) {
+            System.err.println("Error deleting directory " + directoryPath + ": " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private void updateStatus(String message) {
+        if (statusCallback != null) {
+            Platform.runLater(() -> statusCallback.accept(message));
+        }
+    }
+
+    private void updateStatusSafe(String message) {
+        if (statusCallback != null) {
+            Platform.runLater(() -> statusCallback.accept(message));
+        }
+    }
+
+    private void updateProgress(double progress) {
+        if (progressCallback != null) {
+            Platform.runLater(() -> progressCallback.accept(progress));
+        }
+    }
+
+    private void updateProgressSafe(long current, long total) {
+        if (progressCallback != null && total > 0) {
+            double progress = (double) current / total;
+            Platform.runLater(() -> progressCallback.accept(progress));
+        }
+    }
+
+    private void notifyCompletion(IndexingStats stats) {
+        if (completionCallback != null) {
+            Platform.runLater(() -> completionCallback.accept(stats));
+        }
+    }
+
+    private String getFileExtension(String filename) {
+        int lastDot = filename.lastIndexOf('.');
+        if (lastDot > 0) {
+            return filename.substring(lastDot);
+        }
+        return "";
+    }
+
+    /**
+     * Statistics about an indexing operation.
+     */
+    public static class IndexingStats {
+        public long totalFiles = 0;
+        public long processedFiles = 0;
+        public long indexedFiles = 0;
+        public long skippedFiles = 0;
+        public long errorFiles = 0;
+
+        @Override
+        public String toString() {
+            return String.format(
+                    "Total: %d, Processed: %d, Indexed: %d, Skipped: %d, Errors: %d",
+                    totalFiles, processedFiles, indexedFiles, skippedFiles, errorFiles
+            );
+        }
+    }
+}

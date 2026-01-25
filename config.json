@@ -1,0 +1,39 @@
+{
+  "opensearch": {
+    "host": "localhost",
+    "port": 9200,
+    "ssl": false,
+    "username": "",
+    "password": "",
+    "index_name": "photostat"
+  },
+  "indexing": {
+    "batch_size": 50,
+    "directories": [],
+    "file_extensions": [
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".tiff",
+      ".tif",
+      ".cr2",
+      ".cr3",
+      ".nef",
+      ".arw",
+      ".orf",
+      ".rw2",
+      ".dng",
+      ".raf"
+    ]
+  },
+  "ui": {
+    "thumbnail_size": 200,
+    "results_per_page": 50,
+    "window_width": 1400,
+    "window_height": 900
+  },
+  "exiftool": {
+    "path": "exiftool",
+    "use_for_raw": true
+  }
+}
