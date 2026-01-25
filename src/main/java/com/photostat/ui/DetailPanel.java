@@ -336,33 +336,41 @@ public class DetailPanel extends VBox {
     private void openCurrentImage() {
         ImageMetadata metadata = getCurrentMetadata();
         if (metadata != null && metadata.getFilePath() != null) {
-            try {
-                java.awt.Desktop.getDesktop().open(new File(metadata.getFilePath()));
-            } catch (Exception e) {
-                showError("Cannot open file", e.getMessage());
-            }
+            String filePath = metadata.getFilePath();
+            new Thread(() -> {
+                try {
+                    java.awt.Desktop.getDesktop().open(new File(filePath));
+                } catch (Exception e) {
+                    Platform.runLater(() -> showError("Cannot open file", e.getMessage()));
+                }
+            }).start();
         }
     }
 
     private void openCurrentFolder() {
         ImageMetadata metadata = getCurrentMetadata();
         if (metadata != null && metadata.getFilePath() != null) {
-            try {
-                File file = new File(metadata.getFilePath());
-                java.awt.Desktop.getDesktop().open(file.getParentFile());
-            } catch (Exception e) {
-                showError("Cannot open folder", e.getMessage());
-            }
+            File file = new File(metadata.getFilePath());
+            File parentDir = file.getParentFile();
+            new Thread(() -> {
+                try {
+                    java.awt.Desktop.getDesktop().open(parentDir);
+                } catch (Exception e) {
+                    Platform.runLater(() -> showError("Cannot open folder", e.getMessage()));
+                }
+            }).start();
         }
     }
 
     private void openInMaps(double lat, double lon) {
-        try {
-            String url = String.format("https://www.google.com/maps?q=%.6f,%.6f", lat, lon);
-            java.awt.Desktop.getDesktop().browse(new java.net.URI(url));
-        } catch (Exception e) {
-            showError("Cannot open browser", e.getMessage());
-        }
+        new Thread(() -> {
+            try {
+                String url = String.format("https://www.google.com/maps?q=%.6f,%.6f", lat, lon);
+                java.awt.Desktop.getDesktop().browse(new java.net.URI(url));
+            } catch (Exception e) {
+                Platform.runLater(() -> showError("Cannot open browser", e.getMessage()));
+            }
+        }).start();
     }
 
     private ImageMetadata currentMetadata;
