@@ -12,12 +12,14 @@ import org.apache.hc.client5.http.impl.nio.PoolingAsyncClientConnectionManagerBu
 import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
 import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.opensearch.client.json.JsonData;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch._types.FieldValue;
 import org.opensearch.client.opensearch._types.SortOrder;
 import org.opensearch.client.opensearch._types.aggregations.Aggregation;
-import org.opensearch.client.opensearch._types.aggregations.StringTermsBucket;
+import org.opensearch.client.opensearch._types.aggregations.AggregationRange;
+import org.opensearch.client.opensearch._types.aggregations.CalendarInterval;
 import org.opensearch.client.opensearch._types.mapping.Property;
 import org.opensearch.client.opensearch._types.mapping.TypeMapping;
 import org.opensearch.client.opensearch._types.query_dsl.BoolQuery;
@@ -303,19 +305,22 @@ public class OpenSearchService {
         searchBuilder.aggregations("camera_model", Aggregation.of(a -> a.terms(t -> t.field("camera_model").size(50))));
         searchBuilder.aggregations("lens_model", Aggregation.of(a -> a.terms(t -> t.field("lens_model").size(50))));
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
-        searchBuilder.aggregations("iso_ranges", Aggregation.of(a -> a.range(r -> r
-                .field("iso")
-                .ranges(
-                        rr -> rr.key("ISO 100-200").from("100").to("201"),
-                        rr -> rr.key("ISO 200-400").from("200").to("401"),
-                        rr -> rr.key("ISO 400-800").from("400").to("801"),
-                        rr -> rr.key("ISO 800-1600").from("800").to("1601"),
-                        rr -> rr.key("ISO 1600-3200").from("1600").to("3201"),
-                        rr -> rr.key("ISO 3200+").from("3200")
-                ))));
+
+        // ISO ranges aggregation
+        List<AggregationRange> isoRanges = Arrays.asList(
+                new AggregationRange.Builder().key("ISO 100-200").from("100").to("201").build(),
+                new AggregationRange.Builder().key("ISO 200-400").from("200").to("401").build(),
+                new AggregationRange.Builder().key("ISO 400-800").from("400").to("801").build(),
+                new AggregationRange.Builder().key("ISO 800-1600").from("800").to("1601").build(),
+                new AggregationRange.Builder().key("ISO 1600-3200").from("1600").to("3201").build(),
+                new AggregationRange.Builder().key("ISO 3200+").from("3200").build()
+        );
+        searchBuilder.aggregations("iso_ranges", Aggregation.of(a -> a.range(r -> r.field("iso").ranges(isoRanges))));
+
+        // Year aggregation
         searchBuilder.aggregations("year", Aggregation.of(a -> a.dateHistogram(dh -> dh
                 .field("date_taken")
-                .calendarInterval(ci -> ci.year()))));
+                .calendarInterval(CalendarInterval.Year))));
 
         SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
 
@@ -359,18 +364,18 @@ public class OpenSearchService {
                 String actualField = field.replace("_min", "").replace("_max", "");
                 RangeQuery.Builder rangeBuilder = new RangeQuery.Builder().field(actualField);
                 if (field.endsWith("_min")) {
-                    rangeBuilder.gte(value.toString());
+                    rangeBuilder.gte(JsonData.of(value.toString()));
                 } else {
-                    rangeBuilder.lte(value.toString());
+                    rangeBuilder.lte(JsonData.of(value.toString()));
                 }
                 boolQuery.filter(Query.of(q -> q.range(rangeBuilder.build())));
             } else if (field.equals("date_from") || field.equals("date_to")) {
                 String dateField = "date_taken";
                 RangeQuery.Builder rangeBuilder = new RangeQuery.Builder().field(dateField);
                 if (field.equals("date_from")) {
-                    rangeBuilder.gte(formatDate(value));
+                    rangeBuilder.gte(JsonData.of(formatDate(value)));
                 } else {
-                    rangeBuilder.lte(formatDate(value));
+                    rangeBuilder.lte(JsonData.of(formatDate(value)));
                 }
                 boolQuery.filter(Query.of(q -> q.range(rangeBuilder.build())));
             }
@@ -394,7 +399,11 @@ public class OpenSearchService {
 
             if (agg.isSterms()) {
                 agg.sterms().buckets().array().forEach(bucket -> {
-                    buckets.put(bucket.key().stringValue(), bucket.docCount());
+                    buckets.put(bucket.key(), bucket.docCount());
+                });
+            } else if (agg.isLterms()) {
+                agg.lterms().buckets().array().forEach(bucket -> {
+                    buckets.put(String.valueOf(bucket.key()), bucket.docCount());
                 });
             } else if (agg.isDateHistogram()) {
                 agg.dateHistogram().buckets().array().forEach(bucket -> {
@@ -404,6 +413,12 @@ public class OpenSearchService {
                 agg.range().buckets().array().forEach(bucket -> {
                     if (bucket.docCount() > 0) {
                         buckets.put(bucket.key(), bucket.docCount());
+                    }
+                });
+            } else if (agg.isHistogram()) {
+                agg.histogram().buckets().array().forEach(bucket -> {
+                    if (bucket.docCount() > 0) {
+                        buckets.put(String.valueOf(bucket.key()), bucket.docCount());
                     }
                 });
             }
@@ -485,7 +500,7 @@ public class OpenSearchService {
         // Monthly timeline
         searchBuilder.aggregations("monthly", Aggregation.of(a -> a.dateHistogram(dh -> dh
                 .field("date_taken")
-                .calendarInterval(ci -> ci.month()))));
+                .calendarInterval(CalendarInterval.Month))));
 
         // ISO distribution
         searchBuilder.aggregations("iso", Aggregation.of(a -> a.terms(t -> t.field("iso").size(50))));

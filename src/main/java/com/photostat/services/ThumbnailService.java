@@ -27,7 +27,7 @@ public class ThumbnailService {
     // RAW file extensions that need ExifTool for thumbnail extraction
     private static final Set<String> RAW_EXTENSIONS = Set.of(
             ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf",
-            ".pef", ".srw", ".x3f", ".raw", ".rwl", ".rw2"
+            ".pef", ".srw", ".x3f", ".raw", ".rwl"
     );
 
     private ThumbnailService() {

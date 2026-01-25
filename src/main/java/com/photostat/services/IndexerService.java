@@ -188,7 +188,7 @@ public class IndexerService {
                     updateStatus("Found " + stats.totalFiles + " image files");
 
                     if (stats.totalFiles == 0) {
-                        updateProgress(1.0);
+                        notifyProgress(1.0);
                         notifyCompletion(stats);
                         return null;
                     }
@@ -312,7 +312,7 @@ public class IndexerService {
         }
     }
 
-    private void updateProgress(double progress) {
+    private void notifyProgress(double progress) {
         if (progressCallback != null) {
             Platform.runLater(() -> progressCallback.accept(progress));
         }
