@@ -6,6 +6,7 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.scene.layout.Region;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,9 +41,13 @@ public class SearchPanel extends VBox {
     }
 
     private void initializeUI() {
-        setSpacing(10);
-        setPadding(new Insets(10));
+        setSpacing(0);
+        setPadding(new Insets(0));
         setStyle("-fx-background-color: #fafafa; -fx-border-color: #ddd; -fx-border-radius: 5;");
+
+        // Content container that will be scrollable
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
 
         // Search field
         Label searchLabel = new Label("Search:");
@@ -169,7 +174,8 @@ public class SearchPanel extends VBox {
         HBox buttonBox = new HBox(10, searchButton, clearButton);
         buttonBox.setPadding(new Insets(10, 0, 0, 0));
 
-        getChildren().addAll(
+        // Add all elements to the content container
+        content.getChildren().addAll(
                 searchLabel, searchBox,
                 new Separator(),
                 filterGrid,
@@ -177,6 +183,18 @@ public class SearchPanel extends VBox {
                 exposurePane,
                 buttonBox
         );
+
+        // Wrap content in a ScrollPane
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        // Make the ScrollPane fill available space
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+
+        getChildren().add(scrollPane);
     }
 
     /**
