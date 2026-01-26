@@ -46,13 +46,18 @@ public class DetailPanel extends VBox {
 
         // Preview image
         previewImage = new ImageView();
-        previewImage.setFitWidth(350);
-        previewImage.setFitHeight(250);
         previewImage.setPreserveRatio(true);
 
         StackPane imageContainer = new StackPane(previewImage);
-        imageContainer.setStyle("-fx-background-color: #333; -fx-min-height: 200;");
+        imageContainer.setStyle("-fx-background-color: #333;");
+        imageContainer.setMinHeight(200);
+        imageContainer.setPrefHeight(250);
+        imageContainer.setMaxHeight(300);
         imageContainer.setAlignment(Pos.CENTER);
+
+        // Bind image size to container size
+        previewImage.fitWidthProperty().bind(imageContainer.widthProperty().subtract(20));
+        previewImage.fitHeightProperty().bind(imageContainer.heightProperty().subtract(20));
 
         // File name
         fileNameLabel = new Label("No image selected");
