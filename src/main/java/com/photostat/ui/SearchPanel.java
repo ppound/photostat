@@ -319,6 +319,41 @@ public class SearchPanel extends VBox {
             case "file_type":
                 fileTypeCombo.setValue(value);
                 break;
+            case "iso":
+                // Parse ISO range like "ISO 100-200" or "ISO 3200+"
+                try {
+                    String isoStr = value.replace("ISO ", "");
+                    if (isoStr.contains("-")) {
+                        String[] parts = isoStr.split("-");
+                        int minIso = Integer.parseInt(parts[0].trim());
+                        int maxIso = Integer.parseInt(parts[1].trim());
+                        isoMinSpinner.getValueFactory().setValue(minIso);
+                        isoMaxSpinner.getValueFactory().setValue(maxIso);
+                    } else if (isoStr.contains("+")) {
+                        int minIso = Integer.parseInt(isoStr.replace("+", "").trim());
+                        isoMinSpinner.getValueFactory().setValue(minIso);
+                        isoMaxSpinner.getValueFactory().setValue(0); // No upper limit
+                    } else {
+                        int iso = Integer.parseInt(isoStr.replaceAll("[^0-9]", ""));
+                        isoMinSpinner.getValueFactory().setValue(iso);
+                        isoMaxSpinner.getValueFactory().setValue(iso);
+                    }
+                } catch (NumberFormatException ignored) {}
+                break;
+            case "year":
+                // Parse year from date string like "2024-01-01T00:00:00.000Z" or just "2024"
+                try {
+                    String yearStr = value;
+                    if (value.contains("T")) {
+                        yearStr = value.substring(0, 4);
+                    } else if (value.contains("-")) {
+                        yearStr = value.substring(0, 4);
+                    }
+                    int year = Integer.parseInt(yearStr);
+                    dateFromPicker.setValue(LocalDate.of(year, 1, 1));
+                    dateToPicker.setValue(LocalDate.of(year, 12, 31));
+                } catch (Exception ignored) {}
+                break;
         }
     }
 
