@@ -62,7 +62,12 @@ public class FacetsPanel extends VBox {
         scrollPane = new ScrollPane(facetsContainer);
         scrollPane.setFitToWidth(true);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
+
+        // Set min height so the panel has a reasonable size
+        setMinHeight(150);
 
         getChildren().addAll(title, new Separator(), scrollPane);
     }

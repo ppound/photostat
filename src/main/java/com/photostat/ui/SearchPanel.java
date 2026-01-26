@@ -44,6 +44,9 @@ public class SearchPanel extends VBox {
         setSpacing(0);
         setPadding(new Insets(0));
         setStyle("-fx-background-color: #fafafa; -fx-border-color: #ddd; -fx-border-radius: 5;");
+        setMinHeight(200);
+        setPrefHeight(350);
+        setMaxHeight(450);
 
         // Content container that will be scrollable
         VBox content = new VBox(10);
