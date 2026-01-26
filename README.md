@@ -200,8 +200,21 @@ sudo dnf install perl-Image-ExifTool
 1. **Ensure OpenSearch is running** (see installation above)
 
 2. **Launch PhotoStat**:
+
+   **Windows / Linux / Intel Mac:**
    ```bash
    java -jar photostat-java-1.0.0-executable.jar
+   ```
+
+   **Apple Silicon Mac (M1/M2/M3):**
+
+   The executable JAR requires the JavaFX SDK for Apple Silicon. Download and run:
+   ```bash
+   # Download JavaFX SDK for Mac ARM64 from https://gluonhq.com/products/javafx/
+   # Extract to a folder, then run:
+   java --module-path /path/to/javafx-sdk-21/lib \
+        --add-modules javafx.controls,javafx.fxml,javafx.swing \
+        -jar photostat-java-1.0.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -491,6 +504,16 @@ Configuration is stored in `~/.photostat/config.json`:
 
 **Error: "JavaFX runtime components are missing"**
 - Use the `-executable.jar` file which includes JavaFX
+
+**Error on Apple Silicon Mac (M1/M2/M3): "no suitable pipeline found" or graphics errors**
+- The executable JAR includes Intel Mac natives, not ARM64
+- Download JavaFX SDK for Mac ARM64 from https://gluonhq.com/products/javafx/
+- Run with:
+  ```bash
+  java --module-path /path/to/javafx-sdk-21/lib \
+       --add-modules javafx.controls,javafx.fxml,javafx.swing \
+       -jar photostat-java-1.0.0-executable.jar
+  ```
 
 ### Can't Connect to OpenSearch
 
