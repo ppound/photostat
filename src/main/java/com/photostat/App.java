@@ -3,7 +3,9 @@ package com.photostat;
 import com.photostat.services.ConfigService;
 import com.photostat.ui.MainWindow;
 import javafx.application.Application;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 /**
@@ -25,9 +27,21 @@ public class App extends Application {
         // Create main window
         MainWindow mainWindow = new MainWindow();
 
-        // Create scene with configured dimensions
+        // Get screen dimensions and calculate 80% size
+        Rectangle2D screenBounds = Screen.getPrimary().getVisualBounds();
+        int defaultWidth = (int) (screenBounds.getWidth() * 0.8);
+        int defaultHeight = (int) (screenBounds.getHeight() * 0.8);
+
+        // Use saved dimensions if available, otherwise use 80% of screen
         int width = configService.getWindowWidth();
         int height = configService.getWindowHeight();
+
+        // If saved size is the old default (1200x800), use new 80% default
+        if (width == 1200 && height == 800) {
+            width = defaultWidth;
+            height = defaultHeight;
+        }
+
         Scene scene = new Scene(mainWindow, width, height);
 
         // Load stylesheet
@@ -43,6 +57,10 @@ public class App extends Application {
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
+
+        // Center window on screen
+        primaryStage.setX((screenBounds.getWidth() - width) / 2 + screenBounds.getMinX());
+        primaryStage.setY((screenBounds.getHeight() - height) / 2 + screenBounds.getMinY());
 
         // Save window size on close
         primaryStage.setOnCloseRequest(event -> {
