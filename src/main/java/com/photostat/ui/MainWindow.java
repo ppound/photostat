@@ -112,20 +112,26 @@ public class MainWindow extends BorderPane {
         leftSide.setPadding(new Insets(10));
         leftSide.getChildren().addAll(searchPanel, facetsPanel);
         VBox.setVgrow(facetsPanel, Priority.ALWAYS);
-        leftSide.setMinWidth(280);
-        leftSide.setPrefWidth(300);
+        leftSide.setMinWidth(250);
+        leftSide.setPrefWidth(280);
+        leftSide.setMaxWidth(400);
 
         VBox center = new VBox(10);
         center.setPadding(new Insets(10));
         center.getChildren().add(resultsPanel);
         VBox.setVgrow(resultsPanel, Priority.ALWAYS);
 
-        detailPanel.setMinWidth(350);
-        detailPanel.setPrefWidth(400);
+        detailPanel.setMinWidth(300);
+        detailPanel.setPrefWidth(350);
+        detailPanel.setMaxWidth(500);
 
         SplitPane mainSplit = new SplitPane();
         mainSplit.getItems().addAll(leftSide, center, detailPanel);
-        mainSplit.setDividerPositions(0.2, 0.7);
+        mainSplit.setDividerPositions(0.2, 0.75);
+
+        // Ensure SplitPane respects size constraints
+        SplitPane.setResizableWithParent(leftSide, false);
+        SplitPane.setResizableWithParent(detailPanel, false);
 
         searchView.setCenter(mainSplit);
 
