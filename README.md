@@ -24,7 +24,9 @@ A powerful cross-platform desktop application for indexing, searching, and analy
   - [Searching Your Photos](#searching-your-photos)
   - [Using Faceted Navigation](#using-faceted-navigation)
   - [Viewing Image Details](#viewing-image-details)
+  - [Adding Custom Metadata](#adding-custom-metadata)
   - [Exploring Charts](#exploring-charts)
+  - [Enabling Logging](#enabling-logging)
 - [Supported Image Formats](#supported-image-formats)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
@@ -51,6 +53,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Date/Time** - When the photo was taken
 - **GPS Location** - Latitude and longitude with Google Maps integration
 - **Image Dimensions** - Width, height, orientation
+- **Custom Metadata** - Add your own persons, places, and tags to organize photos
 
 ### Visualizations
 
@@ -58,6 +61,20 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Timeline View** - Visualize your photo collection over time
 - **Exposure Analysis** - ISO distribution, aperture histogram, focal length usage
 - **File Type Breakdown** - Pie chart of image formats in your collection
+
+### Custom Metadata
+
+- **Persons** - Tag people in your photos
+- **Places** - Add location names to photos
+- **Tags** - Create custom tags for organization
+- **Searchable** - All custom metadata is fully searchable
+- **Faceted** - Filter by person, place, or tag using facets
+
+### Logging & Debugging
+
+- **Configurable Logging** - Enable/disable file logging
+- **Log Levels** - DEBUG, INFO, WARN, ERROR
+- **Log File** - Logs saved to `~/.photostat/photostat.log`
 
 ### Cross-Platform
 
@@ -84,7 +101,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release:
 
 ```
-photostat-java-1.0.1-executable.jar
+photostat-java-1.1.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -203,7 +220,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.0.1-executable.jar
+   java -jar photostat-java-1.1.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -214,7 +231,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.0.1-executable.jar
+        -jar photostat-java-1.1.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -357,6 +374,9 @@ The **Facets Panel** on the left shows aggregated counts for quick filtering:
 - **File Type** - Click to filter by format
 - **ISO Range** - Click to filter by ISO bracket
 - **Year/Month** - Click to filter by time period
+- **Persons** - Click to filter by tagged people
+- **Places** - Click to filter by location name
+- **Tags** - Click to filter by custom tags
 
 **How to Use:**
 1. Click any facet value to apply that filter
@@ -399,6 +419,33 @@ The **Facets Panel** on the left shows aggregated counts for quick filtering:
    - **Open in Viewer** - Opens the image in your default photo viewer
    - **Open Folder** - Opens the containing folder in file explorer
 
+### Adding Custom Metadata
+
+You can add your own metadata to photos for better organization:
+
+1. **Select an image** in the search results
+
+2. In the **Detail Panel**, find the **Custom Metadata** section:
+
+   ![Custom Metadata](docs/screenshots/custom-metadata.png)
+
+3. **Add metadata:**
+
+   | Field | Description | Example |
+   |-------|-------------|---------|
+   | **Persons** | Names of people in the photo (comma-separated) | "John, Jane, Bob" |
+   | **Place** | Location name | "Central Park, NYC" |
+   | **Tags** | Custom tags (comma-separated) | "vacation, family, summer" |
+
+4. Click **Save Metadata** to save changes
+
+5. The search will automatically refresh
+
+**Using Custom Metadata:**
+- Search for names, places, or tags in the search box
+- Use the **Persons**, **Places**, and **Tags** facets to filter
+- Use the filter dropdowns in the **Custom Metadata** section of the search panel
+
 ### Exploring Charts
 
 Navigate to the **Charts** tab to visualize your collection:
@@ -428,6 +475,38 @@ Navigate to the **Charts** tab to visualize your collection:
 
 4. **Locations** (if GPS data available)
    - Map plot of photo locations
+
+### Enabling Logging
+
+PhotoStat includes file-based logging for debugging:
+
+1. **Edit the config file** at `~/.photostat/config.json`
+
+2. **Add or modify the logging section:**
+
+   ```json
+   {
+     "logging": {
+       "enabled": true,
+       "level": "INFO"
+     }
+   }
+   ```
+
+3. **Available log levels** (from most to least verbose):
+
+   | Level | Description |
+   |-------|-------------|
+   | `DEBUG` | All messages including detailed debug info |
+   | `INFO` | General information, warnings, and errors |
+   | `WARN` | Warnings and errors only |
+   | `ERROR` | Errors only |
+
+4. **Log file location:** `~/.photostat/photostat.log`
+
+5. **Restart the application** for changes to take effect
+
+**Note:** Logging is disabled by default to avoid unnecessary disk writes.
 
 ---
 
@@ -470,15 +549,31 @@ Configuration is stored in `~/.photostat/config.json`:
   "opensearch": {
     "host": "localhost",
     "port": 9200,
-    "useSsl": false,
-    "indexName": "photostat"
+    "ssl": false,
+    "index_name": "photostat",
+    "username": "",
+    "password": ""
   },
-  "directories": [
-    "/home/user/Pictures",
-    "/media/photos"
-  ],
-  "exiftoolPath": "/usr/bin/exiftool",
-  "thumbnailSize": 200
+  "indexing": {
+    "directories": [
+      "/home/user/Pictures",
+      "/media/photos"
+    ],
+    "batch_size": 50,
+    "file_extensions": [".jpg", ".jpeg", ".png", ".cr2", ".nef", ".arw", ".dng", ".raf"]
+  },
+  "ui": {
+    "thumbnail_size": 200,
+    "results_per_page": 50
+  },
+  "exiftool": {
+    "path": "exiftool",
+    "use_for_raw": true
+  },
+  "logging": {
+    "enabled": false,
+    "level": "INFO"
+  }
 }
 ```
 
@@ -486,11 +581,18 @@ Configuration is stored in `~/.photostat/config.json`:
 |---------|-------------|
 | `opensearch.host` | OpenSearch server hostname |
 | `opensearch.port` | OpenSearch HTTP port |
-| `opensearch.useSsl` | Enable HTTPS connection |
-| `opensearch.indexName` | Name of the index to use |
-| `directories` | List of directories to index |
-| `exiftoolPath` | Path to ExifTool executable |
-| `thumbnailSize` | Maximum thumbnail dimension in pixels |
+| `opensearch.ssl` | Enable HTTPS connection |
+| `opensearch.index_name` | Name of the index to use |
+| `opensearch.username` | Username for authentication (optional) |
+| `opensearch.password` | Password for authentication (optional) |
+| `indexing.directories` | List of directories to index |
+| `indexing.batch_size` | Number of files to index per batch |
+| `ui.thumbnail_size` | Maximum thumbnail dimension in pixels |
+| `ui.results_per_page` | Number of results per page |
+| `exiftool.path` | Path to ExifTool executable |
+| `exiftool.use_for_raw` | Use ExifTool for RAW files |
+| `logging.enabled` | Enable file logging (default: false) |
+| `logging.level` | Log level: DEBUG, INFO, WARN, ERROR |
 
 ---
 
@@ -512,7 +614,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.0.1-executable.jar
+       -jar photostat-java-1.1.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -579,7 +681,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.0.1-executable.jar
+# target/photostat-java-1.1.0-executable.jar
 ```
 
 ### Run from Source
@@ -614,7 +716,8 @@ photostat-java/
 │   │   ├── ExifService.java             # EXIF metadata extraction
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
-│   │   └── ThumbnailService.java        # Thumbnail generation
+│   │   ├── ThumbnailService.java        # Thumbnail generation
+│   │   └── LoggingService.java          # File-based logging
 │   └── ui/
 │       ├── MainWindow.java              # Main application window
 │       ├── SearchPanel.java             # Search controls

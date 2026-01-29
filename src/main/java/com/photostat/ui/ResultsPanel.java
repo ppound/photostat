@@ -2,6 +2,7 @@ package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
+import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
@@ -30,6 +31,7 @@ public class ResultsPanel extends VBox {
     private final OpenSearchService openSearchService;
     private final ThumbnailService thumbnailService;
     private final ConfigService configService;
+    private final LoggingService logger;
 
     private TableView<ImageMetadata> resultsTable;
     private Label resultsCountLabel;
@@ -48,6 +50,7 @@ public class ResultsPanel extends VBox {
         this.openSearchService = OpenSearchService.getInstance();
         this.thumbnailService = ThumbnailService.getInstance();
         this.configService = ConfigService.getInstance();
+        this.logger = LoggingService.getInstance();
 
         initializeUI();
     }
@@ -205,10 +208,15 @@ public class ResultsPanel extends VBox {
         int pageSize = configService.getResultsPerPage();
         int from = page * pageSize;
 
+        logger.info("ResultsPanel", "Loading page " + page + " (from=" + from + ", size=" + pageSize + ")");
+        logger.debug("ResultsPanel", "Query: '" + currentQuery + "', Filters: " + currentFilters);
+
         Thread thread = new Thread(() -> {
             try {
+                logger.debug("ResultsPanel", "Calling openSearchService.search...");
                 OpenSearchService.SearchResult result = openSearchService.search(
                         currentQuery, currentFilters, from, pageSize);
+                logger.debug("ResultsPanel", "Search completed, got " + result.getResults().size() + " results");
 
                 Platform.runLater(() -> {
                     resultsTable.getItems().clear();
@@ -219,6 +227,8 @@ public class ResultsPanel extends VBox {
 
                     resultsCountLabel.setText(String.format("Found %,d images", totalResults));
                     pagination.setPageCount(totalPages);
+
+                    logger.info("ResultsPanel", "Displayed " + result.getResults().size() + " of " + totalResults + " total results");
 
                     // Notify aggregations callback
                     if (aggregationsCallback != null) {
@@ -232,6 +242,7 @@ public class ResultsPanel extends VBox {
                 });
 
             } catch (Exception e) {
+                logger.error("ResultsPanel", "Search failed", e);
                 Platform.runLater(() -> {
                     resultsCountLabel.setText("Search error: " + e.getMessage());
                     resultsTable.getItems().clear();

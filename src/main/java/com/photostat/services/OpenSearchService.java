@@ -49,10 +49,12 @@ public class OpenSearchService {
     private OpenSearchClient client;
     private final ConfigService configService;
     private final ObjectMapper objectMapper;
+    private final LoggingService logger;
     private boolean connected = false;
 
     private OpenSearchService() {
         this.configService = ConfigService.getInstance();
+        this.logger = LoggingService.getInstance();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -202,6 +204,11 @@ public class OpenSearchService {
             properties.put("copyright", Property.of(p -> p.text(t -> t)));
             properties.put("software", Property.of(p -> p.keyword(k -> k)));
 
+            // Custom user-defined metadata
+            properties.put("persons", Property.of(p -> p.keyword(k -> k)));
+            properties.put("place", Property.of(p -> p.keyword(k -> k)));
+            properties.put("tags", Property.of(p -> p.keyword(k -> k)));
+
             // Raw EXIF data (not indexed)
             properties.put("all_exif", Property.of(p -> p.object(o -> o.enabled(false))));
 
@@ -224,6 +231,8 @@ public class OpenSearchService {
         String indexName = configService.getIndexName();
         String docId = generateDocumentId(metadata.getFilePath());
 
+        logger.debug("OpenSearchService", "Indexing document: " + metadata.getFilePath() + " with ID: " + docId);
+
         IndexRequest<ImageMetadata> request = new IndexRequest.Builder<ImageMetadata>()
                 .index(indexName)
                 .id(docId)
@@ -231,6 +240,48 @@ public class OpenSearchService {
                 .build();
 
         client.index(request);
+        logger.debug("OpenSearchService", "Document indexed successfully: " + metadata.getFilePath());
+    }
+
+    /**
+     * Update an existing document (re-indexes with new data).
+     */
+    public void updateDocument(ImageMetadata metadata) throws IOException {
+        logger.info("OpenSearchService", "Updating document: " + metadata.getFilePath());
+        logger.debug("OpenSearchService", "Persons: " + metadata.getPersonsString());
+        logger.debug("OpenSearchService", "Place: " + metadata.getPlace());
+        logger.debug("OpenSearchService", "Tags: " + metadata.getTagsString());
+
+        try {
+            indexDocument(metadata);
+
+            // Refresh the index to make the update visible immediately
+            String indexName = configService.getIndexName();
+            client.indices().refresh(r -> r.index(indexName));
+            logger.info("OpenSearchService", "Document updated and index refreshed: " + metadata.getFilePath());
+        } catch (Exception e) {
+            logger.error("OpenSearchService", "Failed to update document: " + metadata.getFilePath(), e);
+            throw e;
+        }
+    }
+
+    /**
+     * Get a document by file path.
+     */
+    public ImageMetadata getDocumentByPath(String filePath) throws IOException {
+        String indexName = configService.getIndexName();
+        String docId = generateDocumentId(filePath);
+
+        GetRequest request = new GetRequest.Builder()
+                .index(indexName)
+                .id(docId)
+                .build();
+
+        GetResponse<ImageMetadata> response = client.get(request, ImageMetadata.class);
+        if (response.found() && response.source() != null) {
+            return response.source();
+        }
+        return null;
     }
 
     /**
@@ -276,6 +327,8 @@ public class OpenSearchService {
      */
     public SearchResult search(String queryText, Map<String, Object> filters, int from, int size) throws IOException {
         String indexName = configService.getIndexName();
+        logger.debug("OpenSearchService", "Search called - query: '" + queryText + "', from: " + from + ", size: " + size);
+        logger.debug("OpenSearchService", "Filters: " + (filters != null ? filters.toString() : "none"));
 
         BoolQuery.Builder boolQuery = new BoolQuery.Builder();
 
@@ -283,7 +336,7 @@ public class OpenSearchService {
         if (queryText != null && !queryText.trim().isEmpty()) {
             boolQuery.must(Query.of(q -> q.multiMatch(mm -> mm
                     .query(queryText)
-                    .fields("file_name", "camera_make", "camera_model", "lens_model", "artist", "copyright")
+                    .fields("file_name", "camera_make", "camera_model", "lens_model", "artist", "copyright", "persons", "place", "tags")
             )));
         }
 
@@ -306,6 +359,11 @@ public class OpenSearchService {
         searchBuilder.aggregations("lens_model", Aggregation.of(a -> a.terms(t -> t.field("lens_model").size(50))));
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
 
+        // Custom metadata aggregations
+        searchBuilder.aggregations("persons", Aggregation.of(a -> a.terms(t -> t.field("persons").size(50))));
+        searchBuilder.aggregations("place", Aggregation.of(a -> a.terms(t -> t.field("place").size(50))));
+        searchBuilder.aggregations("tags", Aggregation.of(a -> a.terms(t -> t.field("tags").size(50))));
+
         // ISO ranges aggregation
         List<AggregationRange> isoRanges = Arrays.asList(
                 new AggregationRange.Builder().key("ISO 100-200").from("100").to("201").build(),
@@ -322,20 +380,27 @@ public class OpenSearchService {
                 .field("date_taken")
                 .calendarInterval(CalendarInterval.Year))));
 
-        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+        try {
+            SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
 
-        // Extract results
-        List<ImageMetadata> results = response.hits().hits().stream()
-                .map(Hit::source)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+            // Extract results
+            List<ImageMetadata> results = response.hits().hits().stream()
+                    .map(Hit::source)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
 
-        long total = response.hits().total() != null ? response.hits().total().value() : 0;
+            long total = response.hits().total() != null ? response.hits().total().value() : 0;
 
-        // Extract aggregations
-        Map<String, Map<String, Long>> aggregations = extractAggregations(response);
+            logger.debug("OpenSearchService", "Search returned " + results.size() + " results, total: " + total);
 
-        return new SearchResult(results, total, aggregations);
+            // Extract aggregations
+            Map<String, Map<String, Long>> aggregations = extractAggregations(response);
+
+            return new SearchResult(results, total, aggregations);
+        } catch (Exception e) {
+            logger.error("OpenSearchService", "Search failed", e);
+            throw e;
+        }
     }
 
     private void addFilters(BoolQuery.Builder boolQuery, Map<String, Object> filters) {
@@ -502,6 +567,11 @@ public class OpenSearchService {
 
         // File types
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
+
+        // Custom metadata
+        searchBuilder.aggregations("persons", Aggregation.of(a -> a.terms(t -> t.field("persons").size(30))));
+        searchBuilder.aggregations("place", Aggregation.of(a -> a.terms(t -> t.field("place").size(30))));
+        searchBuilder.aggregations("tags", Aggregation.of(a -> a.terms(t -> t.field("tags").size(30))));
 
         // Monthly timeline
         searchBuilder.aggregations("monthly", Aggregation.of(a -> a.dateHistogram(dh -> dh

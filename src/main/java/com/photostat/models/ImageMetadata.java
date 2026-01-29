@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -82,8 +84,20 @@ public class ImageMetadata {
     @JsonProperty("all_exif")
     private Map<String, Object> allExif;
 
+    // Custom user-defined metadata
+    @JsonProperty("persons")
+    private List<String> persons;
+
+    @JsonProperty("place")
+    private String place;
+
+    @JsonProperty("tags")
+    private List<String> tags;
+
     public ImageMetadata() {
         this.allExif = new HashMap<>();
+        this.persons = new ArrayList<>();
+        this.tags = new ArrayList<>();
         this.dateIndexed = LocalDateTime.now();
     }
 
@@ -288,6 +302,74 @@ public class ImageMetadata {
             allExif = new HashMap<>();
         }
         allExif.put(key, value);
+    }
+
+    public List<String> getPersons() {
+        return persons;
+    }
+
+    public void setPersons(List<String> persons) {
+        this.persons = persons;
+    }
+
+    public void addPerson(String person) {
+        if (persons == null) {
+            persons = new ArrayList<>();
+        }
+        if (!persons.contains(person)) {
+            persons.add(person);
+        }
+    }
+
+    public void removePerson(String person) {
+        if (persons != null) {
+            persons.remove(person);
+        }
+    }
+
+    public String getPlace() {
+        return place;
+    }
+
+    public void setPlace(String place) {
+        this.place = place;
+    }
+
+    public List<String> getTags() {
+        return tags;
+    }
+
+    public void setTags(List<String> tags) {
+        this.tags = tags;
+    }
+
+    public void addTag(String tag) {
+        if (tags == null) {
+            tags = new ArrayList<>();
+        }
+        if (!tags.contains(tag)) {
+            tags.add(tag);
+        }
+    }
+
+    public void removeTag(String tag) {
+        if (tags != null) {
+            tags.remove(tag);
+        }
+    }
+
+    public String getPersonsString() {
+        if (persons == null || persons.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", persons);
+    }
+
+    public String getTagsString() {
+        if (tags == null || tags.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", tags);
     }
 
     /**

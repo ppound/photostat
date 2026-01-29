@@ -34,6 +34,11 @@ public class SearchPanel extends VBox {
     private Spinner<Integer> focalLengthMinSpinner;
     private Spinner<Integer> focalLengthMaxSpinner;
 
+    // Custom metadata filters
+    private ComboBox<String> personsCombo;
+    private ComboBox<String> placeCombo;
+    private ComboBox<String> tagsCombo;
+
     private BiConsumer<String, Map<String, Object>> searchCallback;
 
     public SearchPanel() {
@@ -166,6 +171,41 @@ public class SearchPanel extends VBox {
 
         exposurePane.setContent(exposureGrid);
 
+        // Custom metadata filters
+        TitledPane customPane = new TitledPane();
+        customPane.setText("Custom Metadata");
+        customPane.setExpanded(false);
+
+        GridPane customGrid = new GridPane();
+        customGrid.setHgap(10);
+        customGrid.setVgap(8);
+
+        // Persons filter
+        customGrid.add(new Label("Person:"), 0, 0);
+        personsCombo = new ComboBox<>();
+        personsCombo.setEditable(true);
+        personsCombo.setPromptText("All");
+        personsCombo.setPrefWidth(150);
+        customGrid.add(personsCombo, 1, 0);
+
+        // Place filter
+        customGrid.add(new Label("Place:"), 0, 1);
+        placeCombo = new ComboBox<>();
+        placeCombo.setEditable(true);
+        placeCombo.setPromptText("All");
+        placeCombo.setPrefWidth(150);
+        customGrid.add(placeCombo, 1, 1);
+
+        // Tags filter
+        customGrid.add(new Label("Tag:"), 0, 2);
+        tagsCombo = new ComboBox<>();
+        tagsCombo.setEditable(true);
+        tagsCombo.setPromptText("All");
+        tagsCombo.setPrefWidth(150);
+        customGrid.add(tagsCombo, 1, 2);
+
+        customPane.setContent(customGrid);
+
         // Buttons
         Button searchButton = new Button("Search");
         searchButton.setDefaultButton(true);
@@ -184,6 +224,7 @@ public class SearchPanel extends VBox {
                 filterGrid,
                 datePane,
                 exposurePane,
+                customPane,
                 buttonBox
         );
 
@@ -281,6 +322,22 @@ public class SearchPanel extends VBox {
             filters.put("focal_length_max", focalMax);
         }
 
+        // Custom metadata filters
+        String persons = personsCombo.getValue();
+        if (persons != null && !persons.trim().isEmpty()) {
+            filters.put("persons", persons.trim());
+        }
+
+        String place = placeCombo.getValue();
+        if (place != null && !place.trim().isEmpty()) {
+            filters.put("place", place.trim());
+        }
+
+        String tags = tagsCombo.getValue();
+        if (tags != null && !tags.trim().isEmpty()) {
+            filters.put("tags", tags.trim());
+        }
+
         return filters;
     }
 
@@ -301,6 +358,9 @@ public class SearchPanel extends VBox {
         apertureMaxSpinner.getValueFactory().setValue(0.0);
         focalLengthMinSpinner.getValueFactory().setValue(0);
         focalLengthMaxSpinner.getValueFactory().setValue(0);
+        personsCombo.setValue(null);
+        placeCombo.setValue(null);
+        tagsCombo.setValue(null);
 
         executeSearch();
     }
@@ -357,6 +417,15 @@ public class SearchPanel extends VBox {
                     dateToPicker.setValue(LocalDate.of(year, 12, 31));
                 } catch (Exception ignored) {}
                 break;
+            case "persons":
+                personsCombo.setValue(value);
+                break;
+            case "place":
+                placeCombo.setValue(value);
+                break;
+            case "tags":
+                tagsCombo.setValue(value);
+                break;
         }
     }
 
@@ -394,6 +463,36 @@ public class SearchPanel extends VBox {
             lensCombo.getItems().add("");
             lensCombo.getItems().addAll(lenses.keySet());
             lensCombo.setValue(current);
+        }
+
+        // Persons
+        Map<String, Long> persons = aggregations.get("persons");
+        if (persons != null) {
+            String current = personsCombo.getValue();
+            personsCombo.getItems().clear();
+            personsCombo.getItems().add("");
+            personsCombo.getItems().addAll(persons.keySet());
+            personsCombo.setValue(current);
+        }
+
+        // Places
+        Map<String, Long> places = aggregations.get("place");
+        if (places != null) {
+            String current = placeCombo.getValue();
+            placeCombo.getItems().clear();
+            placeCombo.getItems().add("");
+            placeCombo.getItems().addAll(places.keySet());
+            placeCombo.setValue(current);
+        }
+
+        // Tags
+        Map<String, Long> tags = aggregations.get("tags");
+        if (tags != null) {
+            String current = tagsCombo.getValue();
+            tagsCombo.getItems().clear();
+            tagsCombo.getItems().add("");
+            tagsCombo.getItems().addAll(tags.keySet());
+            tagsCombo.setValue(current);
         }
     }
 

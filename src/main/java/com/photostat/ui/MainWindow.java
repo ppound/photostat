@@ -107,6 +107,11 @@ public class MainWindow extends BorderPane {
             searchPanel.executeSearch();
         });
 
+        // Wire up detail panel metadata save to refresh results
+        detailPanel.setMetadataSavedCallback(() -> {
+            searchPanel.executeSearch();
+        });
+
         // Layout
         VBox leftSide = new VBox(10);
         leftSide.setPadding(new Insets(10));

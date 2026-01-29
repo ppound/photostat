@@ -1,6 +1,8 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.LoggingService;
+import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -22,6 +24,8 @@ import java.util.Map;
 public class DetailPanel extends VBox {
 
     private final ThumbnailService thumbnailService;
+    private final OpenSearchService openSearchService;
+    private final LoggingService logger;
 
     private ImageView previewImage;
     private Label fileNameLabel;
@@ -32,10 +36,19 @@ public class DetailPanel extends VBox {
     private TitledPane allExifPane;
     private TextArea allExifText;
 
+    // Custom metadata fields
+    private TextField personsField;
+    private TextField placeField;
+    private TextField tagsField;
+    private Button saveMetadataButton;
+    private Runnable metadataSavedCallback;
+
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public DetailPanel() {
         this.thumbnailService = ThumbnailService.getInstance();
+        this.openSearchService = OpenSearchService.getInstance();
+        this.logger = LoggingService.getInstance();
         initializeUI();
     }
 
@@ -110,6 +123,13 @@ public class DetailPanel extends VBox {
         gpsInfoGrid = createInfoGrid();
         gpsPane.setContent(gpsInfoGrid);
 
+        // Custom metadata section
+        TitledPane customPane = new TitledPane();
+        customPane.setText("Custom Metadata");
+        customPane.setExpanded(true);
+        VBox customContent = createCustomMetadataPane();
+        customPane.setContent(customContent);
+
         // All EXIF data section
         allExifPane = new TitledPane();
         allExifPane.setText("All EXIF Data");
@@ -121,7 +141,7 @@ public class DetailPanel extends VBox {
         allExifPane.setContent(allExifText);
 
         detailsContent.getChildren().addAll(
-                basicPane, cameraPane, exposurePane, gpsPane, allExifPane
+                basicPane, cameraPane, exposurePane, gpsPane, customPane, allExifPane
         );
 
         scrollPane.setContent(detailsContent);
@@ -151,6 +171,140 @@ public class DetailPanel extends VBox {
         grid.getColumnConstraints().addAll(labelCol, valueCol);
 
         return grid;
+    }
+
+    private VBox createCustomMetadataPane() {
+        VBox content = new VBox(8);
+        content.setPadding(new Insets(5));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(8);
+
+        ColumnConstraints labelCol = new ColumnConstraints();
+        labelCol.setMinWidth(60);
+        labelCol.setPrefWidth(70);
+
+        ColumnConstraints valueCol = new ColumnConstraints();
+        valueCol.setHgrow(Priority.ALWAYS);
+
+        grid.getColumnConstraints().addAll(labelCol, valueCol);
+
+        int row = 0;
+
+        // Persons field
+        Label personsLabel = new Label("Persons:");
+        personsLabel.setStyle("-fx-font-weight: bold;");
+        personsField = new TextField();
+        personsField.setPromptText("Comma-separated names");
+        grid.add(personsLabel, 0, row);
+        grid.add(personsField, 1, row++);
+
+        // Place field
+        Label placeLabel = new Label("Place:");
+        placeLabel.setStyle("-fx-font-weight: bold;");
+        placeField = new TextField();
+        placeField.setPromptText("Location name");
+        grid.add(placeLabel, 0, row);
+        grid.add(placeField, 1, row++);
+
+        // Tags field
+        Label tagsLabel = new Label("Tags:");
+        tagsLabel.setStyle("-fx-font-weight: bold;");
+        tagsField = new TextField();
+        tagsField.setPromptText("Comma-separated tags");
+        grid.add(tagsLabel, 0, row);
+        grid.add(tagsField, 1, row++);
+
+        // Save button
+        saveMetadataButton = new Button("Save Metadata");
+        saveMetadataButton.setOnAction(e -> saveCustomMetadata());
+        saveMetadataButton.setDisable(true);
+
+        HBox buttonBox = new HBox(saveMetadataButton);
+        buttonBox.setPadding(new Insets(5, 0, 0, 0));
+
+        content.getChildren().addAll(grid, buttonBox);
+
+        return content;
+    }
+
+    private void saveCustomMetadata() {
+        if (currentMetadata == null) {
+            logger.warn("DetailPanel", "saveCustomMetadata called but currentMetadata is null");
+            return;
+        }
+
+        logger.info("DetailPanel", "Saving custom metadata for: " + currentMetadata.getFilePath());
+
+        // Parse comma-separated values
+        String personsText = personsField.getText().trim();
+        String placeText = placeField.getText().trim();
+        String tagsText = tagsField.getText().trim();
+
+        logger.debug("DetailPanel", "Persons: " + personsText);
+        logger.debug("DetailPanel", "Place: " + placeText);
+        logger.debug("DetailPanel", "Tags: " + tagsText);
+
+        // Update metadata object - use setPersons with new list to handle null safely
+        java.util.List<String> newPersons = new java.util.ArrayList<>();
+        if (!personsText.isEmpty()) {
+            for (String person : personsText.split(",")) {
+                String trimmed = person.trim();
+                if (!trimmed.isEmpty() && !newPersons.contains(trimmed)) {
+                    newPersons.add(trimmed);
+                }
+            }
+        }
+        currentMetadata.setPersons(newPersons);
+
+        currentMetadata.setPlace(placeText.isEmpty() ? null : placeText);
+
+        // Use setTags with new list to handle null safely
+        java.util.List<String> newTags = new java.util.ArrayList<>();
+        if (!tagsText.isEmpty()) {
+            for (String tag : tagsText.split(",")) {
+                String trimmed = tag.trim();
+                if (!trimmed.isEmpty() && !newTags.contains(trimmed)) {
+                    newTags.add(trimmed);
+                }
+            }
+        }
+        currentMetadata.setTags(newTags);
+
+        // Save to OpenSearch
+        new Thread(() -> {
+            try {
+                logger.info("DetailPanel", "Calling updateDocument...");
+                openSearchService.updateDocument(currentMetadata);
+                logger.info("DetailPanel", "updateDocument completed successfully");
+                Platform.runLater(() -> {
+                    showInfo("Metadata Saved", "Custom metadata has been saved successfully.");
+                    if (metadataSavedCallback != null) {
+                        logger.info("DetailPanel", "Triggering metadataSavedCallback (search refresh)");
+                        metadataSavedCallback.run();
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("DetailPanel", "Failed to save metadata", e);
+                Platform.runLater(() -> showError("Save Failed", "Failed to save metadata: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    /**
+     * Set callback for when metadata is saved (to refresh search results).
+     */
+    public void setMetadataSavedCallback(Runnable callback) {
+        this.metadataSavedCallback = callback;
+    }
+
+    private void showInfo(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.show();  // Use show() instead of showAndWait() to avoid blocking
     }
 
     /**
@@ -184,8 +338,21 @@ public class DetailPanel extends VBox {
         // Update GPS info
         updateGpsInfo(metadata);
 
+        // Update custom metadata
+        updateCustomMetadata(metadata);
+
         // Update all EXIF
         updateAllExif(metadata);
+    }
+
+    private void updateCustomMetadata(ImageMetadata metadata) {
+        // Enable save button
+        saveMetadataButton.setDisable(false);
+
+        // Populate fields
+        personsField.setText(metadata.getPersonsString());
+        placeField.setText(metadata.getPlace() != null ? metadata.getPlace() : "");
+        tagsField.setText(metadata.getTagsString());
     }
 
     private void loadPreviewImage(String filePath) {
@@ -334,6 +501,10 @@ public class DetailPanel extends VBox {
         exposureInfoGrid.getChildren().clear();
         gpsInfoGrid.getChildren().clear();
         allExifText.clear();
+        personsField.clear();
+        placeField.clear();
+        tagsField.clear();
+        saveMetadataButton.setDisable(true);
     }
 
     private String currentFilePath;
@@ -394,6 +565,6 @@ public class DetailPanel extends VBox {
         alert.setTitle(title);
         alert.setHeaderText(null);
         alert.setContentText(message);
-        alert.showAndWait();
+        alert.show();  // Use show() instead of showAndWait() to avoid blocking
     }
 }

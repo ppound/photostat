@@ -109,6 +109,12 @@ public class ConfigService {
         exiftool.put("use_for_raw", true);
         defaultConfig.put("exiftool", exiftool);
 
+        // Logging settings
+        Map<String, Object> logging = new HashMap<>();
+        logging.put("enabled", false);  // Logging disabled by default
+        logging.put("level", "INFO");   // DEBUG, INFO, WARN, ERROR
+        defaultConfig.put("logging", logging);
+
         return defaultConfig;
     }
 
@@ -258,6 +264,23 @@ public class ConfigService {
 
     public boolean isUseExifToolForRaw() {
         return getNestedBoolean("exiftool", "use_for_raw", true);
+    }
+
+    // Logging settings
+    public boolean isLoggingEnabled() {
+        return getNestedBoolean("logging", "enabled", false);
+    }
+
+    public void setLoggingEnabled(boolean enabled) {
+        setNestedValue("logging", "enabled", enabled);
+    }
+
+    public String getLoggingLevel() {
+        return getNestedString("logging", "level", "INFO");
+    }
+
+    public void setLoggingLevel(String level) {
+        setNestedValue("logging", "level", level);
     }
 
     // Helper methods

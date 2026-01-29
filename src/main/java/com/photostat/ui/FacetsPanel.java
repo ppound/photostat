@@ -22,6 +22,9 @@ public class FacetsPanel extends VBox {
     private TitledPane fileTypePane;
     private TitledPane isoRangePane;
     private TitledPane yearPane;
+    private TitledPane personsPane;
+    private TitledPane placePane;
+    private TitledPane tagsPane;
 
     private BiConsumer<String, String> filterCallback;
 
@@ -44,10 +47,14 @@ public class FacetsPanel extends VBox {
         fileTypePane = createFacetPane("File Type", "file_type");
         isoRangePane = createFacetPane("ISO Range", "iso");
         yearPane = createFacetPane("Year", "year");
+        personsPane = createFacetPane("Persons", "persons");
+        placePane = createFacetPane("Places", "place");
+        tagsPane = createFacetPane("Tags", "tags");
 
         // Default expanded state
         cameraMakePane.setExpanded(true);
         fileTypePane.setExpanded(true);
+        tagsPane.setExpanded(true);
 
         facetsContainer = new VBox(5);
         facetsContainer.getChildren().addAll(
@@ -56,7 +63,11 @@ public class FacetsPanel extends VBox {
                 lensPane,
                 fileTypePane,
                 isoRangePane,
-                yearPane
+                yearPane,
+                new Separator(),
+                personsPane,
+                placePane,
+                tagsPane
         );
 
         scrollPane = new ScrollPane(facetsContainer);
@@ -96,6 +107,9 @@ public class FacetsPanel extends VBox {
         updateFacetPane(fileTypePane, "file_type", aggregations.get("file_type"));
         updateFacetPane(isoRangePane, "iso", aggregations.get("iso_ranges"));
         updateFacetPane(yearPane, "year", aggregations.get("year"));
+        updateFacetPane(personsPane, "persons", aggregations.get("persons"));
+        updateFacetPane(placePane, "place", aggregations.get("place"));
+        updateFacetPane(tagsPane, "tags", aggregations.get("tags"));
     }
 
     private void updateFacetPane(TitledPane pane, String field, Map<String, Long> buckets) {
