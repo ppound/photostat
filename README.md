@@ -25,6 +25,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
   - [Using Faceted Navigation](#using-faceted-navigation)
   - [Viewing Image Details](#viewing-image-details)
   - [Adding Custom Metadata](#adding-custom-metadata)
+  - [Managing Files](#managing-files)
   - [Exploring Charts](#exploring-charts)
   - [Thumbnail Cache](#thumbnail-cache)
   - [Sidecar Files](#sidecar-files)
@@ -47,6 +48,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Thumbnail Preview** - Quick visual preview of search results
 - **Multi-Directory Indexing** - Index photos from multiple locations on your computer
 - **Background Indexing** - Continue working while photos are being indexed
+- **File Operations** - Copy, move, or delete images directly from search results
 
 ### Metadata Support
 
@@ -86,6 +88,15 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Optional** - Can be disabled if you don't want extra files
 - **Portable** - Sidecar files travel with your images
 
+### File Operations
+
+- **Copy Images** - Copy selected images to a new directory
+- **Move Images** - Move images and automatically update the search index
+- **Delete Images** - Remove images from disk and the search index
+- **Multi-Select** - Select multiple images for bulk operations
+- **Sidecar Support** - Sidecar files are copied/moved/deleted alongside images
+- **Optional Re-indexing** - Choose whether to index copied files at the new location
+
 ### Logging & Debugging
 
 - **Configurable Logging** - Enable/disable file logging
@@ -114,10 +125,10 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 
 ### Download
 
-Download the latest release:
+Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.2.0-executable.jar
+photostat-java-1.3.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -236,7 +247,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.2.0-executable.jar
+   java -jar photostat-java-1.3.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -247,7 +258,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.2.0-executable.jar
+        -jar photostat-java-1.3.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -461,6 +472,52 @@ You can add your own metadata to photos for better organization:
 - Search for names, places, or tags in the search box
 - Use the **Persons**, **Places**, and **Tags** facets to filter
 - Use the filter dropdowns in the **Custom Metadata** section of the search panel
+
+### Managing Files
+
+You can copy, move, or delete images directly from search results:
+
+![File Operations Toolbar](docs/screenshots/file-operations-toolbar.png)
+
+**Selecting Images:**
+1. **Single selection** - Click on a row to select one image
+2. **Multi-select** - Use Ctrl+Click to add individual images to selection
+3. **Range select** - Use Shift+Click to select a range of images
+
+**Available Operations:**
+
+| Operation | Button | Description |
+|-----------|--------|-------------|
+| **Copy** | Copy Selected... | Copy images to a new directory |
+| **Move** | Move Selected... | Move images to a new directory |
+| **Delete** | Delete Selected | Permanently delete images |
+
+**Copy Images:**
+1. Select one or more images
+2. Click **Copy Selected...**
+3. Choose a destination directory
+4. After copying, you'll be asked if you want to index the copied files
+   - Click **OK** to add them to the search index
+   - Click **Cancel** to skip indexing
+5. A summary shows the result and indexing status
+
+**Move Images:**
+1. Select one or more images
+2. Click **Move Selected...**
+3. Choose a destination directory
+4. Files are moved and automatically re-indexed at the new location
+5. A summary shows the result and indexing status
+
+**Delete Images:**
+1. Select one or more images
+2. Click **Delete Selected**
+3. Confirm the deletion in the warning dialog
+4. Files are permanently deleted from disk and removed from the index
+
+**Notes:**
+- Sidecar files (`.photostat.json`) are automatically copied/moved/deleted with their images
+- Move and delete operations update the search index automatically
+- Deleted files cannot be recovered - use with caution!
 
 ### Exploring Charts
 
@@ -698,7 +755,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.2.0-executable.jar
+       -jar photostat-java-1.3.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -771,7 +828,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.2.0-executable.jar
+# target/photostat-java-1.3.0-executable.jar
 ```
 
 ### Run from Source
@@ -804,6 +861,7 @@ photostat-java/
 │   ├── services/
 │   │   ├── ConfigService.java           # Configuration management
 │   │   ├── ExifService.java             # EXIF metadata extraction
+│   │   ├── FileOperationsService.java   # Copy, move, delete operations
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
 │   │   ├── ThumbnailService.java        # Thumbnail generation & caching
