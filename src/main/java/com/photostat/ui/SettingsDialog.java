@@ -260,12 +260,21 @@ public class SettingsDialog extends Dialog<Boolean> {
         Label logPathLabel = new Label("Log file: " + logPath);
         logPathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
 
+        // Log file buttons
+        Button openLogButton = new Button("Open Log File");
+        openLogButton.setOnAction(e -> openLogFile(logPath));
+
+        Button clearLogButton = new Button("Clear Log File");
+        clearLogButton.setOnAction(e -> clearLogFile(logPath));
+
+        HBox logButtonsBox = new HBox(10, openLogButton, clearLogButton);
+
         // Note about restart
         Label noteLabel = new Label("Note: Changes to logging settings require an application restart to take effect.");
         noteLabel.setWrapText(true);
         noteLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #996600;");
 
-        pane.getChildren().addAll(grid, new Separator(), levelDescLabel, logPathLabel, new Separator(), noteLabel);
+        pane.getChildren().addAll(grid, new Separator(), levelDescLabel, logPathLabel, logButtonsBox, new Separator(), noteLabel);
 
         return pane;
     }
@@ -368,6 +377,85 @@ public class SettingsDialog extends Dialog<Boolean> {
         java.io.File selected = chooser.showOpenDialog(getDialogPane().getScene().getWindow());
         if (selected != null) {
             exifToolPathField.setText(selected.getAbsolutePath());
+        }
+    }
+
+    private void openLogFile(String logPath) {
+        try {
+            java.io.File logFile = new java.io.File(logPath);
+            if (!logFile.exists()) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Log File");
+                alert.setHeaderText(null);
+                alert.setContentText("Log file does not exist yet. Enable logging and restart the application.");
+                alert.show();
+                return;
+            }
+
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(logFile);
+            } else {
+                // Fallback for systems without Desktop support
+                String os = System.getProperty("os.name").toLowerCase();
+                ProcessBuilder pb;
+                if (os.contains("win")) {
+                    pb = new ProcessBuilder("notepad", logPath);
+                } else if (os.contains("mac")) {
+                    pb = new ProcessBuilder("open", logPath);
+                } else {
+                    pb = new ProcessBuilder("xdg-open", logPath);
+                }
+                pb.start();
+            }
+        } catch (Exception e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText(null);
+            alert.setContentText("Failed to open log file: " + e.getMessage());
+            alert.show();
+        }
+    }
+
+    private void clearLogFile(String logPath) {
+        try {
+            java.io.File logFile = new java.io.File(logPath);
+            if (!logFile.exists()) {
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Log File");
+                alert.setHeaderText(null);
+                alert.setContentText("Log file does not exist.");
+                alert.show();
+                return;
+            }
+
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle("Clear Log File");
+            confirm.setHeaderText(null);
+            confirm.setContentText("Are you sure you want to clear the log file? This cannot be undone.");
+            confirm.showAndWait().ifPresent(response -> {
+                if (response == ButtonType.OK) {
+                    try {
+                        new java.io.FileWriter(logFile, false).close();
+                        Alert success = new Alert(Alert.AlertType.INFORMATION);
+                        success.setTitle("Log File");
+                        success.setHeaderText(null);
+                        success.setContentText("Log file cleared successfully.");
+                        success.show();
+                    } catch (java.io.IOException e) {
+                        Alert error = new Alert(Alert.AlertType.ERROR);
+                        error.setTitle("Error");
+                        error.setHeaderText(null);
+                        error.setContentText("Failed to clear log file: " + e.getMessage());
+                        error.show();
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText(null);
+            alert.setContentText("Error: " + e.getMessage());
+            alert.show();
         }
     }
 }
