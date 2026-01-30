@@ -29,6 +29,10 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Spinner<Integer> thumbnailSizeSpinner;
     private Spinner<Integer> resultsPerPageSpinner;
 
+    // Logging settings
+    private CheckBox loggingEnabledCheckbox;
+    private ComboBox<String> logLevelCombo;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -55,7 +59,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab uiTab = new Tab("User Interface");
         uiTab.setContent(createUIPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab);
+        Tab loggingTab = new Tab("Logging");
+        loggingTab.setContent(createLoggingPane());
+
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -217,6 +224,52 @@ public class SettingsDialog extends Dialog<Boolean> {
         return pane;
     }
 
+    private VBox createLoggingPane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        int row = 0;
+
+        // Enable logging
+        grid.add(new Label("Enable Logging:"), 0, row);
+        loggingEnabledCheckbox = new CheckBox("Write logs to file");
+        grid.add(loggingEnabledCheckbox, 1, row++);
+
+        // Log level
+        grid.add(new Label("Log Level:"), 0, row);
+        logLevelCombo = new ComboBox<>();
+        logLevelCombo.getItems().addAll("DEBUG", "INFO", "WARN", "ERROR");
+        logLevelCombo.setPrefWidth(120);
+        grid.add(logLevelCombo, 1, row++);
+
+        // Log level descriptions
+        Label levelDescLabel = new Label(
+                "DEBUG: All messages including detailed debug info\n" +
+                "INFO: General information, warnings, and errors\n" +
+                "WARN: Warnings and errors only\n" +
+                "ERROR: Errors only"
+        );
+        levelDescLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        // Log file location
+        String logPath = System.getProperty("user.home") + "/.photostat/photostat.log";
+        Label logPathLabel = new Label("Log file: " + logPath);
+        logPathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        // Note about restart
+        Label noteLabel = new Label("Note: Changes to logging settings require an application restart to take effect.");
+        noteLabel.setWrapText(true);
+        noteLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #996600;");
+
+        pane.getChildren().addAll(grid, new Separator(), levelDescLabel, logPathLabel, new Separator(), noteLabel);
+
+        return pane;
+    }
+
     private void loadSettings() {
         hostField.setText(configService.getOpenSearchHost());
         portField.setText(String.valueOf(configService.getOpenSearchPort()));
@@ -228,6 +281,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         batchSizeSpinner.getValueFactory().setValue(configService.getBatchSize());
         thumbnailSizeSpinner.getValueFactory().setValue(configService.getThumbnailSize());
         resultsPerPageSpinner.getValueFactory().setValue(configService.getResultsPerPage());
+
+        // Logging settings
+        loggingEnabledCheckbox.setSelected(configService.isLoggingEnabled());
+        logLevelCombo.setValue(configService.getLoggingLevel());
     }
 
     private void saveSettings() {
@@ -247,6 +304,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setBatchSize(batchSizeSpinner.getValue());
         configService.setThumbnailSize(thumbnailSizeSpinner.getValue());
         configService.setResultsPerPage(resultsPerPageSpinner.getValue());
+
+        // Logging settings
+        configService.setLoggingEnabled(loggingEnabledCheckbox.isSelected());
+        configService.setLoggingLevel(logLevelCombo.getValue());
 
         configService.saveConfig();
     }
