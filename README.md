@@ -117,7 +117,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release:
 
 ```
-photostat-java-1.1.0-executable.jar
+photostat-java-1.2.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -236,7 +236,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.1.0-executable.jar
+   java -jar photostat-java-1.2.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -247,7 +247,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.1.0-executable.jar
+        -jar photostat-java-1.2.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -698,7 +698,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.1.0-executable.jar
+       -jar photostat-java-1.2.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -771,7 +771,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.1.0-executable.jar
+# target/photostat-java-1.2.0-executable.jar
 ```
 
 ### Run from Source
