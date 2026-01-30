@@ -8,21 +8,30 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
-import java.util.Set;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Service for generating image thumbnails.
+ * Service for generating and caching image thumbnails.
+ * Supports both in-memory and disk caching with configurable size limits.
  */
 public class ThumbnailService {
 
     private static ThumbnailService instance;
     private final ConfigService configService;
+    private final LoggingService logger;
 
-    // Simple in-memory cache for thumbnails
-    private final Map<String, Image> thumbnailCache = new ConcurrentHashMap<>();
-    private static final int MAX_CACHE_SIZE = 500;
+    // In-memory cache for thumbnails (L1 cache)
+    private final Map<String, Image> memoryCache = new ConcurrentHashMap<>();
+    private static final int MAX_MEMORY_CACHE_SIZE = 500;
+
+    // Disk cache directory
+    private Path diskCacheDir;
+
+    // Track access times for LRU eviction
+    private final Map<String, Long> cacheAccessTimes = new ConcurrentHashMap<>();
 
     // RAW file extensions that need ExifTool for thumbnail extraction
     private static final Set<String> RAW_EXTENSIONS = Set.of(
@@ -32,6 +41,8 @@ public class ThumbnailService {
 
     private ThumbnailService() {
         this.configService = ConfigService.getInstance();
+        this.logger = LoggingService.getInstance();
+        initDiskCache();
     }
 
     public static synchronized ThumbnailService getInstance() {
@@ -42,28 +53,265 @@ public class ThumbnailService {
     }
 
     /**
+     * Initialize the disk cache directory.
+     */
+    private void initDiskCache() {
+        String userHome = System.getProperty("user.home");
+        diskCacheDir = Path.of(userHome, ".photostat", "cache");
+
+        try {
+            Files.createDirectories(diskCacheDir);
+            logger.info("ThumbnailService", "Disk cache initialized at: " + diskCacheDir);
+        } catch (IOException e) {
+            logger.error("ThumbnailService", "Failed to create disk cache directory", e);
+        }
+    }
+
+    /**
      * Get a thumbnail for an image file.
      */
     public Image getThumbnail(String filePath) {
-        // Check cache first
-        Image cached = thumbnailCache.get(filePath);
+        // Check memory cache first (L1)
+        Image cached = memoryCache.get(filePath);
         if (cached != null) {
+            updateAccessTime(filePath);
             return cached;
+        }
+
+        // Check disk cache (L2)
+        if (configService.isThumbnailCacheEnabled()) {
+            Image diskCached = loadFromDiskCache(filePath);
+            if (diskCached != null) {
+                addToMemoryCache(filePath, diskCached);
+                return diskCached;
+            }
         }
 
         // Generate thumbnail
         Image thumbnail = generateThumbnail(filePath);
         if (thumbnail != null) {
-            // Add to cache with size limit
-            if (thumbnailCache.size() >= MAX_CACHE_SIZE) {
-                // Simple eviction: remove a random entry
-                String keyToRemove = thumbnailCache.keySet().iterator().next();
-                thumbnailCache.remove(keyToRemove);
+            addToMemoryCache(filePath, thumbnail);
+
+            // Save to disk cache
+            if (configService.isThumbnailCacheEnabled()) {
+                saveToDiskCache(filePath, thumbnail);
             }
-            thumbnailCache.put(filePath, thumbnail);
         }
 
         return thumbnail;
+    }
+
+    /**
+     * Add a thumbnail to the memory cache with size limit.
+     */
+    private void addToMemoryCache(String filePath, Image thumbnail) {
+        if (memoryCache.size() >= MAX_MEMORY_CACHE_SIZE) {
+            // Evict oldest entry from memory cache
+            String oldestKey = cacheAccessTimes.entrySet().stream()
+                    .filter(e -> memoryCache.containsKey(e.getKey()))
+                    .min(Map.Entry.comparingByValue())
+                    .map(Map.Entry::getKey)
+                    .orElse(memoryCache.keySet().iterator().next());
+            memoryCache.remove(oldestKey);
+        }
+        memoryCache.put(filePath, thumbnail);
+        updateAccessTime(filePath);
+    }
+
+    /**
+     * Update access time for LRU tracking.
+     */
+    private void updateAccessTime(String filePath) {
+        cacheAccessTimes.put(filePath, System.currentTimeMillis());
+    }
+
+    /**
+     * Generate a cache key based on file path and modification time.
+     */
+    private String getCacheKey(String filePath) {
+        try {
+            Path path = Path.of(filePath);
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            long modTime = attrs.lastModifiedTime().toMillis();
+            int thumbSize = configService.getThumbnailSize();
+
+            String input = filePath + "|" + modTime + "|" + thumbSize;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes());
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 16; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            // Fallback to simple hash
+            return Integer.toHexString(filePath.hashCode());
+        }
+    }
+
+    /**
+     * Get the disk cache file path for a given image.
+     */
+    private Path getDiskCachePath(String filePath) {
+        String cacheKey = getCacheKey(filePath);
+        return diskCacheDir.resolve(cacheKey + ".jpg");
+    }
+
+    /**
+     * Load a thumbnail from the disk cache.
+     */
+    private Image loadFromDiskCache(String filePath) {
+        try {
+            Path cachePath = getDiskCachePath(filePath);
+            if (Files.exists(cachePath)) {
+                // Update file access time for LRU
+                Files.setLastModifiedTime(cachePath, java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+
+                Image image = new Image(cachePath.toUri().toString());
+                if (!image.isError()) {
+                    logger.debug("ThumbnailService", "Loaded from disk cache: " + filePath);
+                    return image;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("ThumbnailService", "Disk cache load failed for " + filePath + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Save a thumbnail to the disk cache.
+     */
+    private void saveToDiskCache(String filePath, Image thumbnail) {
+        try {
+            // Check cache size before saving
+            enforceDiskCacheLimit();
+
+            Path cachePath = getDiskCachePath(filePath);
+
+            // Convert JavaFX Image to BufferedImage and save as JPEG
+            int width = (int) thumbnail.getWidth();
+            int height = (int) thumbnail.getHeight();
+
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+
+            BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            javafx.scene.image.PixelReader reader = thumbnail.getPixelReader();
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    javafx.scene.paint.Color fxColor = reader.getColor(x, y);
+                    int r = (int) (fxColor.getRed() * 255);
+                    int g = (int) (fxColor.getGreen() * 255);
+                    int b = (int) (fxColor.getBlue() * 255);
+                    int rgb = (r << 16) | (g << 8) | b;
+                    bufferedImage.setRGB(x, y, rgb);
+                }
+            }
+
+            // Save as JPEG with quality setting
+            ImageIO.write(bufferedImage, "jpg", cachePath.toFile());
+            logger.debug("ThumbnailService", "Saved to disk cache: " + cachePath);
+
+        } catch (Exception e) {
+            logger.debug("ThumbnailService", "Failed to save to disk cache: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Enforce the disk cache size limit using LRU eviction.
+     */
+    private void enforceDiskCacheLimit() {
+        try {
+            long maxSizeBytes = configService.getThumbnailCacheMaxSizeMB() * 1024L * 1024L;
+            long currentSize = getDiskCacheSize();
+
+            if (currentSize > maxSizeBytes) {
+                logger.info("ThumbnailService", "Disk cache size (" + (currentSize / 1024 / 1024) + "MB) exceeds limit (" +
+                        configService.getThumbnailCacheMaxSizeMB() + "MB), evicting old entries");
+
+                // Get all cache files sorted by last modified time (oldest first)
+                File[] cacheFiles = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
+                if (cacheFiles != null && cacheFiles.length > 0) {
+                    Arrays.sort(cacheFiles, Comparator.comparingLong(File::lastModified));
+
+                    // Delete oldest files until under limit
+                    for (File file : cacheFiles) {
+                        if (currentSize <= maxSizeBytes * 0.8) {  // Target 80% of max
+                            break;
+                        }
+                        long fileSize = file.length();
+                        if (file.delete()) {
+                            currentSize -= fileSize;
+                            logger.debug("ThumbnailService", "Evicted cache file: " + file.getName());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("ThumbnailService", "Error enforcing cache limit", e);
+        }
+    }
+
+    /**
+     * Get the current disk cache size in bytes.
+     */
+    public long getDiskCacheSize() {
+        try {
+            File[] files = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
+            if (files != null) {
+                long total = 0;
+                for (File file : files) {
+                    total += file.length();
+                }
+                return total;
+            }
+        } catch (Exception e) {
+            logger.error("ThumbnailService", "Error calculating cache size", e);
+        }
+        return 0;
+    }
+
+    /**
+     * Get the number of files in the disk cache.
+     */
+    public int getDiskCacheFileCount() {
+        try {
+            File[] files = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
+            return files != null ? files.length : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * Clear the entire disk cache.
+     */
+    public void clearDiskCache() {
+        try {
+            File[] files = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
+            if (files != null) {
+                int count = 0;
+                for (File file : files) {
+                    if (file.delete()) {
+                        count++;
+                    }
+                }
+                logger.info("ThumbnailService", "Cleared " + count + " files from disk cache");
+            }
+        } catch (Exception e) {
+            logger.error("ThumbnailService", "Error clearing disk cache", e);
+        }
+    }
+
+    /**
+     * Get the disk cache directory path.
+     */
+    public Path getDiskCacheDir() {
+        return diskCacheDir;
     }
 
     /**
@@ -282,24 +530,42 @@ public class ThumbnailService {
     }
 
     /**
-     * Clear the thumbnail cache.
+     * Clear the in-memory thumbnail cache.
      */
     public void clearCache() {
-        thumbnailCache.clear();
+        memoryCache.clear();
+        cacheAccessTimes.clear();
     }
 
     /**
-     * Remove a specific thumbnail from cache.
+     * Clear both memory and disk caches.
+     */
+    public void clearAllCaches() {
+        clearCache();
+        clearDiskCache();
+    }
+
+    /**
+     * Remove a specific thumbnail from both caches.
      */
     public void invalidate(String filePath) {
-        thumbnailCache.remove(filePath);
+        memoryCache.remove(filePath);
+        cacheAccessTimes.remove(filePath);
+
+        // Also remove from disk cache
+        try {
+            Path cachePath = getDiskCachePath(filePath);
+            Files.deleteIfExists(cachePath);
+        } catch (Exception e) {
+            // Ignore
+        }
     }
 
     /**
-     * Get the current cache size.
+     * Get the current memory cache size.
      */
     public int getCacheSize() {
-        return thumbnailCache.size();
+        return memoryCache.size();
     }
 
     private String getFileExtension(String filename) {

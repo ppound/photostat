@@ -2,6 +2,7 @@ package com.photostat.ui;
 
 import com.photostat.services.ConfigService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
@@ -33,6 +34,11 @@ public class SettingsDialog extends Dialog<Boolean> {
     private CheckBox loggingEnabledCheckbox;
     private ComboBox<String> logLevelCombo;
 
+    // Cache settings
+    private CheckBox cacheEnabledCheckbox;
+    private Spinner<Integer> cacheMaxSizeSpinner;
+    private Label cacheStatsLabel;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -62,7 +68,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab loggingTab = new Tab("Logging");
         loggingTab.setContent(createLoggingPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab);
+        Tab cacheTab = new Tab("Cache");
+        cacheTab.setContent(createCachePane());
+
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -279,6 +288,89 @@ public class SettingsDialog extends Dialog<Boolean> {
         return pane;
     }
 
+    private VBox createCachePane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        int row = 0;
+
+        // Enable cache
+        grid.add(new Label("Enable Disk Cache:"), 0, row);
+        cacheEnabledCheckbox = new CheckBox("Cache thumbnails to disk");
+        grid.add(cacheEnabledCheckbox, 1, row++);
+
+        // Max cache size
+        grid.add(new Label("Max Cache Size:"), 0, row);
+        cacheMaxSizeSpinner = new Spinner<>(100, 5000, 500, 100);
+        cacheMaxSizeSpinner.setEditable(true);
+        cacheMaxSizeSpinner.setPrefWidth(100);
+        grid.add(cacheMaxSizeSpinner, 1, row);
+        grid.add(new Label("MB"), 2, row++);
+
+        // Cache location
+        ThumbnailService thumbnailService = ThumbnailService.getInstance();
+        String cachePath = thumbnailService.getDiskCacheDir().toString();
+        Label cachePathLabel = new Label("Cache location: " + cachePath);
+        cachePathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        // Cache statistics
+        cacheStatsLabel = new Label();
+        updateCacheStats();
+        cacheStatsLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        // Cache buttons
+        Button refreshStatsButton = new Button("Refresh Stats");
+        refreshStatsButton.setOnAction(e -> updateCacheStats());
+
+        Button clearCacheButton = new Button("Clear Cache");
+        clearCacheButton.setOnAction(e -> clearThumbnailCache());
+
+        HBox cacheButtonsBox = new HBox(10, refreshStatsButton, clearCacheButton);
+
+        // Info label
+        Label infoLabel = new Label(
+                "Disk caching speeds up thumbnail loading by storing generated thumbnails. " +
+                "Old thumbnails are automatically removed when the cache exceeds the size limit."
+        );
+        infoLabel.setWrapText(true);
+        infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+
+        pane.getChildren().addAll(grid, new Separator(), cachePathLabel, cacheStatsLabel, cacheButtonsBox, new Separator(), infoLabel);
+
+        return pane;
+    }
+
+    private void updateCacheStats() {
+        ThumbnailService thumbnailService = ThumbnailService.getInstance();
+        int fileCount = thumbnailService.getDiskCacheFileCount();
+        long sizeBytes = thumbnailService.getDiskCacheSize();
+        double sizeMB = sizeBytes / (1024.0 * 1024.0);
+        cacheStatsLabel.setText(String.format("Cache: %d files, %.1f MB", fileCount, sizeMB));
+    }
+
+    private void clearThumbnailCache() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Clear Thumbnail Cache");
+        confirm.setHeaderText(null);
+        confirm.setContentText("Are you sure you want to clear the thumbnail cache? This cannot be undone.");
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                ThumbnailService.getInstance().clearAllCaches();
+                updateCacheStats();
+
+                Alert success = new Alert(Alert.AlertType.INFORMATION);
+                success.setTitle("Cache Cleared");
+                success.setHeaderText(null);
+                success.setContentText("Thumbnail cache cleared successfully.");
+                success.show();
+            }
+        });
+    }
+
     private void loadSettings() {
         hostField.setText(configService.getOpenSearchHost());
         portField.setText(String.valueOf(configService.getOpenSearchPort()));
@@ -294,6 +386,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Logging settings
         loggingEnabledCheckbox.setSelected(configService.isLoggingEnabled());
         logLevelCombo.setValue(configService.getLoggingLevel());
+
+        // Cache settings
+        cacheEnabledCheckbox.setSelected(configService.isThumbnailCacheEnabled());
+        cacheMaxSizeSpinner.getValueFactory().setValue(configService.getThumbnailCacheMaxSizeMB());
     }
 
     private void saveSettings() {
@@ -317,6 +413,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Logging settings
         configService.setLoggingEnabled(loggingEnabledCheckbox.isSelected());
         configService.setLoggingLevel(logLevelCombo.getValue());
+
+        // Cache settings
+        configService.setThumbnailCacheEnabled(cacheEnabledCheckbox.isSelected());
+        configService.setThumbnailCacheMaxSizeMB(cacheMaxSizeSpinner.getValue());
 
         configService.saveConfig();
     }

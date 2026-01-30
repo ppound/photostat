@@ -115,6 +115,12 @@ public class ConfigService {
         logging.put("level", "INFO");   // DEBUG, INFO, WARN, ERROR
         defaultConfig.put("logging", logging);
 
+        // Thumbnail cache settings
+        Map<String, Object> cache = new HashMap<>();
+        cache.put("enabled", true);        // Disk cache enabled by default
+        cache.put("max_size_mb", 500);     // 500 MB default max size
+        defaultConfig.put("cache", cache);
+
         return defaultConfig;
     }
 
@@ -281,6 +287,23 @@ public class ConfigService {
 
     public void setLoggingLevel(String level) {
         setNestedValue("logging", "level", level);
+    }
+
+    // Thumbnail cache settings
+    public boolean isThumbnailCacheEnabled() {
+        return getNestedBoolean("cache", "enabled", true);
+    }
+
+    public void setThumbnailCacheEnabled(boolean enabled) {
+        setNestedValue("cache", "enabled", enabled);
+    }
+
+    public int getThumbnailCacheMaxSizeMB() {
+        return getNestedInt("cache", "max_size_mb", 500);
+    }
+
+    public void setThumbnailCacheMaxSizeMB(int sizeMB) {
+        setNestedValue("cache", "max_size_mb", sizeMB);
     }
 
     // Helper methods
