@@ -26,6 +26,8 @@ A powerful cross-platform desktop application for indexing, searching, and analy
   - [Viewing Image Details](#viewing-image-details)
   - [Adding Custom Metadata](#adding-custom-metadata)
   - [Exploring Charts](#exploring-charts)
+  - [Thumbnail Cache](#thumbnail-cache)
+  - [Sidecar Files](#sidecar-files)
   - [Enabling Logging](#enabling-logging)
 - [Supported Image Formats](#supported-image-formats)
 - [Configuration](#configuration)
@@ -69,6 +71,20 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Tags** - Create custom tags for organization
 - **Searchable** - All custom metadata is fully searchable
 - **Faceted** - Filter by person, place, or tag using facets
+
+### Thumbnail Caching
+
+- **Disk Cache** - Thumbnails cached to disk for faster loading
+- **Configurable Size** - Set maximum cache size (default 500 MB)
+- **LRU Eviction** - Old thumbnails automatically removed when limit reached
+- **Auto-Invalidation** - Cache updates when source images are modified
+
+### Sidecar Files (Persistent Custom Metadata)
+
+- **JSON Sidecar Files** - Custom metadata saved as `.photostat.json` files
+- **Survives Reindexing** - Metadata preserved when rebuilding the index
+- **Optional** - Can be disabled if you don't want extra files
+- **Portable** - Sidecar files travel with your images
 
 ### Logging & Debugging
 
@@ -476,6 +492,64 @@ Navigate to the **Charts** tab to visualize your collection:
 4. **Locations** (if GPS data available)
    - Map plot of photo locations
 
+### Thumbnail Cache
+
+PhotoStat caches generated thumbnails to disk for faster loading on subsequent views.
+
+**Configure Cache Settings:**
+
+1. Open **File > Settings**
+2. Navigate to the **Cache** tab
+3. Configure options:
+
+   | Setting | Description |
+   |---------|-------------|
+   | Enable Disk Cache | Turn disk caching on/off |
+   | Max Cache Size | Maximum disk space for cache (100-5000 MB) |
+
+4. View cache statistics (file count and size)
+5. Click **Clear Cache** to remove all cached thumbnails
+
+**Cache Location:** `~/.photostat/cache/`
+
+**How It Works:**
+- Thumbnails are saved as JPEG files with hashed filenames
+- Cache key includes file path, modification time, and thumbnail size
+- If source image is modified, a new thumbnail is generated automatically
+- When cache exceeds max size, oldest thumbnails are removed (LRU eviction)
+
+### Sidecar Files
+
+Sidecar files allow custom metadata (persons, places, tags) to persist even when rebuilding the search index.
+
+**How It Works:**
+- When you save custom metadata, a `.photostat.json` file is created alongside the image
+- Example: `IMG_1234.jpg` → `IMG_1234.jpg.photostat.json`
+- When re-indexing, PhotoStat reads the sidecar and restores your custom metadata
+
+**Example Sidecar File:**
+```json
+{
+  "persons" : [ "John", "Jane" ],
+  "place" : "Central Park",
+  "tags" : [ "vacation", "family" ]
+}
+```
+
+**Configure Sidecar Settings:**
+
+1. Open **File > Settings**
+2. Navigate to the **Indexing** tab
+3. Toggle **"Save custom metadata to sidecar files"**
+
+**Benefits:**
+- Custom metadata survives index rebuilds
+- Metadata travels with images if files are moved/copied
+- Can be backed up alongside photos
+- Human-readable JSON format
+
+**Note:** If disabled, custom metadata is only stored in OpenSearch and will be lost if the index is deleted.
+
 ### Enabling Logging
 
 PhotoStat includes file-based logging for debugging:
@@ -573,6 +647,13 @@ Configuration is stored in `~/.photostat/config.json`:
   "logging": {
     "enabled": false,
     "level": "INFO"
+  },
+  "cache": {
+    "enabled": true,
+    "max_size_mb": 500
+  },
+  "sidecar": {
+    "enabled": true
   }
 }
 ```
@@ -593,6 +674,9 @@ Configuration is stored in `~/.photostat/config.json`:
 | `exiftool.use_for_raw` | Use ExifTool for RAW files |
 | `logging.enabled` | Enable file logging (default: false) |
 | `logging.level` | Log level: DEBUG, INFO, WARN, ERROR |
+| `cache.enabled` | Enable thumbnail disk cache (default: true) |
+| `cache.max_size_mb` | Maximum cache size in MB (default: 500) |
+| `sidecar.enabled` | Save custom metadata to sidecar files (default: true) |
 
 ---
 
@@ -651,7 +735,13 @@ Configuration is stored in `~/.photostat/config.json`:
 
 **Slow thumbnail loading:**
 - Large collections may take time on first load
-- Thumbnails are cached after first generation
+- Thumbnails are cached to disk after first generation
+- Check Settings > Cache tab to ensure caching is enabled
+
+**Cache issues:**
+- Try clearing the cache via Settings > Cache > Clear Cache
+- Check available disk space
+- Cache location: `~/.photostat/cache/`
 
 ### Application Freezes
 
@@ -716,7 +806,8 @@ photostat-java/
 │   │   ├── ExifService.java             # EXIF metadata extraction
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
-│   │   ├── ThumbnailService.java        # Thumbnail generation
+│   │   ├── ThumbnailService.java        # Thumbnail generation & caching
+│   │   ├── SidecarService.java          # Sidecar file management
 │   │   └── LoggingService.java          # File-based logging
 │   └── ui/
 │       ├── MainWindow.java              # Main application window
