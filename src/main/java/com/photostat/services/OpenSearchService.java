@@ -16,6 +16,7 @@ import org.opensearch.client.json.JsonData;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch._types.FieldValue;
+import org.opensearch.client.opensearch._types.Result;
 import org.opensearch.client.opensearch._types.SortOrder;
 import org.opensearch.client.opensearch._types.aggregations.Aggregation;
 import org.opensearch.client.opensearch._types.aggregations.AggregationRange;
@@ -511,6 +512,32 @@ public class OpenSearchService {
 
         DeleteByQueryResponse response = client.deleteByQuery(request);
         return response.deleted() != null ? response.deleted() : 0;
+    }
+
+    /**
+     * Delete a single document by file path.
+     */
+    public boolean deleteDocument(String filePath) throws IOException {
+        String indexName = configService.getIndexName();
+        String docId = generateDocumentId(filePath);
+
+        logger.info("OpenSearchService", "Deleting document: " + filePath);
+
+        DeleteRequest request = new DeleteRequest.Builder()
+                .index(indexName)
+                .id(docId)
+                .build();
+
+        DeleteResponse response = client.delete(request);
+        boolean success = response.result() == Result.Deleted;
+
+        if (success) {
+            logger.info("OpenSearchService", "Document deleted successfully");
+        } else {
+            logger.warn("OpenSearchService", "Document not found or not deleted: " + response.result());
+        }
+
+        return success;
     }
 
     /**

@@ -2,6 +2,8 @@ package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
+import com.photostat.services.FileOperationsService;
+import com.photostat.services.IndexerService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
@@ -12,16 +14,21 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.stage.DirectoryChooser;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Panel displaying search results in a table with thumbnails.
@@ -31,6 +38,8 @@ public class ResultsPanel extends VBox {
     private final OpenSearchService openSearchService;
     private final ThumbnailService thumbnailService;
     private final ConfigService configService;
+    private final FileOperationsService fileOperationsService;
+    private final IndexerService indexerService;
     private final LoggingService logger;
 
     private TableView<ImageMetadata> resultsTable;
@@ -50,6 +59,8 @@ public class ResultsPanel extends VBox {
         this.openSearchService = OpenSearchService.getInstance();
         this.thumbnailService = ThumbnailService.getInstance();
         this.configService = ConfigService.getInstance();
+        this.fileOperationsService = FileOperationsService.getInstance();
+        this.indexerService = IndexerService.getInstance();
         this.logger = LoggingService.getInstance();
 
         initializeUI();
@@ -66,6 +77,7 @@ public class ResultsPanel extends VBox {
         // Create table
         resultsTable = new TableView<>();
         resultsTable.setPlaceholder(new Label("No images found. Try searching or indexing images."));
+        resultsTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         VBox.setVgrow(resultsTable, Priority.ALWAYS);
 
         // Create columns
@@ -77,6 +89,23 @@ public class ResultsPanel extends VBox {
                 selectionCallback.accept(newVal);
             }
         });
+
+        // Toolbar for bulk operations
+        Button copySelectedBtn = new Button("Copy Selected...");
+        copySelectedBtn.setOnAction(e -> copySelectedImages());
+
+        Button moveSelectedBtn = new Button("Move Selected...");
+        moveSelectedBtn.setOnAction(e -> moveSelectedImages());
+
+        Button deleteSelectedBtn = new Button("Delete Selected");
+        deleteSelectedBtn.setStyle("-fx-text-fill: #cc0000;");
+        deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
+
+        Label selectionLabel = new Label("(Use Ctrl+Click or Shift+Click to select multiple)");
+        selectionLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        HBox toolbar = new HBox(10, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
+        toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
         resultsTable.setOnMouseClicked(event -> {
@@ -96,7 +125,7 @@ public class ResultsPanel extends VBox {
             loadPage(newVal.intValue());
         });
 
-        getChildren().addAll(resultsCountLabel, resultsTable, pagination);
+        getChildren().addAll(resultsCountLabel, toolbar, resultsTable, pagination);
     }
 
     private void createColumns() {
@@ -295,5 +324,178 @@ public class ResultsPanel extends VBox {
      */
     public void refresh() {
         loadPage(pagination.getCurrentPageIndex());
+    }
+
+    /**
+     * Copy selected images to a chosen directory.
+     */
+    private void copySelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to copy.");
+            return;
+        }
+
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select Destination Directory");
+        File destination = chooser.showDialog(getScene().getWindow());
+
+        if (destination != null) {
+            List<String> paths = selected.stream()
+                    .map(ImageMetadata::getFilePath)
+                    .collect(Collectors.toList());
+
+            FileOperationsService.BatchOperationResult result =
+                    fileOperationsService.copyImages(paths, destination.toPath(), false);
+
+            if (result.hasErrors()) {
+                logger.warn("ResultsPanel", "Copy errors: " + String.join(", ", result.errors));
+            }
+
+            // Ask if user wants to index the copied files
+            String indexMessage = "\nIndex not updated.";
+            if (result.successCount > 0) {
+                Alert indexConfirm = new Alert(Alert.AlertType.CONFIRMATION);
+                indexConfirm.setTitle("Index Copied Files?");
+                indexConfirm.setHeaderText("Add copied files to search index?");
+                indexConfirm.setContentText("Do you want to index the copied files at the new location so they appear in search results?");
+
+                var indexResponse = indexConfirm.showAndWait();
+                if (indexResponse.isPresent() && indexResponse.get() == ButtonType.OK) {
+                    int indexed = 0;
+                    for (ImageMetadata metadata : selected) {
+                        try {
+                            Path oldPath = Path.of(metadata.getFilePath());
+                            Path newPath = destination.toPath().resolve(oldPath.getFileName());
+                            if (indexerService.indexSingleFile(newPath.toString())) {
+                                indexed++;
+                            }
+                        } catch (Exception e) {
+                            logger.error("ResultsPanel", "Failed to index copied file", e);
+                        }
+                    }
+                    indexMessage = "\nIndexed " + indexed + " file(s) at new location.";
+                    logger.info("ResultsPanel", "Indexed " + indexed + " copied files at new location");
+                }
+            }
+
+            showAlert(Alert.AlertType.INFORMATION, "Copy Complete", result.getSummary() + indexMessage);
+        }
+    }
+
+    /**
+     * Move selected images to a chosen directory.
+     */
+    private void moveSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to move.");
+            return;
+        }
+
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Select Destination Directory");
+        File destination = chooser.showDialog(getScene().getWindow());
+
+        if (destination != null) {
+            List<String> paths = selected.stream()
+                    .map(ImageMetadata::getFilePath)
+                    .collect(Collectors.toList());
+
+            FileOperationsService.BatchOperationResult result =
+                    fileOperationsService.moveImages(paths, destination.toPath(), false);
+
+            if (result.hasErrors()) {
+                logger.warn("ResultsPanel", "Move errors: " + String.join(", ", result.errors));
+            }
+
+            // Update index for moved files
+            String indexMessage = "\nIndex not updated.";
+            if (result.successCount > 0) {
+                int reindexed = 0;
+                for (ImageMetadata metadata : selected) {
+                    try {
+                        // Delete old entry from index
+                        openSearchService.deleteDocument(metadata.getFilePath());
+
+                        // Re-index at new location
+                        Path oldPath = Path.of(metadata.getFilePath());
+                        Path newPath = destination.toPath().resolve(oldPath.getFileName());
+                        if (indexerService.indexSingleFile(newPath.toString())) {
+                            reindexed++;
+                        }
+                    } catch (Exception e) {
+                        logger.error("ResultsPanel", "Failed to update index for moved file", e);
+                    }
+                }
+                indexMessage = "\nIndex updated: " + reindexed + " file(s) re-indexed at new location.";
+                logger.info("ResultsPanel", "Re-indexed " + reindexed + " moved files at new location");
+                refresh();
+            }
+
+            showAlert(Alert.AlertType.INFORMATION, "Move Complete", result.getSummary() + indexMessage);
+        }
+    }
+
+    /**
+     * Delete selected images after confirmation.
+     */
+    private void deleteSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to delete.");
+            return;
+        }
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Delete");
+        confirm.setHeaderText("Delete " + selected.size() + " image(s)?");
+        confirm.setContentText("This will permanently delete the selected files from disk and remove them from the index. This cannot be undone.");
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                List<String> paths = selected.stream()
+                        .map(ImageMetadata::getFilePath)
+                        .collect(Collectors.toList());
+
+                FileOperationsService.BatchOperationResult result =
+                        fileOperationsService.deleteImages(paths, true);
+
+                // Remove from index
+                int indexRemoved = 0;
+                for (ImageMetadata metadata : selected) {
+                    try {
+                        if (openSearchService.deleteDocument(metadata.getFilePath())) {
+                            indexRemoved++;
+                        }
+                    } catch (Exception e) {
+                        logger.error("ResultsPanel", "Failed to remove from index: " + metadata.getFilePath(), e);
+                    }
+                }
+
+                String summary = result.getSummary() + "\nRemoved " + indexRemoved + " from index.";
+                showAlert(Alert.AlertType.INFORMATION, "Delete Complete", summary);
+
+                if (result.hasErrors()) {
+                    logger.warn("ResultsPanel", "Delete errors: " + String.join(", ", result.errors));
+                }
+
+                // Refresh results
+                if (result.successCount > 0) {
+                    refresh();
+                }
+            }
+        });
+    }
+
+    /**
+     * Show an alert dialog.
+     */
+    private void showAlert(Alert.AlertType type, String title, String content) {
+        Alert alert = new Alert(type);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(content);
+        alert.showAndWait();
     }
 }

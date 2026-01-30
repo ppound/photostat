@@ -80,7 +80,7 @@ public class DetailPanel extends VBox {
         fileNameLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
         fileNameLabel.setWrapText(true);
 
-        // Open button
+        // Action buttons
         Button openButton = new Button("Open in Viewer");
         openButton.setOnAction(e -> openCurrentImage());
 
@@ -546,6 +546,20 @@ public class DetailPanel extends VBox {
                 }
             }).start();
         }
+    }
+
+    private void clearDetails() {
+        currentMetadata = null;
+        previewImage.setImage(null);
+        fileNameLabel.setText("Select an image to view details");
+        basicInfoGrid.getChildren().clear();
+        cameraInfoGrid.getChildren().clear();
+        exposureInfoGrid.getChildren().clear();
+        gpsInfoGrid.getChildren().clear();
+        allExifText.clear();
+        personsField.clear();
+        placeField.clear();
+        tagsField.clear();
     }
 
     private void openInMaps(double lat, double lon) {

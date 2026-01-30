@@ -306,6 +306,41 @@ public class IndexerService {
         }
     }
 
+    /**
+     * Index a single file at the given path.
+     * Useful for re-indexing files that have been moved.
+     *
+     * @param filePath The path to the file to index
+     * @return true if indexing succeeded, false otherwise
+     */
+    public boolean indexSingleFile(String filePath) {
+        try {
+            if (!openSearchService.isConnected()) {
+                openSearchService.connect();
+            }
+
+            Path file = Path.of(filePath);
+            if (!Files.exists(file)) {
+                System.err.println("File does not exist: " + filePath);
+                return false;
+            }
+
+            // Extract metadata
+            ImageMetadata metadata = exifService.extractMetadata(file);
+
+            // Apply sidecar data if exists
+            sidecarService.applySidecarToMetadata(metadata);
+
+            // Index the document
+            openSearchService.indexDocument(metadata);
+
+            return true;
+        } catch (Exception e) {
+            System.err.println("Error indexing file " + filePath + ": " + e.getMessage());
+            return false;
+        }
+    }
+
     private void updateStatus(String message) {
         if (statusCallback != null) {
             Platform.runLater(() -> statusCallback.accept(message));
