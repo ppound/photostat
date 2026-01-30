@@ -39,6 +39,9 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Spinner<Integer> cacheMaxSizeSpinner;
     private Label cacheStatsLabel;
 
+    // Sidecar settings
+    private CheckBox sidecarEnabledCheckbox;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -186,15 +189,27 @@ public class SettingsDialog extends Dialog<Boolean> {
         browseExifTool.setOnAction(e -> browseForExifTool());
         grid.add(browseExifTool, 2, row++);
 
-        // Info label
-        Label infoLabel = new Label(
+        // Sidecar files
+        grid.add(new Label("Sidecar Files:"), 0, row);
+        sidecarEnabledCheckbox = new CheckBox("Save custom metadata to sidecar files");
+        grid.add(sidecarEnabledCheckbox, 1, row++, 2, 1);
+
+        // Info labels
+        Label exifToolInfoLabel = new Label(
                 "ExifTool is required for extracting metadata from RAW files (CR2, NEF, ARW, etc.). " +
                         "Download from: https://exiftool.org/"
         );
-        infoLabel.setWrapText(true);
-        infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        exifToolInfoLabel.setWrapText(true);
+        exifToolInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
 
-        pane.getChildren().addAll(grid, new Separator(), infoLabel);
+        Label sidecarInfoLabel = new Label(
+                "Sidecar files (.photostat.json) store custom metadata (persons, places, tags) alongside images. " +
+                        "This preserves metadata when rebuilding the index."
+        );
+        sidecarInfoLabel.setWrapText(true);
+        sidecarInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+
+        pane.getChildren().addAll(grid, new Separator(), exifToolInfoLabel, sidecarInfoLabel);
 
         return pane;
     }
@@ -390,6 +405,9 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Cache settings
         cacheEnabledCheckbox.setSelected(configService.isThumbnailCacheEnabled());
         cacheMaxSizeSpinner.getValueFactory().setValue(configService.getThumbnailCacheMaxSizeMB());
+
+        // Sidecar settings
+        sidecarEnabledCheckbox.setSelected(configService.isSidecarEnabled());
     }
 
     private void saveSettings() {
@@ -417,6 +435,9 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Cache settings
         configService.setThumbnailCacheEnabled(cacheEnabledCheckbox.isSelected());
         configService.setThumbnailCacheMaxSizeMB(cacheMaxSizeSpinner.getValue());
+
+        // Sidecar settings
+        configService.setSidecarEnabled(sidecarEnabledCheckbox.isSelected());
 
         configService.saveConfig();
     }

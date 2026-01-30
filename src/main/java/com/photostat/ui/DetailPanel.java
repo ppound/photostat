@@ -3,6 +3,7 @@ package com.photostat.ui;
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
@@ -25,6 +26,7 @@ public class DetailPanel extends VBox {
 
     private final ThumbnailService thumbnailService;
     private final OpenSearchService openSearchService;
+    private final SidecarService sidecarService;
     private final LoggingService logger;
 
     private ImageView previewImage;
@@ -48,6 +50,7 @@ public class DetailPanel extends VBox {
     public DetailPanel() {
         this.thumbnailService = ThumbnailService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
         this.logger = LoggingService.getInstance();
         initializeUI();
     }
@@ -272,12 +275,19 @@ public class DetailPanel extends VBox {
         }
         currentMetadata.setTags(newTags);
 
-        // Save to OpenSearch
+        // Save to OpenSearch and sidecar file
         new Thread(() -> {
             try {
                 logger.info("DetailPanel", "Calling updateDocument...");
                 openSearchService.updateDocument(currentMetadata);
                 logger.info("DetailPanel", "updateDocument completed successfully");
+
+                // Write sidecar file (if enabled in config)
+                boolean sidecarWritten = sidecarService.writeSidecar(currentMetadata);
+                if (sidecarWritten) {
+                    logger.info("DetailPanel", "Sidecar file written successfully");
+                }
+
                 Platform.runLater(() -> {
                     showInfo("Metadata Saved", "Custom metadata has been saved successfully.");
                     if (metadataSavedCallback != null) {

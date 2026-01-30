@@ -25,6 +25,7 @@ public class IndexerService {
     private final ConfigService configService;
     private final ExifService exifService;
     private final OpenSearchService openSearchService;
+    private final SidecarService sidecarService;
 
     private Task<Void> currentTask;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
@@ -38,6 +39,7 @@ public class IndexerService {
         this.configService = ConfigService.getInstance();
         this.exifService = ExifService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
     }
 
     public static synchronized IndexerService getInstance() {
@@ -228,6 +230,10 @@ public class IndexerService {
 
                                     // Extract metadata
                                     ImageMetadata metadata = exifService.extractMetadata(file);
+
+                                    // Apply sidecar data if exists (preserves custom metadata on reindex)
+                                    sidecarService.applySidecarToMetadata(metadata);
+
                                     batch.add(metadata);
                                     stats.processedFiles++;
 

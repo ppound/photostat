@@ -121,6 +121,11 @@ public class ConfigService {
         cache.put("max_size_mb", 500);     // 500 MB default max size
         defaultConfig.put("cache", cache);
 
+        // Sidecar file settings
+        Map<String, Object> sidecar = new HashMap<>();
+        sidecar.put("enabled", true);      // Sidecar files enabled by default
+        defaultConfig.put("sidecar", sidecar);
+
         return defaultConfig;
     }
 
@@ -304,6 +309,15 @@ public class ConfigService {
 
     public void setThumbnailCacheMaxSizeMB(int sizeMB) {
         setNestedValue("cache", "max_size_mb", sizeMB);
+    }
+
+    // Sidecar file settings
+    public boolean isSidecarEnabled() {
+        return getNestedBoolean("sidecar", "enabled", true);
+    }
+
+    public void setSidecarEnabled(boolean enabled) {
+        setNestedValue("sidecar", "enabled", enabled);
     }
 
     // Helper methods
