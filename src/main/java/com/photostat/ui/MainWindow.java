@@ -112,6 +112,9 @@ public class MainWindow extends BorderPane {
             searchPanel.executeSearch();
         });
 
+        // Wire up detail panel status updates to status bar
+        detailPanel.setStatusCallback(this::updateStatus);
+
         // Layout
         VBox leftSide = new VBox(10);
         leftSide.setPadding(new Insets(10));

@@ -46,6 +46,7 @@ public class DetailPanel extends VBox {
     private Button copyMetadataButton;
     private Button pasteMetadataButton;
     private Runnable metadataSavedCallback;
+    private java.util.function.Consumer<String> statusCallback;
 
     // Clipboard for custom metadata copy/paste
     private static String copiedPersons = null;
@@ -306,7 +307,7 @@ public class DetailPanel extends VBox {
                 }
 
                 Platform.runLater(() -> {
-                    showInfo("Metadata Saved", "Custom metadata has been saved successfully.");
+                    updateStatus("Metadata saved successfully");
                     if (metadataSavedCallback != null) {
                         logger.info("DetailPanel", "Triggering metadataSavedCallback (search refresh)");
                         metadataSavedCallback.run();
@@ -330,7 +331,7 @@ public class DetailPanel extends VBox {
         logger.info("DetailPanel", "Copied custom metadata - Persons: " + copiedPersons +
                 ", Place: " + copiedPlace + ", Tags: " + copiedTags);
 
-        showInfo("Metadata Copied", "Custom metadata copied to clipboard.\nYou can now paste it to other images.");
+        updateStatus("Metadata copied to clipboard");
     }
 
     /**
@@ -338,7 +339,7 @@ public class DetailPanel extends VBox {
      */
     private void pasteCustomMetadata() {
         if (copiedPersons == null && copiedPlace == null && copiedTags == null) {
-            showError("Nothing to Paste", "No custom metadata has been copied yet.");
+            updateStatus("Nothing to paste - copy metadata first");
             return;
         }
 
@@ -356,7 +357,7 @@ public class DetailPanel extends VBox {
         logger.info("DetailPanel", "Pasted custom metadata - Persons: " + copiedPersons +
                 ", Place: " + copiedPlace + ", Tags: " + copiedTags);
 
-        showInfo("Metadata Pasted", "Custom metadata pasted. Click 'Save' to apply changes.");
+        updateStatus("Metadata pasted - click Save to apply");
     }
 
     /**
@@ -371,6 +372,22 @@ public class DetailPanel extends VBox {
      */
     public void setMetadataSavedCallback(Runnable callback) {
         this.metadataSavedCallback = callback;
+    }
+
+    /**
+     * Set callback for status bar updates.
+     */
+    public void setStatusCallback(java.util.function.Consumer<String> callback) {
+        this.statusCallback = callback;
+    }
+
+    /**
+     * Update the status bar with a message.
+     */
+    private void updateStatus(String message) {
+        if (statusCallback != null) {
+            statusCallback.accept(message);
+        }
     }
 
     private void showInfo(String title, String message) {
