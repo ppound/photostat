@@ -25,6 +25,8 @@ A powerful cross-platform desktop application for indexing, searching, and analy
   - [Using Faceted Navigation](#using-faceted-navigation)
   - [Viewing Image Details](#viewing-image-details)
   - [Adding Custom Metadata](#adding-custom-metadata)
+  - [AI Image Analysis](#ai-image-analysis)
+  - [Configuring Claude AI](#configuring-claude-ai)
   - [Managing Files](#managing-files)
   - [Exploring Charts](#exploring-charts)
   - [Thumbnail Cache](#thumbnail-cache)
@@ -71,9 +73,19 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Persons** - Tag people in your photos
 - **Places** - Add location names to photos
 - **Tags** - Create custom tags for organization
+- **Rating** - Rate image quality from * to ***** (1-5 stars)
 - **Copy & Paste** - Copy metadata from one image and paste to others
 - **Searchable** - All custom metadata is fully searchable
 - **Faceted** - Filter by person, place, or tag using facets
+
+### AI Image Analysis
+
+- **Claude Vision API** - Analyze images using Claude AI to auto-populate metadata
+- **Batch Processing** - Analyze multiple selected images at once
+- **Smart Tagging** - Automatically detect subjects, styles, and moods
+- **Quality Rating** - AI-generated rating based on composition, sharpness, and artistic value
+- **Person Detection** - Describe people visible in images
+- **Location Recognition** - Identify places and settings
 
 ### Thumbnail Caching
 
@@ -464,6 +476,7 @@ You can add your own metadata to photos for better organization:
    | **Persons** | Names of people in the photo (comma-separated) | "John, Jane, Bob" |
    | **Place** | Location name | "Central Park, NYC" |
    | **Tags** | Custom tags (comma-separated) | "vacation, family, summer" |
+   | **Rating** | Quality rating using asterisks | "***" (3 stars) |
 
 4. Click **Save Metadata** to save changes
 
@@ -485,6 +498,101 @@ You can copy custom metadata from one image and paste it to others:
 5. Click **Save** to apply the changes
 
 This is useful when multiple photos share the same people, location, or tags.
+
+### AI Image Analysis
+
+PhotoStat can automatically analyze your images using Claude AI's vision capabilities to populate metadata fields.
+
+**What the AI Analyzes:**
+
+| Field | Description | Examples |
+|-------|-------------|----------|
+| **Tags** | Photography style, subjects, mood, technical aspects | "Portrait", "Landscape", "Black and White", "Bokeh" |
+| **Persons** | Descriptions of people in the image | "woman in red dress", "elderly man", "child" |
+| **Place** | Location if identifiable | "Beach", "Restaurant", "Central Park" |
+| **Rating** | Quality rating from * to ***** | Based on composition, sharpness, artistic value |
+
+**Using AI Analysis:**
+
+1. **Select images** in the search results (use Ctrl+Click or Shift+Click for multiple)
+
+2. Click **Analyze Selected** in the toolbar above the results
+
+   ![Analyze Button](docs/screenshots/analyze-button.png)
+
+3. **Confirm** the analysis - you'll see how many images will be processed
+
+4. **Wait** for processing - progress is shown in the status bar at the bottom
+
+5. When complete, a summary shows successes and any errors
+
+6. Results are **automatically saved** to OpenSearch and sidecar files
+
+**Notes:**
+- Only JPG, PNG, GIF, and WebP images are supported for analysis
+- RAW files cannot be analyzed directly
+- API usage incurs costs - each image uses API credits
+- Large batches may take several minutes to process
+
+**Rating Scale:**
+
+| Rating | Meaning |
+|--------|---------|
+| * | Poor - significant technical issues, bad composition |
+| ** | Below average - noticeable issues, weak composition |
+| *** | Average - decent execution, standard composition |
+| **** | Good - strong composition, good technique, visually appealing |
+| ***** | Excellent - exceptional composition, masterful technique |
+
+### Configuring Claude AI
+
+To use the AI analysis feature, you need to configure your Claude API key.
+
+**Getting an API Key:**
+
+1. Visit [Anthropic Console](https://console.anthropic.com/)
+2. Create an account or sign in
+3. Navigate to **API Keys**
+4. Click **Create Key** and copy the key
+
+**Configuring in PhotoStat:**
+
+1. Open **File > Settings**
+
+2. Navigate to the **Claude AI** tab
+
+   ![Claude AI Settings](docs/screenshots/claude-settings.png)
+
+3. Enter your **API Key** (starts with `sk-ant-...`)
+
+4. Select a **Model**:
+
+   | Model | Description |
+   |-------|-------------|
+   | claude-sonnet-4-20250514 | Fast, cost-effective (recommended) |
+   | claude-opus-4-20250514 | Most capable, higher cost |
+   | claude-3-5-sonnet-20241022 | Previous generation Sonnet |
+   | claude-3-5-haiku-20241022 | Fastest, lowest cost |
+
+5. Click **Test API Key** to verify your key works
+
+6. Click **OK** to save
+
+**API Costs:**
+
+- Each image analyzed uses API credits
+- Costs depend on image size and selected model
+- Sonnet models offer the best balance of quality and cost
+- Monitor usage at [console.anthropic.com](https://console.anthropic.com/)
+
+**Troubleshooting:**
+
+| Error | Solution |
+|-------|----------|
+| "API Key Required" | Configure your API key in Settings > Claude AI |
+| "Invalid API key" | Check that the key is correct and active |
+| "API error: 429" | Rate limited - wait and try again with fewer images |
+| "Analysis failed" | Check internet connection; verify image format is supported |
 
 ### Managing Files
 
@@ -602,7 +710,8 @@ Sidecar files allow custom metadata (persons, places, tags) to persist even when
 {
   "persons" : [ "John", "Jane" ],
   "place" : "Central Park",
-  "tags" : [ "vacation", "family" ]
+  "tags" : [ "vacation", "family" ],
+  "rating" : "****"
 }
 ```
 
@@ -724,6 +833,10 @@ Configuration is stored in `~/.photostat/config.json`:
   },
   "sidecar": {
     "enabled": true
+  },
+  "claude": {
+    "api_key": "",
+    "model": "claude-sonnet-4-20250514"
   }
 }
 ```
@@ -747,6 +860,8 @@ Configuration is stored in `~/.photostat/config.json`:
 | `cache.enabled` | Enable thumbnail disk cache (default: true) |
 | `cache.max_size_mb` | Maximum cache size in MB (default: 500) |
 | `sidecar.enabled` | Save custom metadata to sidecar files (default: true) |
+| `claude.api_key` | Your Anthropic API key for AI analysis |
+| `claude.model` | Claude model to use (default: claude-sonnet-4-20250514) |
 
 ---
 
@@ -875,6 +990,7 @@ photostat-java/
 │   │   ├── ConfigService.java           # Configuration management
 │   │   ├── ExifService.java             # EXIF metadata extraction
 │   │   ├── FileOperationsService.java   # Copy, move, delete operations
+│   │   ├── ImageAnalysisService.java    # Claude AI image analysis
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
 │   │   ├── ThumbnailService.java        # Thumbnail generation & caching
@@ -903,9 +1019,10 @@ photostat-java/
 |-----------|------------|
 | GUI Framework | JavaFX 21 |
 | Search Engine | OpenSearch 2.x |
+| AI Analysis | Claude API (Anthropic) |
 | EXIF Extraction | metadata-extractor + ExifTool |
 | JSON Processing | Jackson |
-| HTTP Client | Apache HttpClient 5 |
+| HTTP Client | Apache HttpClient 5 / Java HttpClient |
 | Build System | Maven |
 | Logging | SLF4J |
 

@@ -3,9 +3,11 @@ package com.photostat.ui;
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
 import com.photostat.services.FileOperationsService;
+import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.IndexerService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
@@ -39,6 +41,8 @@ public class ResultsPanel extends VBox {
     private final ThumbnailService thumbnailService;
     private final ConfigService configService;
     private final FileOperationsService fileOperationsService;
+    private final ImageAnalysisService imageAnalysisService;
+    private final SidecarService sidecarService;
     private final IndexerService indexerService;
     private final LoggingService logger;
 
@@ -52,6 +56,9 @@ public class ResultsPanel extends VBox {
 
     private Consumer<ImageMetadata> selectionCallback;
     private Consumer<Map<String, Map<String, Long>>> aggregationsCallback;
+    private Consumer<String> statusCallback;
+
+    private Button analyzeSelectedBtn;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -60,6 +67,8 @@ public class ResultsPanel extends VBox {
         this.thumbnailService = ThumbnailService.getInstance();
         this.configService = ConfigService.getInstance();
         this.fileOperationsService = FileOperationsService.getInstance();
+        this.imageAnalysisService = ImageAnalysisService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
         this.indexerService = IndexerService.getInstance();
         this.logger = LoggingService.getInstance();
 
@@ -91,6 +100,10 @@ public class ResultsPanel extends VBox {
         });
 
         // Toolbar for bulk operations
+        analyzeSelectedBtn = new Button("Analyze Selected");
+        analyzeSelectedBtn.setOnAction(e -> analyzeSelectedImages());
+        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with Claude AI"));
+
         Button copySelectedBtn = new Button("Copy Selected...");
         copySelectedBtn.setOnAction(e -> copySelectedImages());
 
@@ -104,7 +117,7 @@ public class ResultsPanel extends VBox {
         Label selectionLabel = new Label("(Use Ctrl+Click or Shift+Click to select multiple)");
         selectionLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
 
-        HBox toolbar = new HBox(10, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
+        HBox toolbar = new HBox(10, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -486,6 +499,160 @@ public class ResultsPanel extends VBox {
                 }
             }
         });
+    }
+
+    /**
+     * Analyze selected images using Claude AI.
+     */
+    private void analyzeSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to analyze.");
+            return;
+        }
+
+        if (!imageAnalysisService.isConfigured()) {
+            showAlert(Alert.AlertType.ERROR, "API Key Required",
+                    "Please configure your Claude API key in Settings (Claude AI tab).");
+            return;
+        }
+
+        // Filter to only supported formats
+        List<ImageMetadata> supportedImages = selected.stream()
+                .filter(m -> {
+                    String path = m.getFilePath().toLowerCase();
+                    return path.endsWith(".jpg") || path.endsWith(".jpeg") ||
+                           path.endsWith(".png") || path.endsWith(".gif") || path.endsWith(".webp");
+                })
+                .collect(Collectors.toList());
+
+        if (supportedImages.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Supported Images",
+                    "None of the selected images are in a supported format (JPG, PNG, GIF, WebP).");
+            return;
+        }
+
+        int unsupported = selected.size() - supportedImages.size();
+        String unsupportedMsg = unsupported > 0 ?
+                "\n(" + unsupported + " unsupported format(s) will be skipped)" : "";
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Analyze Images");
+        confirm.setHeaderText("Analyze " + supportedImages.size() + " image(s) with Claude AI?");
+        confirm.setContentText("This will use the Claude API to analyze each image and populate metadata fields (tags, persons, place, rating)." +
+                unsupportedMsg + "\n\nNote: API usage incurs costs.");
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                analyzeImagesInBackground(supportedImages);
+            }
+        });
+    }
+
+    /**
+     * Analyze images in a background thread.
+     */
+    private void analyzeImagesInBackground(List<ImageMetadata> images) {
+        analyzeSelectedBtn.setDisable(true);
+        analyzeSelectedBtn.setText("Analyzing...");
+        updateStatus("Analyzing " + images.size() + " image(s)...");
+
+        new Thread(() -> {
+            int successCount = 0;
+            int errorCount = 0;
+            List<String> errors = new ArrayList<>();
+
+            for (int i = 0; i < images.size(); i++) {
+                ImageMetadata metadata = images.get(i);
+                final int current = i + 1;
+
+                Platform.runLater(() -> {
+                    updateStatus("Analyzing image " + current + " of " + images.size() + ": " + metadata.getFileName());
+                });
+
+                try {
+                    ImageAnalysisService.AnalysisResult result =
+                            imageAnalysisService.analyzeImage(metadata.getFilePath());
+
+                    if (result.hasError()) {
+                        errorCount++;
+                        errors.add(metadata.getFileName() + ": " + result.getError());
+                        logger.warn("ResultsPanel", "Analysis failed for " + metadata.getFilePath() + ": " + result.getError());
+                    } else {
+                        // Update metadata with analysis results
+                        if (result.getTags() != null && !result.getTags().isEmpty()) {
+                            metadata.setTags(result.getTags());
+                        }
+                        if (result.getPersons() != null && !result.getPersons().isEmpty()) {
+                            metadata.setPersons(result.getPersons());
+                        }
+                        if (result.getPlace() != null && !result.getPlace().isEmpty()) {
+                            metadata.setPlace(result.getPlace());
+                        }
+                        if (result.getRating() != null && !result.getRating().isEmpty()) {
+                            metadata.setRating(result.getRating());
+                        }
+
+                        // Save to OpenSearch
+                        openSearchService.updateDocument(metadata);
+
+                        // Save to sidecar file
+                        sidecarService.writeSidecar(metadata);
+
+                        successCount++;
+                        logger.info("ResultsPanel", "Analyzed and saved: " + metadata.getFilePath());
+                    }
+                } catch (Exception e) {
+                    errorCount++;
+                    errors.add(metadata.getFileName() + ": " + e.getMessage());
+                    logger.error("ResultsPanel", "Analysis failed for " + metadata.getFilePath(), e);
+                }
+            }
+
+            final int finalSuccessCount = successCount;
+            final int finalErrorCount = errorCount;
+            final List<String> finalErrors = errors;
+
+            Platform.runLater(() -> {
+                analyzeSelectedBtn.setDisable(false);
+                analyzeSelectedBtn.setText("Analyze Selected");
+
+                String summary = "Analysis complete.\n" +
+                        "Succeeded: " + finalSuccessCount + "\n" +
+                        "Failed: " + finalErrorCount;
+
+                if (!finalErrors.isEmpty()) {
+                    summary += "\n\nErrors:\n" + String.join("\n", finalErrors.subList(0, Math.min(5, finalErrors.size())));
+                    if (finalErrors.size() > 5) {
+                        summary += "\n... and " + (finalErrors.size() - 5) + " more";
+                    }
+                }
+
+                updateStatus("Analysis complete: " + finalSuccessCount + " succeeded, " + finalErrorCount + " failed");
+                showAlert(Alert.AlertType.INFORMATION, "Analysis Complete", summary);
+
+                // Refresh results to show updated metadata
+                if (finalSuccessCount > 0) {
+                    refresh();
+                }
+            });
+        }).start();
+    }
+
+    /**
+     * Set callback for status updates.
+     */
+    public void setStatusCallback(Consumer<String> callback) {
+        this.statusCallback = callback;
+    }
+
+    /**
+     * Update the status bar.
+     */
+    private void updateStatus(String message) {
+        if (statusCallback != null) {
+            statusCallback.accept(message);
+        }
     }
 
     /**

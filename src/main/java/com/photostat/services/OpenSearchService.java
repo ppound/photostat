@@ -209,6 +209,7 @@ public class OpenSearchService {
             properties.put("persons", Property.of(p -> p.keyword(k -> k)));
             properties.put("place", Property.of(p -> p.keyword(k -> k)));
             properties.put("tags", Property.of(p -> p.keyword(k -> k)));
+            properties.put("rating", Property.of(p -> p.keyword(k -> k)));
 
             // Raw EXIF data (not indexed)
             properties.put("all_exif", Property.of(p -> p.object(o -> o.enabled(false))));
@@ -252,6 +253,7 @@ public class OpenSearchService {
         logger.debug("OpenSearchService", "Persons: " + metadata.getPersonsString());
         logger.debug("OpenSearchService", "Place: " + metadata.getPlace());
         logger.debug("OpenSearchService", "Tags: " + metadata.getTagsString());
+        logger.debug("OpenSearchService", "Rating: " + metadata.getRating());
 
         try {
             indexDocument(metadata);

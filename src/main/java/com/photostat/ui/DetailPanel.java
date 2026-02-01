@@ -42,6 +42,7 @@ public class DetailPanel extends VBox {
     private TextField personsField;
     private TextField placeField;
     private TextField tagsField;
+    private TextField ratingField;
     private Button saveMetadataButton;
     private Button copyMetadataButton;
     private Button pasteMetadataButton;
@@ -52,6 +53,7 @@ public class DetailPanel extends VBox {
     private static String copiedPersons = null;
     private static String copiedPlace = null;
     private static String copiedTags = null;
+    private static String copiedRating = null;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -227,6 +229,14 @@ public class DetailPanel extends VBox {
         grid.add(tagsLabel, 0, row);
         grid.add(tagsField, 1, row++);
 
+        // Rating field
+        Label ratingLabel = new Label("Rating:");
+        ratingLabel.setStyle("-fx-font-weight: bold;");
+        ratingField = new TextField();
+        ratingField.setPromptText("e.g., *, **, ***, ****, *****");
+        grid.add(ratingLabel, 0, row);
+        grid.add(ratingField, 1, row++);
+
         // Buttons
         saveMetadataButton = new Button("Save");
         saveMetadataButton.setOnAction(e -> saveCustomMetadata());
@@ -262,10 +272,12 @@ public class DetailPanel extends VBox {
         String personsText = personsField.getText().trim();
         String placeText = placeField.getText().trim();
         String tagsText = tagsField.getText().trim();
+        String ratingText = ratingField.getText().trim();
 
         logger.debug("DetailPanel", "Persons: " + personsText);
         logger.debug("DetailPanel", "Place: " + placeText);
         logger.debug("DetailPanel", "Tags: " + tagsText);
+        logger.debug("DetailPanel", "Rating: " + ratingText);
 
         // Update metadata object - use setPersons with new list to handle null safely
         java.util.List<String> newPersons = new java.util.ArrayList<>();
@@ -292,6 +304,8 @@ public class DetailPanel extends VBox {
             }
         }
         currentMetadata.setTags(newTags);
+
+        currentMetadata.setRating(ratingText.isEmpty() ? null : ratingText);
 
         // Save to OpenSearch and sidecar file
         new Thread(() -> {
@@ -327,9 +341,10 @@ public class DetailPanel extends VBox {
         copiedPersons = personsField.getText().trim();
         copiedPlace = placeField.getText().trim();
         copiedTags = tagsField.getText().trim();
+        copiedRating = ratingField.getText().trim();
 
         logger.info("DetailPanel", "Copied custom metadata - Persons: " + copiedPersons +
-                ", Place: " + copiedPlace + ", Tags: " + copiedTags);
+                ", Place: " + copiedPlace + ", Tags: " + copiedTags + ", Rating: " + copiedRating);
 
         updateStatus("Metadata copied to clipboard");
     }
@@ -338,7 +353,7 @@ public class DetailPanel extends VBox {
      * Paste custom metadata from clipboard into fields.
      */
     private void pasteCustomMetadata() {
-        if (copiedPersons == null && copiedPlace == null && copiedTags == null) {
+        if (copiedPersons == null && copiedPlace == null && copiedTags == null && copiedRating == null) {
             updateStatus("Nothing to paste - copy metadata first");
             return;
         }
@@ -353,9 +368,12 @@ public class DetailPanel extends VBox {
         if (copiedTags != null) {
             tagsField.setText(copiedTags);
         }
+        if (copiedRating != null) {
+            ratingField.setText(copiedRating);
+        }
 
         logger.info("DetailPanel", "Pasted custom metadata - Persons: " + copiedPersons +
-                ", Place: " + copiedPlace + ", Tags: " + copiedTags);
+                ", Place: " + copiedPlace + ", Tags: " + copiedTags + ", Rating: " + copiedRating);
 
         updateStatus("Metadata pasted - click Save to apply");
     }
@@ -364,7 +382,7 @@ public class DetailPanel extends VBox {
      * Check if there is copied metadata available.
      */
     private static boolean hasClipboardData() {
-        return copiedPersons != null || copiedPlace != null || copiedTags != null;
+        return copiedPersons != null || copiedPlace != null || copiedTags != null || copiedRating != null;
     }
 
     /**
@@ -446,6 +464,7 @@ public class DetailPanel extends VBox {
         personsField.setText(metadata.getPersonsString());
         placeField.setText(metadata.getPlace() != null ? metadata.getPlace() : "");
         tagsField.setText(metadata.getTagsString());
+        ratingField.setText(metadata.getRating() != null ? metadata.getRating() : "");
     }
 
     private void loadPreviewImage(String filePath) {
@@ -597,6 +616,7 @@ public class DetailPanel extends VBox {
         personsField.clear();
         placeField.clear();
         tagsField.clear();
+        ratingField.clear();
         saveMetadataButton.setDisable(true);
         copyMetadataButton.setDisable(true);
         pasteMetadataButton.setDisable(true);
@@ -645,6 +665,7 @@ public class DetailPanel extends VBox {
         personsField.clear();
         placeField.clear();
         tagsField.clear();
+        ratingField.clear();
     }
 
     private void openInMaps(double lat, double lon) {

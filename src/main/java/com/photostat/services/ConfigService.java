@@ -126,6 +126,12 @@ public class ConfigService {
         sidecar.put("enabled", true);      // Sidecar files enabled by default
         defaultConfig.put("sidecar", sidecar);
 
+        // Claude API settings
+        Map<String, Object> claude = new HashMap<>();
+        claude.put("api_key", "");
+        claude.put("model", "claude-sonnet-4-20250514");
+        defaultConfig.put("claude", claude);
+
         return defaultConfig;
     }
 
@@ -318,6 +324,23 @@ public class ConfigService {
 
     public void setSidecarEnabled(boolean enabled) {
         setNestedValue("sidecar", "enabled", enabled);
+    }
+
+    // Claude API settings
+    public String getClaudeApiKey() {
+        return getNestedString("claude", "api_key", "");
+    }
+
+    public void setClaudeApiKey(String apiKey) {
+        setNestedValue("claude", "api_key", apiKey);
+    }
+
+    public String getClaudeModel() {
+        return getNestedString("claude", "model", "claude-sonnet-4-20250514");
+    }
+
+    public void setClaudeModel(String model) {
+        setNestedValue("claude", "model", model);
     }
 
     // Helper methods

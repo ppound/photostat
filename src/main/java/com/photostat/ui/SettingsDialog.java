@@ -42,6 +42,10 @@ public class SettingsDialog extends Dialog<Boolean> {
     // Sidecar settings
     private CheckBox sidecarEnabledCheckbox;
 
+    // Claude API settings
+    private PasswordField claudeApiKeyField;
+    private ComboBox<String> claudeModelCombo;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -74,7 +78,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab cacheTab = new Tab("Cache");
         cacheTab.setContent(createCachePane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab);
+        Tab claudeTab = new Tab("Claude AI");
+        claudeTab.setContent(createClaudePane());
+
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, claudeTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -359,6 +366,106 @@ public class SettingsDialog extends Dialog<Boolean> {
         return pane;
     }
 
+    private VBox createClaudePane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        int row = 0;
+
+        // API Key
+        grid.add(new Label("API Key:"), 0, row);
+        claudeApiKeyField = new PasswordField();
+        claudeApiKeyField.setPromptText("sk-ant-...");
+        claudeApiKeyField.setPrefWidth(280);
+        grid.add(claudeApiKeyField, 1, row++);
+
+        // Model selection
+        grid.add(new Label("Model:"), 0, row);
+        claudeModelCombo = new ComboBox<>();
+        claudeModelCombo.getItems().addAll(
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-20250514",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022"
+        );
+        claudeModelCombo.setPrefWidth(280);
+        grid.add(claudeModelCombo, 1, row++);
+
+        // Info label
+        Label infoLabel = new Label(
+            "The Claude API is used for the 'Analyze' feature which automatically " +
+            "analyzes images and populates metadata fields (tags, persons, place, rating).\n\n" +
+            "To get an API key, visit: https://console.anthropic.com/\n\n" +
+            "Note: API usage incurs costs based on the number of images analyzed."
+        );
+        infoLabel.setWrapText(true);
+        infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+
+        // Test API button
+        Button testApiButton = new Button("Test API Key");
+        Label apiStatusLabel = new Label("");
+        testApiButton.setOnAction(e -> testClaudeApi(apiStatusLabel));
+
+        HBox testBox = new HBox(10, testApiButton, apiStatusLabel);
+        HBox.setHgrow(apiStatusLabel, Priority.ALWAYS);
+
+        pane.getChildren().addAll(grid, new Separator(), infoLabel, new Separator(), testBox);
+
+        return pane;
+    }
+
+    private void testClaudeApi(Label statusLabel) {
+        statusLabel.setText("Testing...");
+        statusLabel.setStyle("-fx-text-fill: #666;");
+
+        String apiKey = claudeApiKeyField.getText().trim();
+        if (apiKey.isEmpty()) {
+            statusLabel.setText("Please enter an API key");
+            statusLabel.setStyle("-fx-text-fill: #cc0000;");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("https://api.anthropic.com/v1/messages"))
+                    .header("Content-Type", "application/json")
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                        "{\"model\":\"claude-sonnet-4-20250514\",\"max_tokens\":10,\"messages\":[{\"role\":\"user\",\"content\":\"Hi\"}]}"
+                    ))
+                    .build();
+
+                java.net.http.HttpResponse<String> response = client.send(request,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+
+                Platform.runLater(() -> {
+                    if (response.statusCode() == 200) {
+                        statusLabel.setText("API key is valid!");
+                        statusLabel.setStyle("-fx-text-fill: #00aa00;");
+                    } else if (response.statusCode() == 401) {
+                        statusLabel.setText("Invalid API key");
+                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    } else {
+                        statusLabel.setText("Error: " + response.statusCode());
+                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    statusLabel.setText("Error: " + e.getMessage());
+                    statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                });
+            }
+        }).start();
+    }
+
     private void updateCacheStats() {
         ThumbnailService thumbnailService = ThumbnailService.getInstance();
         int fileCount = thumbnailService.getDiskCacheFileCount();
@@ -408,6 +515,10 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Sidecar settings
         sidecarEnabledCheckbox.setSelected(configService.isSidecarEnabled());
+
+        // Claude API settings
+        claudeApiKeyField.setText(configService.getClaudeApiKey());
+        claudeModelCombo.setValue(configService.getClaudeModel());
     }
 
     private void saveSettings() {
@@ -438,6 +549,12 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Sidecar settings
         configService.setSidecarEnabled(sidecarEnabledCheckbox.isSelected());
+
+        // Claude API settings
+        configService.setClaudeApiKey(claudeApiKeyField.getText().trim());
+        if (claudeModelCombo.getValue() != null) {
+            configService.setClaudeModel(claudeModelCombo.getValue());
+        }
 
         configService.saveConfig();
     }

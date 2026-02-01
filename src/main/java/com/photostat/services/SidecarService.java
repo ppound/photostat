@@ -81,6 +81,9 @@ public class SidecarService {
             if (data.containsKey("tags")) {
                 sidecar.setTags((List<String>) data.get("tags"));
             }
+            if (data.containsKey("rating")) {
+                sidecar.setRating((String) data.get("rating"));
+            }
 
             logger.debug("SidecarService", "Read sidecar for: " + imagePath);
             return sidecar;
@@ -94,7 +97,7 @@ public class SidecarService {
     /**
      * Write custom metadata to a sidecar file.
      */
-    public boolean writeSidecar(String imagePath, List<String> persons, String place, List<String> tags) {
+    public boolean writeSidecar(String imagePath, List<String> persons, String place, List<String> tags, String rating) {
         if (!configService.isSidecarEnabled()) {
             logger.debug("SidecarService", "Sidecar files disabled, skipping write");
             return false;
@@ -104,11 +107,12 @@ public class SidecarService {
         boolean hasPersons = persons != null && !persons.isEmpty();
         boolean hasPlace = place != null && !place.trim().isEmpty();
         boolean hasTags = tags != null && !tags.isEmpty();
+        boolean hasRating = rating != null && !rating.trim().isEmpty();
 
         Path sidecarPath = getSidecarPath(imagePath);
 
         // If no custom metadata, delete sidecar if it exists
-        if (!hasPersons && !hasPlace && !hasTags) {
+        if (!hasPersons && !hasPlace && !hasTags && !hasRating) {
             try {
                 if (Files.exists(sidecarPath)) {
                     Files.delete(sidecarPath);
@@ -132,6 +136,9 @@ public class SidecarService {
         if (hasTags) {
             data.put("tags", tags);
         }
+        if (hasRating) {
+            data.put("rating", rating.trim());
+        }
 
         try {
             objectMapper.writeValue(sidecarPath.toFile(), data);
@@ -151,7 +158,8 @@ public class SidecarService {
                 metadata.getFilePath(),
                 metadata.getPersons(),
                 metadata.getPlace(),
-                metadata.getTags()
+                metadata.getTags(),
+                metadata.getRating()
         );
     }
 
@@ -169,6 +177,9 @@ public class SidecarService {
             }
             if (sidecar.getTags() != null && !sidecar.getTags().isEmpty()) {
                 metadata.setTags(sidecar.getTags());
+            }
+            if (sidecar.getRating() != null && !sidecar.getRating().isEmpty()) {
+                metadata.setRating(sidecar.getRating());
             }
             logger.debug("SidecarService", "Applied sidecar data to: " + metadata.getFilePath());
         }
@@ -198,6 +209,7 @@ public class SidecarService {
         private List<String> persons;
         private String place;
         private List<String> tags;
+        private String rating;
 
         public List<String> getPersons() {
             return persons;
@@ -223,11 +235,20 @@ public class SidecarService {
             this.tags = tags;
         }
 
+        public String getRating() {
+            return rating;
+        }
+
+        public void setRating(String rating) {
+            this.rating = rating;
+        }
+
         public boolean isEmpty() {
             boolean noPersons = persons == null || persons.isEmpty();
             boolean noPlace = place == null || place.trim().isEmpty();
             boolean noTags = tags == null || tags.isEmpty();
-            return noPersons && noPlace && noTags;
+            boolean noRating = rating == null || rating.trim().isEmpty();
+            return noPersons && noPlace && noTags && noRating;
         }
     }
 }

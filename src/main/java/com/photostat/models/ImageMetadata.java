@@ -94,6 +94,9 @@ public class ImageMetadata {
     @JsonProperty("tags")
     private List<String> tags;
 
+    @JsonProperty("rating")
+    private String rating;
+
     public ImageMetadata() {
         this.allExif = new HashMap<>();
         this.persons = new ArrayList<>();
@@ -356,6 +359,14 @@ public class ImageMetadata {
         if (tags != null) {
             tags.remove(tag);
         }
+    }
+
+    public String getRating() {
+        return rating;
+    }
+
+    public void setRating(String rating) {
+        this.rating = rating;
     }
 
     public String getPersonsString() {

@@ -115,6 +115,9 @@ public class MainWindow extends BorderPane {
         // Wire up detail panel status updates to status bar
         detailPanel.setStatusCallback(this::updateStatus);
 
+        // Wire up results panel status updates to status bar
+        resultsPanel.setStatusCallback(this::updateStatus);
+
         // Layout
         VBox leftSide = new VBox(10);
         leftSide.setPadding(new Insets(10));
