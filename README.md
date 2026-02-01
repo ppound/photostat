@@ -71,6 +71,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Persons** - Tag people in your photos
 - **Places** - Add location names to photos
 - **Tags** - Create custom tags for organization
+- **Copy & Paste** - Copy metadata from one image and paste to others
 - **Searchable** - All custom metadata is fully searchable
 - **Faceted** - Filter by person, place, or tag using facets
 
@@ -128,7 +129,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.3.0-executable.jar
+photostat-java-1.3.1-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -247,7 +248,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.3.0-executable.jar
+   java -jar photostat-java-1.3.1-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -258,7 +259,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.3.0-executable.jar
+        -jar photostat-java-1.3.1-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -472,6 +473,18 @@ You can add your own metadata to photos for better organization:
 - Search for names, places, or tags in the search box
 - Use the **Persons**, **Places**, and **Tags** facets to filter
 - Use the filter dropdowns in the **Custom Metadata** section of the search panel
+
+**Copy & Paste Metadata:**
+
+You can copy custom metadata from one image and paste it to others:
+
+1. Select an image with the metadata you want to copy
+2. Click **Copy** in the Custom Metadata section
+3. Select another image
+4. Click **Paste** to fill in the fields
+5. Click **Save** to apply the changes
+
+This is useful when multiple photos share the same people, location, or tags.
 
 ### Managing Files
 
@@ -755,7 +768,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.3.0-executable.jar
+       -jar photostat-java-1.3.1-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -828,7 +841,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.3.0-executable.jar
+# target/photostat-java-1.3.1-executable.jar
 ```
 
 ### Run from Source

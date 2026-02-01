@@ -43,7 +43,14 @@ public class DetailPanel extends VBox {
     private TextField placeField;
     private TextField tagsField;
     private Button saveMetadataButton;
+    private Button copyMetadataButton;
+    private Button pasteMetadataButton;
     private Runnable metadataSavedCallback;
+
+    // Clipboard for custom metadata copy/paste
+    private static String copiedPersons = null;
+    private static String copiedPlace = null;
+    private static String copiedTags = null;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -219,12 +226,22 @@ public class DetailPanel extends VBox {
         grid.add(tagsLabel, 0, row);
         grid.add(tagsField, 1, row++);
 
-        // Save button
-        saveMetadataButton = new Button("Save Metadata");
+        // Buttons
+        saveMetadataButton = new Button("Save");
         saveMetadataButton.setOnAction(e -> saveCustomMetadata());
         saveMetadataButton.setDisable(true);
 
-        HBox buttonBox = new HBox(saveMetadataButton);
+        copyMetadataButton = new Button("Copy");
+        copyMetadataButton.setOnAction(e -> copyCustomMetadata());
+        copyMetadataButton.setDisable(true);
+        copyMetadataButton.setTooltip(new Tooltip("Copy custom metadata to clipboard"));
+
+        pasteMetadataButton = new Button("Paste");
+        pasteMetadataButton.setOnAction(e -> pasteCustomMetadata());
+        pasteMetadataButton.setDisable(true);
+        pasteMetadataButton.setTooltip(new Tooltip("Paste custom metadata from clipboard"));
+
+        HBox buttonBox = new HBox(5, saveMetadataButton, copyMetadataButton, pasteMetadataButton);
         buttonBox.setPadding(new Insets(5, 0, 0, 0));
 
         content.getChildren().addAll(grid, buttonBox);
@@ -303,6 +320,53 @@ public class DetailPanel extends VBox {
     }
 
     /**
+     * Copy custom metadata fields to clipboard.
+     */
+    private void copyCustomMetadata() {
+        copiedPersons = personsField.getText().trim();
+        copiedPlace = placeField.getText().trim();
+        copiedTags = tagsField.getText().trim();
+
+        logger.info("DetailPanel", "Copied custom metadata - Persons: " + copiedPersons +
+                ", Place: " + copiedPlace + ", Tags: " + copiedTags);
+
+        showInfo("Metadata Copied", "Custom metadata copied to clipboard.\nYou can now paste it to other images.");
+    }
+
+    /**
+     * Paste custom metadata from clipboard into fields.
+     */
+    private void pasteCustomMetadata() {
+        if (copiedPersons == null && copiedPlace == null && copiedTags == null) {
+            showError("Nothing to Paste", "No custom metadata has been copied yet.");
+            return;
+        }
+
+        // Paste the copied values into the fields
+        if (copiedPersons != null) {
+            personsField.setText(copiedPersons);
+        }
+        if (copiedPlace != null) {
+            placeField.setText(copiedPlace);
+        }
+        if (copiedTags != null) {
+            tagsField.setText(copiedTags);
+        }
+
+        logger.info("DetailPanel", "Pasted custom metadata - Persons: " + copiedPersons +
+                ", Place: " + copiedPlace + ", Tags: " + copiedTags);
+
+        showInfo("Metadata Pasted", "Custom metadata pasted. Click 'Save' to apply changes.");
+    }
+
+    /**
+     * Check if there is copied metadata available.
+     */
+    private static boolean hasClipboardData() {
+        return copiedPersons != null || copiedPlace != null || copiedTags != null;
+    }
+
+    /**
      * Set callback for when metadata is saved (to refresh search results).
      */
     public void setMetadataSavedCallback(Runnable callback) {
@@ -356,8 +420,10 @@ public class DetailPanel extends VBox {
     }
 
     private void updateCustomMetadata(ImageMetadata metadata) {
-        // Enable save button
+        // Enable buttons
         saveMetadataButton.setDisable(false);
+        copyMetadataButton.setDisable(false);
+        pasteMetadataButton.setDisable(!hasClipboardData());
 
         // Populate fields
         personsField.setText(metadata.getPersonsString());
@@ -515,6 +581,8 @@ public class DetailPanel extends VBox {
         placeField.clear();
         tagsField.clear();
         saveMetadataButton.setDisable(true);
+        copyMetadataButton.setDisable(true);
+        pasteMetadataButton.setDisable(true);
     }
 
     private String currentFilePath;
