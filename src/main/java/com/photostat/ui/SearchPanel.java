@@ -38,6 +38,7 @@ public class SearchPanel extends VBox {
     private ComboBox<String> personsCombo;
     private ComboBox<String> placeCombo;
     private ComboBox<String> tagsCombo;
+    private ComboBox<String> ratingCombo;
 
     private BiConsumer<String, Map<String, Object>> searchCallback;
 
@@ -204,6 +205,14 @@ public class SearchPanel extends VBox {
         tagsCombo.setPrefWidth(150);
         customGrid.add(tagsCombo, 1, 2);
 
+        // Rating filter
+        customGrid.add(new Label("Rating:"), 0, 3);
+        ratingCombo = new ComboBox<>();
+        ratingCombo.setEditable(true);
+        ratingCombo.setPromptText("All");
+        ratingCombo.setPrefWidth(150);
+        customGrid.add(ratingCombo, 1, 3);
+
         customPane.setContent(customGrid);
 
         // Buttons
@@ -338,6 +347,11 @@ public class SearchPanel extends VBox {
             filters.put("tags", tags.trim());
         }
 
+        String rating = ratingCombo.getValue();
+        if (rating != null && !rating.trim().isEmpty()) {
+            filters.put("rating", rating.trim());
+        }
+
         return filters;
     }
 
@@ -361,6 +375,7 @@ public class SearchPanel extends VBox {
         personsCombo.setValue(null);
         placeCombo.setValue(null);
         tagsCombo.setValue(null);
+        ratingCombo.setValue(null);
 
         executeSearch();
     }
@@ -425,6 +440,9 @@ public class SearchPanel extends VBox {
                 break;
             case "tags":
                 tagsCombo.setValue(value);
+                break;
+            case "rating":
+                ratingCombo.setValue(value);
                 break;
         }
     }
@@ -493,6 +511,16 @@ public class SearchPanel extends VBox {
             tagsCombo.getItems().add("");
             tagsCombo.getItems().addAll(tags.keySet());
             tagsCombo.setValue(current);
+        }
+
+        // Rating
+        Map<String, Long> ratings = aggregations.get("rating");
+        if (ratings != null) {
+            String current = ratingCombo.getValue();
+            ratingCombo.getItems().clear();
+            ratingCombo.getItems().add("");
+            ratingCombo.getItems().addAll(ratings.keySet());
+            ratingCombo.setValue(current);
         }
     }
 

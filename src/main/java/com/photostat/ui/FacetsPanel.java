@@ -25,6 +25,7 @@ public class FacetsPanel extends VBox {
     private TitledPane personsPane;
     private TitledPane placePane;
     private TitledPane tagsPane;
+    private TitledPane ratingPane;
 
     private BiConsumer<String, String> filterCallback;
 
@@ -50,11 +51,13 @@ public class FacetsPanel extends VBox {
         personsPane = createFacetPane("Persons", "persons");
         placePane = createFacetPane("Places", "place");
         tagsPane = createFacetPane("Tags", "tags");
+        ratingPane = createFacetPane("Rating", "rating");
 
         // Default expanded state
         cameraMakePane.setExpanded(true);
         fileTypePane.setExpanded(true);
         tagsPane.setExpanded(true);
+        ratingPane.setExpanded(true);
 
         facetsContainer = new VBox(5);
         facetsContainer.getChildren().addAll(
@@ -67,7 +70,8 @@ public class FacetsPanel extends VBox {
                 new Separator(),
                 personsPane,
                 placePane,
-                tagsPane
+                tagsPane,
+                ratingPane
         );
 
         scrollPane = new ScrollPane(facetsContainer);
@@ -110,6 +114,7 @@ public class FacetsPanel extends VBox {
         updateFacetPane(personsPane, "persons", aggregations.get("persons"));
         updateFacetPane(placePane, "place", aggregations.get("place"));
         updateFacetPane(tagsPane, "tags", aggregations.get("tags"));
+        updateFacetPane(ratingPane, "rating", aggregations.get("rating"));
     }
 
     private void updateFacetPane(TitledPane pane, String field, Map<String, Long> buckets) {

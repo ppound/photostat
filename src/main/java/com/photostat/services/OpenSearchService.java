@@ -366,6 +366,7 @@ public class OpenSearchService {
         searchBuilder.aggregations("persons", Aggregation.of(a -> a.terms(t -> t.field("persons").size(50))));
         searchBuilder.aggregations("place", Aggregation.of(a -> a.terms(t -> t.field("place").size(50))));
         searchBuilder.aggregations("tags", Aggregation.of(a -> a.terms(t -> t.field("tags").size(50))));
+        searchBuilder.aggregations("rating", Aggregation.of(a -> a.terms(t -> t.field("rating").size(10))));
 
         // ISO ranges aggregation
         List<AggregationRange> isoRanges = Arrays.asList(
