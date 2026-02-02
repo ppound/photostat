@@ -141,7 +141,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.3.1-executable.jar
+photostat-java-1.4.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -260,7 +260,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.3.1-executable.jar
+   java -jar photostat-java-1.4.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -271,7 +271,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.3.1-executable.jar
+        -jar photostat-java-1.4.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -522,9 +522,14 @@ PhotoStat can automatically analyze your images using Claude AI's vision capabil
 
 3. **Confirm** the analysis - you'll see how many images will be processed
 
-4. **Wait** for processing - progress is shown in the status bar at the bottom
+4. **Monitor progress** - a progress dialog shows:
+   - Progress bar with completion percentage
+   - Current image count (X of Y)
+   - Current file being analyzed
+   - Error count during processing
+   - **Cancel** button to stop after the current image
 
-5. When complete, a summary shows successes and any errors
+5. When complete, a summary shows successes, failures, and any errors
 
 6. Results are **automatically saved** to OpenSearch and sidecar files
 
@@ -883,7 +888,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.3.1-executable.jar
+       -jar photostat-java-1.4.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -956,7 +961,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.3.1-executable.jar
+# target/photostat-java-1.4.0-executable.jar
 ```
 
 ### Run from Source
