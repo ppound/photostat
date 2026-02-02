@@ -5,6 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,6 +24,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -30,6 +40,8 @@ public class ImageAnalysisService {
 
     private static final String CLAUDE_API_URL = "https://api.anthropic.com/v1/messages";
     private static final String ANTHROPIC_VERSION = "2023-06-01";
+    private static final int MAX_IMAGE_SIZE = 1024;  // Max dimension in pixels for API optimization
+    private static final float JPEG_QUALITY = 0.85f; // JPEG compression quality
 
     private ImageAnalysisService() {
         this.configService = ConfigService.getInstance();
@@ -90,9 +102,6 @@ public class ImageAnalysisService {
                 return result;
             }
 
-            byte[] imageBytes = Files.readAllBytes(path);
-            String base64Image = Base64.getEncoder().encodeToString(imageBytes);
-
             // Determine media type
             String mediaType = getMediaType(imagePath);
             if (mediaType == null) {
@@ -100,8 +109,18 @@ public class ImageAnalysisService {
                 return result;
             }
 
-            // Build the request
-            String requestBody = buildRequestBody(base64Image, mediaType);
+            // Optimize image for API (resize and compress)
+            byte[] optimizedBytes = optimizeImageForApi(path.toFile());
+            if (optimizedBytes == null) {
+                result.setError("Failed to process image");
+                return result;
+            }
+
+            String base64Image = Base64.getEncoder().encodeToString(optimizedBytes);
+            logger.debug("ImageAnalysisService", "Optimized image size: " + (optimizedBytes.length / 1024) + " KB");
+
+            // Build the request (always send as JPEG since we convert)
+            String requestBody = buildRequestBody(base64Image, "image/jpeg");
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(CLAUDE_API_URL))
@@ -148,6 +167,83 @@ public class ImageAnalysisService {
             return "image/webp";
         }
         return null;
+    }
+
+    /**
+     * Optimize an image for the Claude Vision API by resizing and compressing.
+     * This reduces API costs and improves response time.
+     */
+    private byte[] optimizeImageForApi(File imageFile) {
+        try {
+            // Read the original image
+            BufferedImage originalImage = ImageIO.read(imageFile);
+            if (originalImage == null) {
+                logger.error("ImageAnalysisService", "Failed to read image: " + imageFile.getPath());
+                return null;
+            }
+
+            int originalWidth = originalImage.getWidth();
+            int originalHeight = originalImage.getHeight();
+
+            // Calculate new dimensions maintaining aspect ratio
+            int newWidth = originalWidth;
+            int newHeight = originalHeight;
+
+            if (originalWidth > MAX_IMAGE_SIZE || originalHeight > MAX_IMAGE_SIZE) {
+                if (originalWidth > originalHeight) {
+                    newWidth = MAX_IMAGE_SIZE;
+                    newHeight = (int) ((double) originalHeight / originalWidth * MAX_IMAGE_SIZE);
+                } else {
+                    newHeight = MAX_IMAGE_SIZE;
+                    newWidth = (int) ((double) originalWidth / originalHeight * MAX_IMAGE_SIZE);
+                }
+                logger.debug("ImageAnalysisService", "Resizing image from " + originalWidth + "x" + originalHeight +
+                        " to " + newWidth + "x" + newHeight);
+            }
+
+            // Create resized image
+            BufferedImage resizedImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g2d = resizedImage.createGraphics();
+
+            // Use high-quality rendering hints
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            // Fill with white background (for transparent images)
+            g2d.setColor(Color.WHITE);
+            g2d.fillRect(0, 0, newWidth, newHeight);
+
+            // Draw the resized image
+            g2d.drawImage(originalImage, 0, 0, newWidth, newHeight, null);
+            g2d.dispose();
+
+            // Compress as JPEG
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpeg");
+            if (!writers.hasNext()) {
+                logger.error("ImageAnalysisService", "No JPEG writer available");
+                return null;
+            }
+
+            ImageWriter writer = writers.next();
+            ImageOutputStream ios = ImageIO.createImageOutputStream(outputStream);
+            writer.setOutput(ios);
+
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(JPEG_QUALITY);
+
+            writer.write(null, new IIOImage(resizedImage, null, null), param);
+            writer.dispose();
+            ios.close();
+
+            return outputStream.toByteArray();
+
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to optimize image", e);
+            return null;
+        }
     }
 
     private String buildRequestBody(String base64Image, String mediaType) throws IOException {
