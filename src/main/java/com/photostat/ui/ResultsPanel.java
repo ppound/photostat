@@ -22,6 +22,9 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -550,24 +553,83 @@ public class ResultsPanel extends VBox {
     }
 
     /**
-     * Analyze images in a background thread.
+     * Analyze images in a background thread with progress dialog.
      */
     private void analyzeImagesInBackground(List<ImageMetadata> images) {
         analyzeSelectedBtn.setDisable(true);
-        analyzeSelectedBtn.setText("Analyzing...");
         updateStatus("Analyzing " + images.size() + " image(s)...");
+
+        // Create progress dialog
+        Stage progressStage = new Stage();
+        progressStage.initModality(Modality.APPLICATION_MODAL);
+        progressStage.initStyle(StageStyle.UTILITY);
+        progressStage.setTitle("Analyzing Images");
+        progressStage.setResizable(false);
+
+        VBox progressContent = new VBox(15);
+        progressContent.setPadding(new Insets(20));
+        progressContent.setAlignment(Pos.CENTER);
+        progressContent.setPrefWidth(450);
+
+        Label titleLabel = new Label("Analyzing images with Claude AI...");
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        ProgressBar progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(400);
+        progressBar.setPrefHeight(25);
+
+        Label progressLabel = new Label("0 of " + images.size());
+        progressLabel.setStyle("-fx-font-size: 12px;");
+
+        Label currentFileLabel = new Label("Preparing...");
+        currentFileLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        currentFileLabel.setWrapText(true);
+        currentFileLabel.setMaxWidth(400);
+
+        Label statusLabel = new Label("");
+        statusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+
+        Button cancelButton = new Button("Cancel");
+        final boolean[] cancelled = {false};
+        cancelButton.setOnAction(e -> {
+            cancelled[0] = true;
+            cancelButton.setDisable(true);
+            cancelButton.setText("Cancelling...");
+            currentFileLabel.setText("Cancelling after current image...");
+        });
+
+        progressContent.getChildren().addAll(titleLabel, progressBar, progressLabel, currentFileLabel, statusLabel, cancelButton);
+
+        javafx.scene.Scene progressScene = new javafx.scene.Scene(progressContent);
+        progressStage.setScene(progressScene);
+        progressStage.show();
+
+        // Center on parent window
+        if (getScene() != null && getScene().getWindow() != null) {
+            progressStage.setX(getScene().getWindow().getX() + (getScene().getWindow().getWidth() - 450) / 2);
+            progressStage.setY(getScene().getWindow().getY() + (getScene().getWindow().getHeight() - 200) / 2);
+        }
 
         new Thread(() -> {
             int successCount = 0;
             int errorCount = 0;
             List<String> errors = new ArrayList<>();
+            final int totalImages = images.size();
 
             for (int i = 0; i < images.size(); i++) {
+                if (cancelled[0]) {
+                    break;
+                }
+
                 ImageMetadata metadata = images.get(i);
                 final int current = i + 1;
+                final double progress = (double) i / totalImages;
 
                 Platform.runLater(() -> {
-                    updateStatus("Analyzing image " + current + " of " + images.size() + ": " + metadata.getFileName());
+                    progressBar.setProgress(progress);
+                    progressLabel.setText(current + " of " + totalImages);
+                    currentFileLabel.setText("Analyzing: " + metadata.getFileName());
+                    updateStatus("Analyzing image " + current + " of " + totalImages + ": " + metadata.getFileName());
                 });
 
                 try {
@@ -578,6 +640,8 @@ public class ResultsPanel extends VBox {
                         errorCount++;
                         errors.add(metadata.getFileName() + ": " + result.getError());
                         logger.warn("ResultsPanel", "Analysis failed for " + metadata.getFilePath() + ": " + result.getError());
+                        final int errCount = errorCount;
+                        Platform.runLater(() -> statusLabel.setText("Errors: " + errCount));
                     } else {
                         // Update metadata with analysis results
                         if (result.getTags() != null && !result.getTags().isEmpty()) {
@@ -606,20 +670,31 @@ public class ResultsPanel extends VBox {
                     errorCount++;
                     errors.add(metadata.getFileName() + ": " + e.getMessage());
                     logger.error("ResultsPanel", "Analysis failed for " + metadata.getFilePath(), e);
+                    final int errCount = errorCount;
+                    Platform.runLater(() -> statusLabel.setText("Errors: " + errCount));
                 }
             }
 
             final int finalSuccessCount = successCount;
             final int finalErrorCount = errorCount;
             final List<String> finalErrors = errors;
+            final boolean wasCancelled = cancelled[0];
 
             Platform.runLater(() -> {
+                progressStage.close();
                 analyzeSelectedBtn.setDisable(false);
-                analyzeSelectedBtn.setText("Analyze Selected");
 
-                String summary = "Analysis complete.\n" +
-                        "Succeeded: " + finalSuccessCount + "\n" +
-                        "Failed: " + finalErrorCount;
+                String summary;
+                if (wasCancelled) {
+                    summary = "Analysis cancelled.\n" +
+                            "Completed: " + finalSuccessCount + "\n" +
+                            "Failed: " + finalErrorCount + "\n" +
+                            "Skipped: " + (totalImages - finalSuccessCount - finalErrorCount);
+                } else {
+                    summary = "Analysis complete.\n" +
+                            "Succeeded: " + finalSuccessCount + "\n" +
+                            "Failed: " + finalErrorCount;
+                }
 
                 if (!finalErrors.isEmpty()) {
                     summary += "\n\nErrors:\n" + String.join("\n", finalErrors.subList(0, Math.min(5, finalErrors.size())));
@@ -628,8 +703,8 @@ public class ResultsPanel extends VBox {
                     }
                 }
 
-                updateStatus("Analysis complete: " + finalSuccessCount + " succeeded, " + finalErrorCount + " failed");
-                showAlert(Alert.AlertType.INFORMATION, "Analysis Complete", summary);
+                updateStatus("Analysis " + (wasCancelled ? "cancelled" : "complete") + ": " + finalSuccessCount + " succeeded, " + finalErrorCount + " failed");
+                showAlert(Alert.AlertType.INFORMATION, wasCancelled ? "Analysis Cancelled" : "Analysis Complete", summary);
 
                 // Refresh results to show updated metadata
                 if (finalSuccessCount > 0) {
