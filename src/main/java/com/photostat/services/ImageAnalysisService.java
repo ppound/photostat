@@ -21,6 +21,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -34,6 +36,7 @@ public class ImageAnalysisService {
 
     private static ImageAnalysisService instance;
     private final ConfigService configService;
+    private final SidecarService sidecarService;
     private final LoggingService logger;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -45,6 +48,7 @@ public class ImageAnalysisService {
 
     private ImageAnalysisService() {
         this.configService = ConfigService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
         this.logger = LoggingService.getInstance();
         this.objectMapper = new ObjectMapper();
         this.httpClient = HttpClient.newBuilder()
@@ -143,6 +147,11 @@ public class ImageAnalysisService {
 
             // Parse the response
             parseResponse(response.body(), result);
+
+            // Save analysis cache if successful
+            if (!result.hasError()) {
+                saveAnalysisCache(imagePath);
+            }
 
             logger.info("ImageAnalysisService", "Analysis complete. Tags: " + result.getTags().size() +
                     ", Persons: " + result.getPersons().size() + ", Rating: " + result.getRating());
@@ -281,43 +290,7 @@ public class ImageAnalysisService {
     }
 
     private String getAnalysisPrompt() {
-        return """
-            Analyze this photograph and provide metadata in JSON format. Include:
-
-            1. **tags**: Array of descriptive tags for the image. Include:
-               - Photography style (e.g., "Portrait", "Landscape", "Street Photography", "Pet Photography", "Macro", "Architecture", "Food Photography")
-               - Subject matter (e.g., "Dog", "Cat", "Bird", "Flower", "Building", "Car")
-               - Mood/atmosphere (e.g., "Moody", "Bright", "Dramatic", "Peaceful")
-               - Technical aspects if notable (e.g., "Black and White", "Bokeh", "Long Exposure", "HDR")
-               - Season/weather if visible (e.g., "Winter", "Snow", "Sunset", "Rainy")
-               - Setting (e.g., "Indoor", "Outdoor", "Urban", "Rural", "Beach")
-
-            2. **persons**: Array of descriptive identifiers for people visible in the image. If no people are visible, use an empty array. Don't use names unless they are clearly identifiable public figures. Instead use descriptions like "woman in red dress", "elderly man", "child", etc.
-
-            3. **place**: A single string describing the location if identifiable. This could be a specific place name, city, type of venue (e.g., "Restaurant", "Park", "Beach"), or null if not determinable.
-
-            4. **rating**: Rate the overall quality of the photograph from * to ***** (1 to 5 stars) based on:
-               - Composition and framing
-               - Technical quality (sharpness, exposure, focus)
-               - Artistic value and creativity
-               - Color/tonal quality
-               - Overall impact and interest
-
-               Use this scale:
-               - * = Poor (significant technical issues, bad composition)
-               - ** = Below average (noticeable issues, weak composition)
-               - *** = Average (decent execution, standard composition)
-               - **** = Good (strong composition, good technique, visually appealing)
-               - ***** = Excellent (exceptional composition, masterful technique, highly impactful)
-
-            Respond with ONLY valid JSON in this exact format:
-            {
-                "tags": ["tag1", "tag2", "tag3"],
-                "persons": [],
-                "place": "Location or null",
-                "rating": "***"
-            }
-            """;
+        return configService.getClaudeAnalysisPrompt();
     }
 
     private void parseResponse(String responseBody, AnalysisResult result) {
@@ -418,5 +391,95 @@ public class ImageAnalysisService {
     public boolean isConfigured() {
         String apiKey = configService.getClaudeApiKey();
         return apiKey != null && !apiKey.trim().isEmpty();
+    }
+
+    /**
+     * Compute a hash of the image based on file size and modification time.
+     * This is faster than hashing the entire file contents.
+     */
+    private String computeImageHash(Path imagePath) {
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(imagePath, BasicFileAttributes.class);
+            String hashInput = imagePath.toString() + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+            return computeHash(hashInput);
+        } catch (IOException e) {
+            logger.error("ImageAnalysisService", "Failed to compute image hash", e);
+            return null;
+        }
+    }
+
+    /**
+     * Compute a hash of the prompt string.
+     */
+    private String computePromptHash(String prompt) {
+        return computeHash(prompt);
+    }
+
+    /**
+     * Compute SHA-256 hash of a string.
+     */
+    private String computeHash(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes("UTF-8"));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hashBytes) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString().substring(0, 16); // Use first 16 chars for brevity
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to compute hash", e);
+            return null;
+        }
+    }
+
+    /**
+     * Check if analysis is cached and still valid.
+     * Returns true if cache is valid (image unchanged, same model, same prompt).
+     */
+    public boolean isAnalysisCached(String imagePath) {
+        SidecarService.SidecarData sidecar = sidecarService.getAnalysisCache(imagePath);
+        if (sidecar == null || !sidecar.hasAnalysisCache()) {
+            return false;
+        }
+
+        // Check image hash
+        String currentImageHash = computeImageHash(Path.of(imagePath));
+        if (currentImageHash == null || !currentImageHash.equals(sidecar.getAnalysisImageHash())) {
+            logger.debug("ImageAnalysisService", "Cache invalid: image hash mismatch for " + imagePath);
+            return false;
+        }
+
+        // Check model
+        String currentModel = configService.getClaudeModel();
+        if (!currentModel.equals(sidecar.getAnalysisModel())) {
+            logger.debug("ImageAnalysisService", "Cache invalid: model changed for " + imagePath);
+            return false;
+        }
+
+        // Check prompt hash
+        String currentPromptHash = computePromptHash(configService.getClaudeAnalysisPrompt());
+        if (currentPromptHash == null || !currentPromptHash.equals(sidecar.getAnalysisPromptHash())) {
+            logger.debug("ImageAnalysisService", "Cache invalid: prompt changed for " + imagePath);
+            return false;
+        }
+
+        logger.debug("ImageAnalysisService", "Analysis cache valid for " + imagePath);
+        return true;
+    }
+
+    /**
+     * Save analysis cache metadata to sidecar file.
+     */
+    private void saveAnalysisCache(String imagePath) {
+        String imageHash = computeImageHash(Path.of(imagePath));
+        String model = configService.getClaudeModel();
+        String promptHash = computePromptHash(configService.getClaudeAnalysisPrompt());
+
+        if (imageHash != null && promptHash != null) {
+            sidecarService.updateAnalysisCache(imagePath, imageHash, model, promptHash);
+        }
     }
 }

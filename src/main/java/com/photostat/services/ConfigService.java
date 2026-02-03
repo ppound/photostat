@@ -343,6 +343,54 @@ public class ConfigService {
         setNestedValue("claude", "model", model);
     }
 
+    public String getClaudeAnalysisPrompt() {
+        return getNestedString("claude", "analysis_prompt", getDefaultAnalysisPrompt());
+    }
+
+    public void setClaudeAnalysisPrompt(String prompt) {
+        setNestedValue("claude", "analysis_prompt", prompt);
+    }
+
+    public static String getDefaultAnalysisPrompt() {
+        return """
+            Analyze this photograph and provide metadata in JSON format. Include:
+
+            1. **tags**: Array of descriptive tags for the image. Include:
+               - Photography style (e.g., "Portrait", "Landscape", "Street Photography", "Pet Photography", "Macro", "Architecture", "Food Photography")
+               - Subject matter (e.g., "Dog", "Cat", "Bird", "Flower", "Building", "Car")
+               - Mood/atmosphere (e.g., "Moody", "Bright", "Dramatic", "Peaceful")
+               - Technical aspects if notable (e.g., "Black and White", "Bokeh", "Long Exposure", "HDR")
+               - Season/weather if visible (e.g., "Winter", "Snow", "Sunset", "Rainy")
+               - Setting (e.g., "Indoor", "Outdoor", "Urban", "Rural", "Beach")
+
+            2. **persons**: Array of descriptive identifiers for people visible in the image. If no people are visible, use an empty array. Don't use names unless they are clearly identifiable public figures. Instead use descriptions like "woman in red dress", "elderly man", "child", etc.
+
+            3. **place**: A single string describing the location if identifiable. This could be a specific place name, city, type of venue (e.g., "Restaurant", "Park", "Beach"), or null if not determinable.
+
+            4. **rating**: Rate the overall quality of the photograph from * to ***** (1 to 5 stars) based on:
+               - Composition and framing
+               - Technical quality (sharpness, exposure, focus)
+               - Artistic value and creativity
+               - Color/tonal quality
+               - Overall impact and interest
+
+               Use this scale:
+               - * = Poor (significant technical issues, bad composition)
+               - ** = Below average (noticeable issues, weak composition)
+               - *** = Average (decent execution, standard composition)
+               - **** = Good (strong composition, good technique, visually appealing)
+               - ***** = Excellent (exceptional composition, masterful technique, highly impactful)
+
+            Respond with ONLY valid JSON in this exact format:
+            {
+                "tags": ["tag1", "tag2", "tag3"],
+                "persons": [],
+                "place": "Location or null",
+                "rating": "***"
+            }
+            """;
+    }
+
     // Helper methods
     @SuppressWarnings("unchecked")
     private String getNestedString(String section, String key, String defaultValue) {

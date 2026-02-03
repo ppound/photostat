@@ -85,6 +85,17 @@ public class SidecarService {
                 sidecar.setRating((String) data.get("rating"));
             }
 
+            // Analysis cache fields
+            if (data.containsKey("analysisImageHash")) {
+                sidecar.setAnalysisImageHash((String) data.get("analysisImageHash"));
+            }
+            if (data.containsKey("analysisModel")) {
+                sidecar.setAnalysisModel((String) data.get("analysisModel"));
+            }
+            if (data.containsKey("analysisPromptHash")) {
+                sidecar.setAnalysisPromptHash((String) data.get("analysisPromptHash"));
+            }
+
             logger.debug("SidecarService", "Read sidecar for: " + imagePath);
             return sidecar;
 
@@ -186,6 +197,52 @@ public class SidecarService {
     }
 
     /**
+     * Update the analysis cache in a sidecar file.
+     * Preserves existing custom metadata while updating cache fields.
+     */
+    public boolean updateAnalysisCache(String imagePath, String imageHash, String model, String promptHash) {
+        if (!configService.isSidecarEnabled()) {
+            logger.debug("SidecarService", "Sidecar files disabled, skipping analysis cache update");
+            return false;
+        }
+
+        Path sidecarPath = getSidecarPath(imagePath);
+        Map<String, Object> data = new HashMap<>();
+
+        // Read existing data if present
+        if (Files.exists(sidecarPath)) {
+            try {
+                data = objectMapper.readValue(sidecarPath.toFile(), Map.class);
+            } catch (IOException e) {
+                logger.warn("SidecarService", "Failed to read existing sidecar, creating new: " + sidecarPath);
+                data = new HashMap<>();
+            }
+        }
+
+        // Update analysis cache fields
+        data.put("analysisImageHash", imageHash);
+        data.put("analysisModel", model);
+        data.put("analysisPromptHash", promptHash);
+
+        try {
+            objectMapper.writeValue(sidecarPath.toFile(), data);
+            logger.debug("SidecarService", "Updated analysis cache in sidecar: " + sidecarPath);
+            return true;
+        } catch (IOException e) {
+            logger.error("SidecarService", "Failed to update analysis cache in sidecar: " + sidecarPath, e);
+            return false;
+        }
+    }
+
+    /**
+     * Get analysis cache data from a sidecar file.
+     * Returns null if no cache exists.
+     */
+    public SidecarData getAnalysisCache(String imagePath) {
+        return readSidecar(imagePath);
+    }
+
+    /**
      * Delete a sidecar file.
      */
     public boolean deleteSidecar(String imagePath) {
@@ -210,6 +267,11 @@ public class SidecarService {
         private String place;
         private List<String> tags;
         private String rating;
+
+        // Analysis cache fields
+        private String analysisImageHash;  // Hash of file size + modification time
+        private String analysisModel;      // Claude model used
+        private String analysisPromptHash; // Hash of the prompt used
 
         public List<String> getPersons() {
             return persons;
@@ -243,12 +305,40 @@ public class SidecarService {
             this.rating = rating;
         }
 
+        public String getAnalysisImageHash() {
+            return analysisImageHash;
+        }
+
+        public void setAnalysisImageHash(String analysisImageHash) {
+            this.analysisImageHash = analysisImageHash;
+        }
+
+        public String getAnalysisModel() {
+            return analysisModel;
+        }
+
+        public void setAnalysisModel(String analysisModel) {
+            this.analysisModel = analysisModel;
+        }
+
+        public String getAnalysisPromptHash() {
+            return analysisPromptHash;
+        }
+
+        public void setAnalysisPromptHash(String analysisPromptHash) {
+            this.analysisPromptHash = analysisPromptHash;
+        }
+
         public boolean isEmpty() {
             boolean noPersons = persons == null || persons.isEmpty();
             boolean noPlace = place == null || place.trim().isEmpty();
             boolean noTags = tags == null || tags.isEmpty();
             boolean noRating = rating == null || rating.trim().isEmpty();
             return noPersons && noPlace && noTags && noRating;
+        }
+
+        public boolean hasAnalysisCache() {
+            return analysisImageHash != null && !analysisImageHash.isEmpty();
         }
     }
 }

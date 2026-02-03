@@ -613,6 +613,7 @@ public class ResultsPanel extends VBox {
         new Thread(() -> {
             int successCount = 0;
             int errorCount = 0;
+            int skippedCount = 0;  // Cached/already analyzed
             List<String> errors = new ArrayList<>();
             final int totalImages = images.size();
 
@@ -624,6 +625,20 @@ public class ResultsPanel extends VBox {
                 ImageMetadata metadata = images.get(i);
                 final int current = i + 1;
                 final double progress = (double) i / totalImages;
+
+                // Check if analysis is cached (image unchanged, same model, same prompt)
+                if (imageAnalysisService.isAnalysisCached(metadata.getFilePath())) {
+                    skippedCount++;
+                    final int skipCount = skippedCount;
+                    Platform.runLater(() -> {
+                        progressBar.setProgress(progress);
+                        progressLabel.setText(current + " of " + totalImages);
+                        currentFileLabel.setText("Cached: " + metadata.getFileName());
+                        statusLabel.setText("Skipped (cached): " + skipCount);
+                    });
+                    logger.debug("ResultsPanel", "Skipping cached analysis for: " + metadata.getFilePath());
+                    continue;
+                }
 
                 Platform.runLater(() -> {
                     progressBar.setProgress(progress);
@@ -677,6 +692,7 @@ public class ResultsPanel extends VBox {
 
             final int finalSuccessCount = successCount;
             final int finalErrorCount = errorCount;
+            final int finalSkippedCount = skippedCount;
             final List<String> finalErrors = errors;
             final boolean wasCancelled = cancelled[0];
 
@@ -687,12 +703,14 @@ public class ResultsPanel extends VBox {
                 String summary;
                 if (wasCancelled) {
                     summary = "Analysis cancelled.\n" +
-                            "Completed: " + finalSuccessCount + "\n" +
+                            "Analyzed: " + finalSuccessCount + "\n" +
+                            "Cached (skipped): " + finalSkippedCount + "\n" +
                             "Failed: " + finalErrorCount + "\n" +
-                            "Skipped: " + (totalImages - finalSuccessCount - finalErrorCount);
+                            "Remaining: " + (totalImages - finalSuccessCount - finalSkippedCount - finalErrorCount);
                 } else {
                     summary = "Analysis complete.\n" +
-                            "Succeeded: " + finalSuccessCount + "\n" +
+                            "Analyzed: " + finalSuccessCount + "\n" +
+                            "Cached (skipped): " + finalSkippedCount + "\n" +
                             "Failed: " + finalErrorCount;
                 }
 
@@ -703,7 +721,7 @@ public class ResultsPanel extends VBox {
                     }
                 }
 
-                updateStatus("Analysis " + (wasCancelled ? "cancelled" : "complete") + ": " + finalSuccessCount + " succeeded, " + finalErrorCount + " failed");
+                updateStatus("Analysis " + (wasCancelled ? "cancelled" : "complete") + ": " + finalSuccessCount + " analyzed, " + finalSkippedCount + " cached, " + finalErrorCount + " failed");
                 showAlert(Alert.AlertType.INFORMATION, wasCancelled ? "Analysis Cancelled" : "Analysis Complete", summary);
 
                 // Refresh results to show updated metadata
