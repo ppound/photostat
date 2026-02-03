@@ -394,34 +394,21 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Compute a hash of the image based on file size and modification time.
-     * This is faster than hashing the entire file contents.
+     * Compute a combined hash of model + prompt + image info (size + modification time).
+     * This single hash detects any change that would require re-analysis.
      */
-    private String computeImageHash(Path imagePath) {
+    private String computeAnalysisHash(String imagePath) {
         try {
-            BasicFileAttributes attrs = Files.readAttributes(imagePath, BasicFileAttributes.class);
-            String hashInput = imagePath.toString() + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
-            return computeHash(hashInput);
-        } catch (IOException e) {
-            logger.error("ImageAnalysisService", "Failed to compute image hash", e);
-            return null;
-        }
-    }
+            Path path = Path.of(imagePath);
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
 
-    /**
-     * Compute a hash of the prompt string.
-     */
-    private String computePromptHash(String prompt) {
-        return computeHash(prompt);
-    }
+            // Combine: model + prompt + image path + file size + modification time
+            String model = configService.getClaudeModel();
+            String prompt = configService.getClaudeAnalysisPrompt();
+            String hashInput = model + "|" + prompt + "|" + imagePath + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
 
-    /**
-     * Compute SHA-256 hash of a string.
-     */
-    private String computeHash(String input) {
-        try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashBytes = digest.digest(input.getBytes("UTF-8"));
+            byte[] hashBytes = digest.digest(hashInput.getBytes("UTF-8"));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hashBytes) {
                 String hex = Integer.toHexString(0xff & b);
@@ -430,14 +417,14 @@ public class ImageAnalysisService {
             }
             return hexString.toString().substring(0, 16); // Use first 16 chars for brevity
         } catch (Exception e) {
-            logger.error("ImageAnalysisService", "Failed to compute hash", e);
+            logger.error("ImageAnalysisService", "Failed to compute analysis hash", e);
             return null;
         }
     }
 
     /**
      * Check if analysis is cached and still valid.
-     * Returns true if cache is valid (image unchanged, same model, same prompt).
+     * Returns true if the stored hash matches current hash (image unchanged, same model, same prompt).
      */
     public boolean isAnalysisCached(String imagePath) {
         SidecarService.SidecarData sidecar = sidecarService.getAnalysisCache(imagePath);
@@ -445,41 +432,27 @@ public class ImageAnalysisService {
             return false;
         }
 
-        // Check image hash
-        String currentImageHash = computeImageHash(Path.of(imagePath));
-        if (currentImageHash == null || !currentImageHash.equals(sidecar.getAnalysisImageHash())) {
-            logger.debug("ImageAnalysisService", "Cache invalid: image hash mismatch for " + imagePath);
+        String currentHash = computeAnalysisHash(imagePath);
+        if (currentHash == null) {
             return false;
         }
 
-        // Check model
-        String currentModel = configService.getClaudeModel();
-        if (!currentModel.equals(sidecar.getAnalysisModel())) {
-            logger.debug("ImageAnalysisService", "Cache invalid: model changed for " + imagePath);
-            return false;
+        boolean matches = currentHash.equals(sidecar.getAnalysisHash());
+        if (matches) {
+            logger.debug("ImageAnalysisService", "Analysis cache valid for " + imagePath);
+        } else {
+            logger.debug("ImageAnalysisService", "Analysis cache invalid for " + imagePath);
         }
-
-        // Check prompt hash
-        String currentPromptHash = computePromptHash(configService.getClaudeAnalysisPrompt());
-        if (currentPromptHash == null || !currentPromptHash.equals(sidecar.getAnalysisPromptHash())) {
-            logger.debug("ImageAnalysisService", "Cache invalid: prompt changed for " + imagePath);
-            return false;
-        }
-
-        logger.debug("ImageAnalysisService", "Analysis cache valid for " + imagePath);
-        return true;
+        return matches;
     }
 
     /**
-     * Save analysis cache metadata to sidecar file.
+     * Save analysis hash to sidecar file.
      */
     private void saveAnalysisCache(String imagePath) {
-        String imageHash = computeImageHash(Path.of(imagePath));
-        String model = configService.getClaudeModel();
-        String promptHash = computePromptHash(configService.getClaudeAnalysisPrompt());
-
-        if (imageHash != null && promptHash != null) {
-            sidecarService.updateAnalysisCache(imagePath, imageHash, model, promptHash);
+        String analysisHash = computeAnalysisHash(imagePath);
+        if (analysisHash != null) {
+            sidecarService.updateAnalysisCache(imagePath, analysisHash);
         }
     }
 }

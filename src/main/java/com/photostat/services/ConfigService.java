@@ -62,6 +62,7 @@ public class ConfigService {
         if (configFile.exists()) {
             try {
                 config = objectMapper.readValue(configFile, Map.class);
+                migrateConfig();
             } catch (IOException e) {
                 System.err.println("Failed to load config: " + e.getMessage());
                 config = createDefaultConfig();
@@ -69,6 +70,60 @@ public class ConfigService {
         } else {
             config = createDefaultConfig();
             saveConfig();
+        }
+    }
+
+    /**
+     * Migrate existing config by adding missing keys with default values.
+     */
+    @SuppressWarnings("unchecked")
+    private void migrateConfig() {
+        boolean changed = false;
+
+        // Ensure claude section exists
+        if (!config.containsKey("claude")) {
+            Map<String, Object> claude = new HashMap<>();
+            claude.put("api_key", "");
+            claude.put("model", "claude-sonnet-4-20250514");
+            claude.put("analysis_prompt", getDefaultAnalysisPrompt());
+            config.put("claude", claude);
+            changed = true;
+        } else {
+            Map<String, Object> claude = (Map<String, Object>) config.get("claude");
+
+            // Add analysis_prompt if missing
+            if (!claude.containsKey("analysis_prompt")) {
+                claude.put("analysis_prompt", getDefaultAnalysisPrompt());
+                changed = true;
+            }
+
+            // Add model if missing
+            if (!claude.containsKey("model")) {
+                claude.put("model", "claude-sonnet-4-20250514");
+                changed = true;
+            }
+        }
+
+        // Ensure sidecar section exists
+        if (!config.containsKey("sidecar")) {
+            Map<String, Object> sidecar = new HashMap<>();
+            sidecar.put("enabled", true);
+            config.put("sidecar", sidecar);
+            changed = true;
+        }
+
+        // Ensure cache section exists
+        if (!config.containsKey("cache")) {
+            Map<String, Object> cache = new HashMap<>();
+            cache.put("enabled", true);
+            cache.put("max_size_mb", 500);
+            config.put("cache", cache);
+            changed = true;
+        }
+
+        if (changed) {
+            saveConfig();
+            System.out.println("Config migrated with new default values");
         }
     }
 
@@ -130,6 +185,7 @@ public class ConfigService {
         Map<String, Object> claude = new HashMap<>();
         claude.put("api_key", "");
         claude.put("model", "claude-sonnet-4-20250514");
+        claude.put("analysis_prompt", getDefaultAnalysisPrompt());
         defaultConfig.put("claude", claude);
 
         return defaultConfig;

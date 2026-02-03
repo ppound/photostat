@@ -85,15 +85,9 @@ public class SidecarService {
                 sidecar.setRating((String) data.get("rating"));
             }
 
-            // Analysis cache fields
-            if (data.containsKey("analysisImageHash")) {
-                sidecar.setAnalysisImageHash((String) data.get("analysisImageHash"));
-            }
-            if (data.containsKey("analysisModel")) {
-                sidecar.setAnalysisModel((String) data.get("analysisModel"));
-            }
-            if (data.containsKey("analysisPromptHash")) {
-                sidecar.setAnalysisPromptHash((String) data.get("analysisPromptHash"));
+            // Analysis cache field
+            if (data.containsKey("analysisHash")) {
+                sidecar.setAnalysisHash((String) data.get("analysisHash"));
             }
 
             logger.debug("SidecarService", "Read sidecar for: " + imagePath);
@@ -107,7 +101,9 @@ public class SidecarService {
 
     /**
      * Write custom metadata to a sidecar file.
+     * Preserves existing analysisHash if present.
      */
+    @SuppressWarnings("unchecked")
     public boolean writeSidecar(String imagePath, List<String> persons, String place, List<String> tags, String rating) {
         if (!configService.isSidecarEnabled()) {
             logger.debug("SidecarService", "Sidecar files disabled, skipping write");
@@ -122,8 +118,19 @@ public class SidecarService {
 
         Path sidecarPath = getSidecarPath(imagePath);
 
-        // If no custom metadata, delete sidecar if it exists
-        if (!hasPersons && !hasPlace && !hasTags && !hasRating) {
+        // Read existing sidecar to preserve analysisHash
+        String existingAnalysisHash = null;
+        if (Files.exists(sidecarPath)) {
+            try {
+                Map<String, Object> existingData = objectMapper.readValue(sidecarPath.toFile(), Map.class);
+                existingAnalysisHash = (String) existingData.get("analysisHash");
+            } catch (IOException e) {
+                logger.warn("SidecarService", "Failed to read existing sidecar for preservation: " + sidecarPath);
+            }
+        }
+
+        // If no custom metadata and no analysisHash, delete sidecar if it exists
+        if (!hasPersons && !hasPlace && !hasTags && !hasRating && existingAnalysisHash == null) {
             try {
                 if (Files.exists(sidecarPath)) {
                     Files.delete(sidecarPath);
@@ -149,6 +156,11 @@ public class SidecarService {
         }
         if (hasRating) {
             data.put("rating", rating.trim());
+        }
+
+        // Preserve existing analysisHash
+        if (existingAnalysisHash != null) {
+            data.put("analysisHash", existingAnalysisHash);
         }
 
         try {
@@ -197,10 +209,10 @@ public class SidecarService {
     }
 
     /**
-     * Update the analysis cache in a sidecar file.
-     * Preserves existing custom metadata while updating cache fields.
+     * Update the analysis hash in a sidecar file.
+     * Preserves existing custom metadata while updating cache field.
      */
-    public boolean updateAnalysisCache(String imagePath, String imageHash, String model, String promptHash) {
+    public boolean updateAnalysisCache(String imagePath, String analysisHash) {
         if (!configService.isSidecarEnabled()) {
             logger.debug("SidecarService", "Sidecar files disabled, skipping analysis cache update");
             return false;
@@ -219,10 +231,8 @@ public class SidecarService {
             }
         }
 
-        // Update analysis cache fields
-        data.put("analysisImageHash", imageHash);
-        data.put("analysisModel", model);
-        data.put("analysisPromptHash", promptHash);
+        // Update analysis hash
+        data.put("analysisHash", analysisHash);
 
         try {
             objectMapper.writeValue(sidecarPath.toFile(), data);
@@ -268,10 +278,8 @@ public class SidecarService {
         private List<String> tags;
         private String rating;
 
-        // Analysis cache fields
-        private String analysisImageHash;  // Hash of file size + modification time
-        private String analysisModel;      // Claude model used
-        private String analysisPromptHash; // Hash of the prompt used
+        // Analysis cache field - combined hash of model + prompt + image (size + modification time)
+        private String analysisHash;
 
         public List<String> getPersons() {
             return persons;
@@ -305,28 +313,12 @@ public class SidecarService {
             this.rating = rating;
         }
 
-        public String getAnalysisImageHash() {
-            return analysisImageHash;
+        public String getAnalysisHash() {
+            return analysisHash;
         }
 
-        public void setAnalysisImageHash(String analysisImageHash) {
-            this.analysisImageHash = analysisImageHash;
-        }
-
-        public String getAnalysisModel() {
-            return analysisModel;
-        }
-
-        public void setAnalysisModel(String analysisModel) {
-            this.analysisModel = analysisModel;
-        }
-
-        public String getAnalysisPromptHash() {
-            return analysisPromptHash;
-        }
-
-        public void setAnalysisPromptHash(String analysisPromptHash) {
-            this.analysisPromptHash = analysisPromptHash;
+        public void setAnalysisHash(String analysisHash) {
+            this.analysisHash = analysisHash;
         }
 
         public boolean isEmpty() {
@@ -338,7 +330,7 @@ public class SidecarService {
         }
 
         public boolean hasAnalysisCache() {
-            return analysisImageHash != null && !analysisImageHash.isEmpty();
+            return analysisHash != null && !analysisHash.isEmpty();
         }
     }
 }
