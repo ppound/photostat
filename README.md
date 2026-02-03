@@ -86,6 +86,8 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Quality Rating** - AI-generated rating based on composition, sharpness, and artistic value
 - **Person Detection** - Describe people visible in images
 - **Location Recognition** - Identify places and settings
+- **Analysis Caching** - Skips API calls for unchanged images to reduce costs
+- **Customizable Prompt** - Modify the analysis prompt in config.json
 
 ### Thumbnail Caching
 
@@ -141,7 +143,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.4.0-executable.jar
+photostat-java-1.4.1-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -260,7 +262,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.4.0-executable.jar
+   java -jar photostat-java-1.4.1-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -271,7 +273,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.4.0-executable.jar
+        -jar photostat-java-1.4.1-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -538,6 +540,35 @@ PhotoStat can automatically analyze your images using Claude AI's vision capabil
 - RAW files cannot be analyzed directly
 - API usage incurs costs - each image uses API credits
 - Large batches may take several minutes to process
+
+**Analysis Caching:**
+
+PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
+
+- An `analysisHash` is stored in the sidecar file after each analysis
+- The hash combines: model + prompt + image (file size + modification time)
+- When re-analyzing, images with matching hashes are skipped
+- The progress dialog shows "Cached (skipped)" count for unchanged images
+- Cache is invalidated when you:
+  - Change the Claude model in settings
+  - Modify the analysis prompt in config.json
+  - Edit or replace the image file
+
+**Customizing the Analysis Prompt:**
+
+You can customize how Claude analyzes your images by editing the prompt in `~/.photostat/config.json`:
+
+```json
+{
+  "claude": {
+    "api_key": "sk-ant-...",
+    "model": "claude-sonnet-4-20250514",
+    "analysis_prompt": "Your custom prompt here..."
+  }
+}
+```
+
+Changing the prompt will invalidate the cache, causing all images to be re-analyzed on next run.
 
 **Rating Scale:**
 
@@ -867,6 +898,7 @@ Configuration is stored in `~/.photostat/config.json`:
 | `sidecar.enabled` | Save custom metadata to sidecar files (default: true) |
 | `claude.api_key` | Your Anthropic API key for AI analysis |
 | `claude.model` | Claude model to use (default: claude-sonnet-4-20250514) |
+| `claude.analysis_prompt` | Customizable prompt for image analysis |
 
 ---
 
@@ -888,7 +920,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.4.0-executable.jar
+       -jar photostat-java-1.4.1-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -961,7 +993,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.4.0-executable.jar
+# target/photostat-java-1.4.1-executable.jar
 ```
 
 ### Run from Source
