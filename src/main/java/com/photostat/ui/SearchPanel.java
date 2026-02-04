@@ -1,7 +1,11 @@
 package com.photostat.ui;
 
+import javafx.collections.FXCollections;
+import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -11,9 +15,12 @@ import javafx.scene.layout.Region;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 /**
  * Panel containing search controls and filters.
@@ -39,6 +46,9 @@ public class SearchPanel extends VBox {
     private ComboBox<String> placeCombo;
     private ComboBox<String> tagsCombo;
     private ComboBox<String> ratingCombo;
+
+    // Store original items for autocomplete filtering
+    private Map<ComboBox<String>, List<String>> originalItems = new HashMap<>();
 
     private BiConsumer<String, Map<String, Object>> searchCallback;
 
@@ -77,25 +87,25 @@ public class SearchPanel extends VBox {
         // Camera Make
         filterGrid.add(new Label("Camera Make:"), 0, row);
         cameraMakeCombo = new ComboBox<>();
-        cameraMakeCombo.setEditable(true);
         cameraMakeCombo.setPromptText("All");
         cameraMakeCombo.setPrefWidth(150);
+        setupAutoComplete(cameraMakeCombo);
         filterGrid.add(cameraMakeCombo, 1, row++);
 
         // Camera Model
         filterGrid.add(new Label("Camera Model:"), 0, row);
         cameraModelCombo = new ComboBox<>();
-        cameraModelCombo.setEditable(true);
         cameraModelCombo.setPromptText("All");
         cameraModelCombo.setPrefWidth(150);
+        setupAutoComplete(cameraModelCombo);
         filterGrid.add(cameraModelCombo, 1, row++);
 
         // Lens
         filterGrid.add(new Label("Lens:"), 0, row);
         lensCombo = new ComboBox<>();
-        lensCombo.setEditable(true);
         lensCombo.setPromptText("All");
         lensCombo.setPrefWidth(150);
+        setupAutoComplete(lensCombo);
         filterGrid.add(lensCombo, 1, row++);
 
         // File Type
@@ -184,33 +194,33 @@ public class SearchPanel extends VBox {
         // Persons filter
         customGrid.add(new Label("Person:"), 0, 0);
         personsCombo = new ComboBox<>();
-        personsCombo.setEditable(true);
         personsCombo.setPromptText("All");
         personsCombo.setPrefWidth(150);
+        setupAutoComplete(personsCombo);
         customGrid.add(personsCombo, 1, 0);
 
         // Place filter
         customGrid.add(new Label("Place:"), 0, 1);
         placeCombo = new ComboBox<>();
-        placeCombo.setEditable(true);
         placeCombo.setPromptText("All");
         placeCombo.setPrefWidth(150);
+        setupAutoComplete(placeCombo);
         customGrid.add(placeCombo, 1, 1);
 
         // Tags filter
         customGrid.add(new Label("Tag:"), 0, 2);
         tagsCombo = new ComboBox<>();
-        tagsCombo.setEditable(true);
         tagsCombo.setPromptText("All");
         tagsCombo.setPrefWidth(150);
+        setupAutoComplete(tagsCombo);
         customGrid.add(tagsCombo, 1, 2);
 
         // Rating filter
         customGrid.add(new Label("Rating:"), 0, 3);
         ratingCombo = new ComboBox<>();
-        ratingCombo.setEditable(true);
         ratingCombo.setPromptText("All");
         ratingCombo.setPrefWidth(150);
+        setupAutoComplete(ratingCombo);
         customGrid.add(ratingCombo, 1, 3);
 
         customPane.setContent(customGrid);
@@ -267,20 +277,20 @@ public class SearchPanel extends VBox {
     private Map<String, Object> buildFilters() {
         Map<String, Object> filters = new HashMap<>();
 
-        // Camera make
-        String cameraMake = cameraMakeCombo.getValue();
+        // Camera make (use editor text for editable ComboBox)
+        String cameraMake = cameraMakeCombo.getEditor().getText();
         if (cameraMake != null && !cameraMake.trim().isEmpty()) {
             filters.put("camera_make", cameraMake.trim());
         }
 
         // Camera model
-        String cameraModel = cameraModelCombo.getValue();
+        String cameraModel = cameraModelCombo.getEditor().getText();
         if (cameraModel != null && !cameraModel.trim().isEmpty()) {
             filters.put("camera_model", cameraModel.trim());
         }
 
         // Lens
-        String lens = lensCombo.getValue();
+        String lens = lensCombo.getEditor().getText();
         if (lens != null && !lens.trim().isEmpty()) {
             filters.put("lens_model", lens.trim());
         }
@@ -331,23 +341,23 @@ public class SearchPanel extends VBox {
             filters.put("focal_length_max", focalMax);
         }
 
-        // Custom metadata filters
-        String persons = personsCombo.getValue();
+        // Custom metadata filters (use editor text for editable ComboBoxes)
+        String persons = personsCombo.getEditor().getText();
         if (persons != null && !persons.trim().isEmpty()) {
             filters.put("persons", persons.trim());
         }
 
-        String place = placeCombo.getValue();
+        String place = placeCombo.getEditor().getText();
         if (place != null && !place.trim().isEmpty()) {
             filters.put("place", place.trim());
         }
 
-        String tags = tagsCombo.getValue();
+        String tags = tagsCombo.getEditor().getText();
         if (tags != null && !tags.trim().isEmpty()) {
             filters.put("tags", tags.trim());
         }
 
-        String rating = ratingCombo.getValue();
+        String rating = ratingCombo.getEditor().getText();
         if (rating != null && !rating.trim().isEmpty()) {
             filters.put("rating", rating.trim());
         }
@@ -360,8 +370,11 @@ public class SearchPanel extends VBox {
      */
     public void clearFilters() {
         searchField.clear();
+        cameraMakeCombo.getEditor().clear();
         cameraMakeCombo.setValue(null);
+        cameraModelCombo.getEditor().clear();
         cameraModelCombo.setValue(null);
+        lensCombo.getEditor().clear();
         lensCombo.setValue(null);
         fileTypeCombo.setValue(null);
         dateFromPicker.setValue(null);
@@ -372,10 +385,19 @@ public class SearchPanel extends VBox {
         apertureMaxSpinner.getValueFactory().setValue(0.0);
         focalLengthMinSpinner.getValueFactory().setValue(0);
         focalLengthMaxSpinner.getValueFactory().setValue(0);
+        personsCombo.getEditor().clear();
         personsCombo.setValue(null);
+        placeCombo.getEditor().clear();
         placeCombo.setValue(null);
+        tagsCombo.getEditor().clear();
         tagsCombo.setValue(null);
+        ratingCombo.getEditor().clear();
         ratingCombo.setValue(null);
+
+        // Restore full item lists after clearing
+        for (ComboBox<String> combo : originalItems.keySet()) {
+            combo.getItems().setAll(originalItems.get(combo));
+        }
 
         executeSearch();
     }
@@ -386,13 +408,13 @@ public class SearchPanel extends VBox {
     public void addFilter(String field, String value) {
         switch (field) {
             case "camera_make":
-                cameraMakeCombo.setValue(value);
+                cameraMakeCombo.getEditor().setText(value);
                 break;
             case "camera_model":
-                cameraModelCombo.setValue(value);
+                cameraModelCombo.getEditor().setText(value);
                 break;
             case "lens_model":
-                lensCombo.setValue(value);
+                lensCombo.getEditor().setText(value);
                 break;
             case "file_type":
                 fileTypeCombo.setValue(value);
@@ -433,16 +455,16 @@ public class SearchPanel extends VBox {
                 } catch (Exception ignored) {}
                 break;
             case "persons":
-                personsCombo.setValue(value);
+                personsCombo.getEditor().setText(value);
                 break;
             case "place":
-                placeCombo.setValue(value);
+                placeCombo.getEditor().setText(value);
                 break;
             case "tags":
-                tagsCombo.setValue(value);
+                tagsCombo.getEditor().setText(value);
                 break;
             case "rating":
-                ratingCombo.setValue(value);
+                ratingCombo.getEditor().setText(value);
                 break;
         }
     }
@@ -456,71 +478,43 @@ public class SearchPanel extends VBox {
         // Camera makes
         Map<String, Long> cameraMakes = aggregations.get("camera_make");
         if (cameraMakes != null) {
-            String current = cameraMakeCombo.getValue();
-            cameraMakeCombo.getItems().clear();
-            cameraMakeCombo.getItems().add("");
-            cameraMakeCombo.getItems().addAll(cameraMakes.keySet());
-            cameraMakeCombo.setValue(current);
+            updateOriginalItems(cameraMakeCombo, new ArrayList<>(cameraMakes.keySet()));
         }
 
         // Camera models
         Map<String, Long> cameraModels = aggregations.get("camera_model");
         if (cameraModels != null) {
-            String current = cameraModelCombo.getValue();
-            cameraModelCombo.getItems().clear();
-            cameraModelCombo.getItems().add("");
-            cameraModelCombo.getItems().addAll(cameraModels.keySet());
-            cameraModelCombo.setValue(current);
+            updateOriginalItems(cameraModelCombo, new ArrayList<>(cameraModels.keySet()));
         }
 
         // Lenses
         Map<String, Long> lenses = aggregations.get("lens_model");
         if (lenses != null) {
-            String current = lensCombo.getValue();
-            lensCombo.getItems().clear();
-            lensCombo.getItems().add("");
-            lensCombo.getItems().addAll(lenses.keySet());
-            lensCombo.setValue(current);
+            updateOriginalItems(lensCombo, new ArrayList<>(lenses.keySet()));
         }
 
         // Persons
         Map<String, Long> persons = aggregations.get("persons");
         if (persons != null) {
-            String current = personsCombo.getValue();
-            personsCombo.getItems().clear();
-            personsCombo.getItems().add("");
-            personsCombo.getItems().addAll(persons.keySet());
-            personsCombo.setValue(current);
+            updateOriginalItems(personsCombo, new ArrayList<>(persons.keySet()));
         }
 
         // Places
         Map<String, Long> places = aggregations.get("place");
         if (places != null) {
-            String current = placeCombo.getValue();
-            placeCombo.getItems().clear();
-            placeCombo.getItems().add("");
-            placeCombo.getItems().addAll(places.keySet());
-            placeCombo.setValue(current);
+            updateOriginalItems(placeCombo, new ArrayList<>(places.keySet()));
         }
 
         // Tags
         Map<String, Long> tags = aggregations.get("tags");
         if (tags != null) {
-            String current = tagsCombo.getValue();
-            tagsCombo.getItems().clear();
-            tagsCombo.getItems().add("");
-            tagsCombo.getItems().addAll(tags.keySet());
-            tagsCombo.setValue(current);
+            updateOriginalItems(tagsCombo, new ArrayList<>(tags.keySet()));
         }
 
         // Rating
         Map<String, Long> ratings = aggregations.get("rating");
         if (ratings != null) {
-            String current = ratingCombo.getValue();
-            ratingCombo.getItems().clear();
-            ratingCombo.getItems().add("");
-            ratingCombo.getItems().addAll(ratings.keySet());
-            ratingCombo.setValue(current);
+            updateOriginalItems(ratingCombo, new ArrayList<>(ratings.keySet()));
         }
     }
 
@@ -529,5 +523,107 @@ public class SearchPanel extends VBox {
      */
     public void setSearchCallback(BiConsumer<String, Map<String, Object>> callback) {
         this.searchCallback = callback;
+    }
+
+    /**
+     * Setup autocomplete filtering for a ComboBox.
+     * Filters dropdown items as user types.
+     */
+    private void setupAutoComplete(ComboBox<String> comboBox) {
+        comboBox.setEditable(true);
+
+        // Store reference to original items
+        originalItems.put(comboBox, new ArrayList<>());
+
+        // Track if we're updating programmatically to prevent auto-show
+        comboBox.getProperties().put("updating", false);
+
+        // Add key listener to filter items when typing
+        comboBox.getEditor().setOnKeyReleased(event -> {
+            // Only filter on actual character keys, not navigation
+            if (event.getCode().isLetterKey() || event.getCode().isDigitKey() ||
+                event.getCode() == KeyCode.BACK_SPACE || event.getCode() == KeyCode.DELETE) {
+
+                List<String> allItems = originalItems.get(comboBox);
+                if (allItems == null || allItems.isEmpty()) {
+                    return;
+                }
+
+                String newText = comboBox.getEditor().getText();
+                if (newText == null || newText.isEmpty()) {
+                    comboBox.getItems().setAll(allItems);
+                    comboBox.show();
+                } else {
+                    String lowerTyped = newText.toLowerCase();
+                    List<String> filtered = allItems.stream()
+                            .filter(item -> item != null && !item.isEmpty() &&
+                                    item.toLowerCase().contains(lowerTyped))
+                            .collect(Collectors.toList());
+
+                    if (!filtered.isEmpty()) {
+                        comboBox.getItems().setAll(filtered);
+                        comboBox.show();
+                    }
+                }
+            }
+        });
+
+        // When showing dropdown, make sure items are populated and filtered
+        comboBox.setOnShowing(event -> {
+            // Don't interfere if we're updating programmatically
+            if (Boolean.TRUE.equals(comboBox.getProperties().get("updating"))) {
+                return;
+            }
+
+            String currentText = comboBox.getEditor().getText();
+            List<String> allItems = originalItems.get(comboBox);
+
+            if (allItems == null || allItems.isEmpty()) {
+                return;
+            }
+
+            if (currentText == null || currentText.isEmpty()) {
+                comboBox.getItems().setAll(allItems);
+            } else {
+                String lowerTyped = currentText.toLowerCase();
+                List<String> filtered = allItems.stream()
+                        .filter(item -> item != null && !item.isEmpty() &&
+                                item.toLowerCase().contains(lowerTyped))
+                        .collect(Collectors.toList());
+                if (!filtered.isEmpty()) {
+                    comboBox.getItems().setAll(filtered);
+                } else {
+                    comboBox.getItems().setAll(allItems);
+                }
+            }
+        });
+    }
+
+    /**
+     * Update the original items for a ComboBox (for autocomplete filtering).
+     * Preserves current editor text.
+     */
+    private void updateOriginalItems(ComboBox<String> comboBox, List<String> items) {
+        // Mark as updating to prevent auto-show behavior
+        comboBox.getProperties().put("updating", true);
+
+        // Preserve current text
+        String currentText = comboBox.getEditor().getText();
+
+        List<String> itemList = new ArrayList<>();
+        itemList.add(""); // Empty option for "All"
+        itemList.addAll(items);
+        originalItems.put(comboBox, itemList);
+
+        // Set items without triggering show
+        comboBox.getItems().setAll(itemList);
+
+        // Restore the text
+        if (currentText != null && !currentText.isEmpty()) {
+            comboBox.getEditor().setText(currentText);
+        }
+
+        // Done updating
+        comboBox.getProperties().put("updating", false);
     }
 }

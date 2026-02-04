@@ -99,6 +99,7 @@ public class MainWindow extends BorderPane {
 
         resultsPanel.setAggregationsCallback(aggregations -> {
             facetsPanel.updateFacets(aggregations);
+            searchPanel.updateFilterOptions(aggregations);
         });
 
         // Wire up facets to apply filters
