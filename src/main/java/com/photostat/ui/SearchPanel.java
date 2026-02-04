@@ -42,9 +42,9 @@ public class SearchPanel extends VBox {
     private Spinner<Integer> focalLengthMaxSpinner;
 
     // Custom metadata filters
-    private ComboBox<String> personsCombo;
-    private ComboBox<String> placeCombo;
-    private ComboBox<String> tagsCombo;
+    private MultiSelectAutoComplete personsSelect;
+    private MultiSelectAutoComplete placeSelect;
+    private MultiSelectAutoComplete tagsSelect;
     private ComboBox<String> ratingCombo;
 
     // Store original items for autocomplete filtering
@@ -191,31 +191,28 @@ public class SearchPanel extends VBox {
         customGrid.setHgap(10);
         customGrid.setVgap(8);
 
-        // Persons filter
+        // Persons filter (multi-select)
         customGrid.add(new Label("Person:"), 0, 0);
-        personsCombo = new ComboBox<>();
-        personsCombo.setPromptText("All");
-        personsCombo.setPrefWidth(150);
-        setupAutoComplete(personsCombo);
-        customGrid.add(personsCombo, 1, 0);
+        personsSelect = new MultiSelectAutoComplete();
+        personsSelect.setPromptText("Type to add...");
+        personsSelect.setPrefWidth(150);
+        customGrid.add(personsSelect, 1, 0);
 
-        // Place filter
+        // Place filter (multi-select)
         customGrid.add(new Label("Place:"), 0, 1);
-        placeCombo = new ComboBox<>();
-        placeCombo.setPromptText("All");
-        placeCombo.setPrefWidth(150);
-        setupAutoComplete(placeCombo);
-        customGrid.add(placeCombo, 1, 1);
+        placeSelect = new MultiSelectAutoComplete();
+        placeSelect.setPromptText("Type to add...");
+        placeSelect.setPrefWidth(150);
+        customGrid.add(placeSelect, 1, 1);
 
-        // Tags filter
+        // Tags filter (multi-select)
         customGrid.add(new Label("Tag:"), 0, 2);
-        tagsCombo = new ComboBox<>();
-        tagsCombo.setPromptText("All");
-        tagsCombo.setPrefWidth(150);
-        setupAutoComplete(tagsCombo);
-        customGrid.add(tagsCombo, 1, 2);
+        tagsSelect = new MultiSelectAutoComplete();
+        tagsSelect.setPromptText("Type to add...");
+        tagsSelect.setPrefWidth(150);
+        customGrid.add(tagsSelect, 1, 2);
 
-        // Rating filter
+        // Rating filter (single select - keep as ComboBox)
         customGrid.add(new Label("Rating:"), 0, 3);
         ratingCombo = new ComboBox<>();
         ratingCombo.setPromptText("All");
@@ -341,20 +338,20 @@ public class SearchPanel extends VBox {
             filters.put("focal_length_max", focalMax);
         }
 
-        // Custom metadata filters (use editor text for editable ComboBoxes)
-        String persons = personsCombo.getEditor().getText();
-        if (persons != null && !persons.trim().isEmpty()) {
-            filters.put("persons", persons.trim());
+        // Custom metadata filters (multi-select components return lists)
+        List<String> persons = personsSelect.getSelectedItems();
+        if (persons != null && !persons.isEmpty()) {
+            filters.put("persons", persons);
         }
 
-        String place = placeCombo.getEditor().getText();
-        if (place != null && !place.trim().isEmpty()) {
-            filters.put("place", place.trim());
+        List<String> places = placeSelect.getSelectedItems();
+        if (places != null && !places.isEmpty()) {
+            filters.put("place", places);
         }
 
-        String tags = tagsCombo.getEditor().getText();
-        if (tags != null && !tags.trim().isEmpty()) {
-            filters.put("tags", tags.trim());
+        List<String> tags = tagsSelect.getSelectedItems();
+        if (tags != null && !tags.isEmpty()) {
+            filters.put("tags", tags);
         }
 
         String rating = ratingCombo.getEditor().getText();
@@ -385,12 +382,9 @@ public class SearchPanel extends VBox {
         apertureMaxSpinner.getValueFactory().setValue(0.0);
         focalLengthMinSpinner.getValueFactory().setValue(0);
         focalLengthMaxSpinner.getValueFactory().setValue(0);
-        personsCombo.getEditor().clear();
-        personsCombo.setValue(null);
-        placeCombo.getEditor().clear();
-        placeCombo.setValue(null);
-        tagsCombo.getEditor().clear();
-        tagsCombo.setValue(null);
+        personsSelect.clear();
+        placeSelect.clear();
+        tagsSelect.clear();
         ratingCombo.getEditor().clear();
         ratingCombo.setValue(null);
 
@@ -455,13 +449,13 @@ public class SearchPanel extends VBox {
                 } catch (Exception ignored) {}
                 break;
             case "persons":
-                personsCombo.getEditor().setText(value);
+                personsSelect.setSelectedItems(List.of(value));
                 break;
             case "place":
-                placeCombo.getEditor().setText(value);
+                placeSelect.setSelectedItems(List.of(value));
                 break;
             case "tags":
-                tagsCombo.getEditor().setText(value);
+                tagsSelect.setSelectedItems(List.of(value));
                 break;
             case "rating":
                 ratingCombo.getEditor().setText(value);
@@ -493,22 +487,22 @@ public class SearchPanel extends VBox {
             updateOriginalItems(lensCombo, new ArrayList<>(lenses.keySet()));
         }
 
-        // Persons
+        // Persons (multi-select)
         Map<String, Long> persons = aggregations.get("persons");
         if (persons != null) {
-            updateOriginalItems(personsCombo, new ArrayList<>(persons.keySet()));
+            personsSelect.setItems(new ArrayList<>(persons.keySet()));
         }
 
-        // Places
+        // Places (multi-select)
         Map<String, Long> places = aggregations.get("place");
         if (places != null) {
-            updateOriginalItems(placeCombo, new ArrayList<>(places.keySet()));
+            placeSelect.setItems(new ArrayList<>(places.keySet()));
         }
 
-        // Tags
+        // Tags (multi-select)
         Map<String, Long> tags = aggregations.get("tags");
         if (tags != null) {
-            updateOriginalItems(tagsCombo, new ArrayList<>(tags.keySet()));
+            tagsSelect.setItems(new ArrayList<>(tags.keySet()));
         }
 
         // Rating

@@ -421,12 +421,13 @@ public class OpenSearchService {
             } else if (value instanceof List) {
                 @SuppressWarnings("unchecked")
                 List<String> values = (List<String>) value;
-                if (!values.isEmpty()) {
-                    boolQuery.filter(Query.of(q -> q.terms(t -> t
-                            .field(field)
-                            .terms(tv -> tv.value(values.stream()
-                                    .map(FieldValue::of)
-                                    .collect(Collectors.toList()))))));
+                // Use AND logic - each selected value must be present
+                for (String v : values) {
+                    if (v != null && !v.isEmpty()) {
+                        boolQuery.filter(Query.of(q -> q.term(t -> t
+                                .field(field)
+                                .value(FieldValue.of(v)))));
+                    }
                 }
             } else if (field.endsWith("_min") || field.endsWith("_max")) {
                 // Range filter
