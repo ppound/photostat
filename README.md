@@ -47,6 +47,8 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 
 - **Fast Full-Text Search** - Search across all EXIF metadata fields instantly
 - **Faceted Navigation** - Filter by camera make, model, lens, file type, ISO range, and date
+- **Autocomplete Filters** - Type-ahead filtering for camera, lens, and custom metadata fields
+- **Multi-Select Filters** - Select multiple persons, places, or tags with chip-style UI
 - **Thumbnail Preview** - Quick visual preview of search results
 - **Multi-Directory Indexing** - Index photos from multiple locations on your computer
 - **Background Indexing** - Continue working while photos are being indexed
@@ -74,9 +76,11 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 - **Places** - Add location names to photos
 - **Tags** - Create custom tags for organization
 - **Rating** - Rate image quality from * to ***** (1-5 stars)
+- **Multi-Select Chips** - Person, Place, and Tag filters use chip-style UI for selecting multiple values
+- **Autocomplete** - Type-ahead suggestions when adding metadata
 - **Copy & Paste** - Copy metadata from one image and paste to others
 - **Searchable** - All custom metadata is fully searchable
-- **Faceted** - Filter by person, place, or tag using facets
+- **Faceted** - Filter by person, place, or tag using facets (clicks add to selection)
 
 ### AI Image Analysis
 
@@ -143,7 +147,7 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.4.1-executable.jar
+photostat-java-1.5.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -262,7 +266,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.4.1-executable.jar
+   java -jar photostat-java-1.5.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -273,7 +277,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.4.1-executable.jar
+        -jar photostat-java-1.5.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -382,13 +386,21 @@ When you first launch PhotoStat, you'll see the main window with three tabs:
 
    | Filter | Description |
    |--------|-------------|
-   | Camera Make | Filter by manufacturer (Canon, Nikon, Sony...) |
-   | Camera Model | Filter by specific camera model |
-   | Lens | Filter by lens used |
+   | Camera Make | Filter by manufacturer with autocomplete (Canon, Nikon, Sony...) |
+   | Camera Model | Filter by specific camera model with autocomplete |
+   | Lens | Filter by lens used with autocomplete |
    | File Type | JPEG, PNG, RAW formats |
    | Date Range | Photos taken between dates |
    | ISO Range | Filter by ISO sensitivity |
    | Aperture | Filter by f-stop value |
+   | Person | Multi-select with chips - filter by tagged people |
+   | Place | Multi-select with chips - filter by location |
+   | Tags | Multi-select with chips - filter by custom tags |
+   | Rating | Filter by quality rating with autocomplete |
+
+   **Autocomplete**: Camera, lens, and rating fields support type-ahead filtering - start typing to narrow down options.
+
+   **Multi-Select Chips**: Person, Place, and Tag filters display selected values as removable chips, allowing you to filter by multiple values simultaneously (AND logic - all selected values must match).
 
    ![Search Filters](docs/screenshots/search-filters.png)
 
@@ -424,7 +436,8 @@ The **Facets Panel** on the left shows aggregated counts for quick filtering:
 1. Click any facet value to apply that filter
 2. The search results update immediately
 3. Other facets update to show remaining options
-4. Click again to remove the filter
+4. For Person, Place, and Tag facets: clicking adds to existing selections (displayed as chips)
+5. Remove individual filters by clicking the X on chips, or use Clear Filters to reset all
 
 ### Viewing Image Details
 
@@ -920,7 +933,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.4.1-executable.jar
+       -jar photostat-java-1.5.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -993,7 +1006,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.4.1-executable.jar
+# target/photostat-java-1.5.0-executable.jar
 ```
 
 ### Run from Source
@@ -1042,7 +1055,8 @@ photostat-java/
 │       ├── ChartsPanel.java             # Charts and visualizations
 │       ├── DetailPanel.java             # Image detail view
 │       ├── DirectoryBrowserDialog.java  # Directory browser
-│       └── SettingsDialog.java          # Settings dialog
+│       ├── SettingsDialog.java          # Settings dialog
+│       └── MultiSelectAutoComplete.java # Chip-style multi-select component
 └── src/main/resources/
     ├── styles.css                       # JavaFX stylesheet
     └── application.properties           # Default configuration
