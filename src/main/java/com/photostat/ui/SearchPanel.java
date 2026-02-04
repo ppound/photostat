@@ -449,13 +449,13 @@ public class SearchPanel extends VBox {
                 } catch (Exception ignored) {}
                 break;
             case "persons":
-                personsSelect.setSelectedItems(List.of(value));
+                addToMultiSelect(personsSelect, value);
                 break;
             case "place":
-                placeSelect.setSelectedItems(List.of(value));
+                addToMultiSelect(placeSelect, value);
                 break;
             case "tags":
-                tagsSelect.setSelectedItems(List.of(value));
+                addToMultiSelect(tagsSelect, value);
                 break;
             case "rating":
                 ratingCombo.getEditor().setText(value);
@@ -509,6 +509,17 @@ public class SearchPanel extends VBox {
         Map<String, Long> ratings = aggregations.get("rating");
         if (ratings != null) {
             updateOriginalItems(ratingCombo, new ArrayList<>(ratings.keySet()));
+        }
+    }
+
+    /**
+     * Add a value to a multi-select component without removing existing selections.
+     */
+    private void addToMultiSelect(MultiSelectAutoComplete multiSelect, String value) {
+        List<String> currentItems = new ArrayList<>(multiSelect.getSelectedItems());
+        if (!currentItems.contains(value)) {
+            currentItems.add(value);
+            multiSelect.setSelectedItems(currentItems);
         }
     }
 
