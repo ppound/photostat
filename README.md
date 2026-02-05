@@ -6,8 +6,26 @@ A powerful cross-platform desktop application for indexing, searching, and analy
 
 ---
 
+## Why PhotoStat?
+
+After years of photography and using various software like Lightroom, Capture One, Photoshop, and others to process images, many photographers find themselves with thousands of photos scattered across different applications, catalogs, and drives. Each tool has its own proprietary database, making it difficult to get a unified view of your entire collection.
+
+**PhotoStat was built to solve this problem:**
+
+- **Unified Search Across All Your Photos** - Index images from multiple directories and drives into a single searchable database, regardless of which software was used to edit them
+- **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files, not trapped in proprietary catalogs
+- **Cross-Platform** - Runs on Windows, macOS, and Linux with a single executable JAR
+- **Backup-Friendly** - Sidecar files travel with your images, so custom metadata survives backups, moves, and drive migrations
+- **Open Standards** - Built on OpenSearch for powerful, fast searching with a query syntax you may already know
+- **AI-Powered Organization** - Leverage Claude AI to automatically tag and categorize your photos, making it easier to find images even if you never manually tagged them
+
+Whether you're consolidating years of photos from different tools, migrating to a new system, or just want a fast way to search and organize your collection, PhotoStat gives you control over your photo library.
+
+---
+
 ## Table of Contents
 
+- [Why PhotoStat?](#why-photostat)
 - [Features](#features)
 - [System Requirements](#system-requirements)
 - [Installation](#installation)
