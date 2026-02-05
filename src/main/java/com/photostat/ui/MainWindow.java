@@ -108,9 +108,10 @@ public class MainWindow extends BorderPane {
             searchPanel.executeSearch();
         });
 
-        // Wire up detail panel metadata save to refresh results
+        // Wire up detail panel metadata save to refresh table display
+        // (just redraws the table - doesn't reload from OpenSearch since data is already updated in memory)
         detailPanel.setMetadataSavedCallback(() -> {
-            searchPanel.executeSearch();
+            resultsPanel.refreshTableDisplay();
         });
 
         // Wire up detail panel status updates to status bar

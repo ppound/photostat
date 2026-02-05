@@ -336,10 +336,19 @@ public class ResultsPanel extends VBox {
     }
 
     /**
-     * Refresh the current page.
+     * Refresh the current page (reloads from OpenSearch).
      */
     public void refresh() {
         loadPage(pagination.getCurrentPageIndex());
+    }
+
+    /**
+     * Refresh the table display without reloading data from OpenSearch.
+     * Use this when the ImageMetadata objects have been updated in memory
+     * (e.g., after saving custom metadata) and just need to redraw.
+     */
+    public void refreshTableDisplay() {
+        resultsTable.refresh();
     }
 
     /**
@@ -724,9 +733,10 @@ public class ResultsPanel extends VBox {
                 updateStatus("Analysis " + (wasCancelled ? "cancelled" : "complete") + ": " + finalSuccessCount + " analyzed, " + finalSkippedCount + " cached, " + finalErrorCount + " failed");
                 showAlert(Alert.AlertType.INFORMATION, wasCancelled ? "Analysis Cancelled" : "Analysis Complete", summary);
 
-                // Refresh results to show updated metadata
+                // Refresh table display to show updated metadata
+                // (just redraws - data is already updated in memory)
                 if (finalSuccessCount > 0) {
-                    refresh();
+                    refreshTableDisplay();
                 }
             });
         }).start();
