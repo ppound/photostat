@@ -167,7 +167,7 @@ Whether you're consolidating years of photos from different tools, migrating to 
 Download the latest release from the **[GitHub Releases Page](https://github.com/ppound/photostat/releases)**:
 
 ```
-photostat-java-1.5.1-executable.jar
+photostat-java-1.6.0-executable.jar
 ```
 
 This is a self-contained JAR file that includes all dependencies. No installation is required.
@@ -286,7 +286,7 @@ sudo dnf install perl-Image-ExifTool
 
    **Windows / Linux / Intel Mac:**
    ```bash
-   java -jar photostat-java-1.5.1-executable.jar
+   java -jar photostat-java-1.6.0-executable.jar
    ```
 
    **Apple Silicon Mac (M1/M2/M3):**
@@ -297,7 +297,7 @@ sudo dnf install perl-Image-ExifTool
    # Extract to a folder, then run:
    java --module-path /path/to/javafx-sdk-21/lib \
         --add-modules javafx.controls,javafx.fxml,javafx.swing \
-        -jar photostat-java-1.5.1-executable.jar
+        -jar photostat-java-1.6.0-executable.jar
    ```
 
 3. **Configure connection** (if needed) via File > Settings
@@ -712,16 +712,16 @@ PhotoStat includes a CLI mode for batch image analysis that can run in the backg
 
 ```bash
 # Show help
-java -jar photostat-java-1.5.1-executable.jar --help
+java -jar photostat-java-1.6.0-executable.jar --help
 
 # Show CLI analysis help
-java -jar photostat-java-1.5.1-executable.jar --analyze --help
+java -jar photostat-java-1.6.0-executable.jar --analyze --help
 
 # Run analysis on configured directories
-java -jar photostat-java-1.5.1-executable.jar --analyze
+java -jar photostat-java-1.6.0-executable.jar --analyze
 
 # Preview what would be analyzed (no API calls)
-java -jar photostat-java-1.5.1-executable.jar --analyze --dry-run
+java -jar photostat-java-1.6.0-executable.jar --analyze --dry-run
 ```
 
 **CLI Options:**
@@ -741,28 +741,28 @@ java -jar photostat-java-1.5.1-executable.jar --analyze --dry-run
 
 ```bash
 # Analyze with Gemini instead of configured provider
-java -jar photostat-java-1.5.1-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.6.0-executable.jar --analyze --provider gemini
 
 # Analyze a specific directory
-java -jar photostat-java-1.5.1-executable.jar --analyze --dir /path/to/photos
+java -jar photostat-java-1.6.0-executable.jar --analyze --dir /path/to/photos
 
 # Re-analyze everything (ignore cache)
-java -jar photostat-java-1.5.1-executable.jar --analyze --force
+java -jar photostat-java-1.6.0-executable.jar --analyze --force
 
 # Quiet mode for scripts
-java -jar photostat-java-1.5.1-executable.jar --analyze --quiet
+java -jar photostat-java-1.6.0-executable.jar --analyze --quiet
 ```
 
 **Running in Background (Windows PowerShell):**
 
 ```powershell
-Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.5.1-executable.jar", "--analyze"
+Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.6.0-executable.jar", "--analyze"
 ```
 
 **Running in Background (Linux/macOS):**
 
 ```bash
-nohup java -jar photostat-java-1.5.1-executable.jar --analyze > analysis.log 2>&1 &
+nohup java -jar photostat-java-1.6.0-executable.jar --analyze > analysis.log 2>&1 &
 ```
 
 **What the CLI Does:**
@@ -1103,7 +1103,7 @@ Configuration is stored in `~/.photostat/config.json`:
   ```bash
   java --module-path /path/to/javafx-sdk-21/lib \
        --add-modules javafx.controls,javafx.fxml,javafx.swing \
-       -jar photostat-java-1.5.1-executable.jar
+       -jar photostat-java-1.6.0-executable.jar
   ```
 
 ### Can't Connect to OpenSearch
@@ -1176,7 +1176,7 @@ cd photostat-java
 mvn clean package
 
 # The executable JAR will be at:
-# target/photostat-java-1.5.1-executable.jar
+# target/photostat-java-1.6.0-executable.jar
 ```
 
 ### Run from Source
