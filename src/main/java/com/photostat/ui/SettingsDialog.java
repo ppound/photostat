@@ -42,9 +42,16 @@ public class SettingsDialog extends Dialog<Boolean> {
     // Sidecar settings
     private CheckBox sidecarEnabledCheckbox;
 
+    // AI Provider settings
+    private ComboBox<String> aiProviderCombo;
+
     // Claude API settings
     private PasswordField claudeApiKeyField;
     private ComboBox<String> claudeModelCombo;
+
+    // Gemini API settings
+    private PasswordField geminiApiKeyField;
+    private ComboBox<String> geminiModelCombo;
 
     private Label connectionStatusLabel;
 
@@ -78,10 +85,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab cacheTab = new Tab("Cache");
         cacheTab.setContent(createCachePane());
 
-        Tab claudeTab = new Tab("Claude AI");
-        claudeTab.setContent(createClaudePane());
+        Tab aiTab = new Tab("AI Analysis");
+        aiTab.setContent(createAIPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, claudeTab);
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -366,25 +373,42 @@ public class SettingsDialog extends Dialog<Boolean> {
         return pane;
     }
 
-    private VBox createClaudePane() {
+    private ScrollPane createAIPane() {
         VBox pane = new VBox(15);
         pane.setPadding(new Insets(15));
 
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
+        // Provider selection
+        GridPane providerGrid = new GridPane();
+        providerGrid.setHgap(10);
+        providerGrid.setVgap(10);
 
-        int row = 0;
+        providerGrid.add(new Label("AI Provider:"), 0, 0);
+        aiProviderCombo = new ComboBox<>();
+        aiProviderCombo.getItems().addAll("Claude", "Gemini");
+        aiProviderCombo.setPrefWidth(150);
+        providerGrid.add(aiProviderCombo, 1, 0);
 
-        // API Key
-        grid.add(new Label("API Key:"), 0, row);
+        Label providerInfoLabel = new Label("Select which AI service to use for image analysis");
+        providerInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        providerGrid.add(providerInfoLabel, 2, 0);
+
+        // Claude settings section
+        TitledPane claudeSection = new TitledPane();
+        claudeSection.setText("Claude Settings");
+        claudeSection.setCollapsible(false);
+
+        GridPane claudeGrid = new GridPane();
+        claudeGrid.setHgap(10);
+        claudeGrid.setVgap(10);
+        claudeGrid.setPadding(new Insets(10));
+
+        claudeGrid.add(new Label("API Key:"), 0, 0);
         claudeApiKeyField = new PasswordField();
         claudeApiKeyField.setPromptText("sk-ant-...");
-        claudeApiKeyField.setPrefWidth(280);
-        grid.add(claudeApiKeyField, 1, row++);
+        claudeApiKeyField.setPrefWidth(250);
+        claudeGrid.add(claudeApiKeyField, 1, 0);
 
-        // Model selection
-        grid.add(new Label("Model:"), 0, row);
+        claudeGrid.add(new Label("Model:"), 0, 1);
         claudeModelCombo = new ComboBox<>();
         claudeModelCombo.getItems().addAll(
             "claude-sonnet-4-20250514",
@@ -392,30 +416,125 @@ public class SettingsDialog extends Dialog<Boolean> {
             "claude-3-5-sonnet-20241022",
             "claude-3-5-haiku-20241022"
         );
-        claudeModelCombo.setPrefWidth(280);
-        grid.add(claudeModelCombo, 1, row++);
+        claudeModelCombo.setPrefWidth(250);
+        claudeGrid.add(claudeModelCombo, 1, 1);
 
-        // Info label
-        Label infoLabel = new Label(
-            "The Claude API is used for the 'Analyze' feature which automatically " +
-            "analyzes images and populates metadata fields (tags, persons, place, rating).\n\n" +
-            "To get an API key, visit: https://console.anthropic.com/\n\n" +
-            "Note: API usage incurs costs based on the number of images analyzed."
+        Button testClaudeButton = new Button("Test");
+        Label claudeStatusLabel = new Label("");
+        testClaudeButton.setOnAction(e -> testClaudeApi(claudeStatusLabel));
+        HBox claudeTestBox = new HBox(10, testClaudeButton, claudeStatusLabel);
+        claudeGrid.add(claudeTestBox, 1, 2);
+
+        Label claudeInfoLabel = new Label("Get API key: https://console.anthropic.com/");
+        claudeInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        claudeGrid.add(claudeInfoLabel, 1, 3);
+
+        claudeSection.setContent(claudeGrid);
+
+        // Gemini settings section
+        TitledPane geminiSection = new TitledPane();
+        geminiSection.setText("Gemini Settings");
+        geminiSection.setCollapsible(false);
+
+        GridPane geminiGrid = new GridPane();
+        geminiGrid.setHgap(10);
+        geminiGrid.setVgap(10);
+        geminiGrid.setPadding(new Insets(10));
+
+        geminiGrid.add(new Label("API Key:"), 0, 0);
+        geminiApiKeyField = new PasswordField();
+        geminiApiKeyField.setPromptText("AIza...");
+        geminiApiKeyField.setPrefWidth(250);
+        geminiGrid.add(geminiApiKeyField, 1, 0);
+
+        geminiGrid.add(new Label("Model:"), 0, 1);
+        geminiModelCombo = new ComboBox<>();
+        geminiModelCombo.getItems().addAll(
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
         );
-        infoLabel.setWrapText(true);
-        infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        geminiModelCombo.setPrefWidth(250);
+        geminiGrid.add(geminiModelCombo, 1, 1);
 
-        // Test API button
-        Button testApiButton = new Button("Test API Key");
-        Label apiStatusLabel = new Label("");
-        testApiButton.setOnAction(e -> testClaudeApi(apiStatusLabel));
+        Button testGeminiButton = new Button("Test");
+        Label geminiStatusLabel = new Label("");
+        testGeminiButton.setOnAction(e -> testGeminiApi(geminiStatusLabel));
+        HBox geminiTestBox = new HBox(10, testGeminiButton, geminiStatusLabel);
+        geminiGrid.add(geminiTestBox, 1, 2);
 
-        HBox testBox = new HBox(10, testApiButton, apiStatusLabel);
-        HBox.setHgrow(apiStatusLabel, Priority.ALWAYS);
+        Label geminiInfoLabel = new Label("Get API key: https://aistudio.google.com/apikey");
+        geminiInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        geminiGrid.add(geminiInfoLabel, 1, 3);
 
-        pane.getChildren().addAll(grid, new Separator(), infoLabel, new Separator(), testBox);
+        geminiSection.setContent(geminiGrid);
 
-        return pane;
+        // Cost comparison info
+        Label costInfoLabel = new Label(
+            "Cost Comparison (approximate per 1000 images):\n" +
+            "• Claude Sonnet: ~$1.50-3.00 (best quality)\n" +
+            "• Claude Haiku: ~$0.15-0.30 (fast, good quality)\n" +
+            "• Gemini Flash: ~$0.05-0.10 (cheapest)"
+        );
+        costInfoLabel.setWrapText(true);
+        costInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+
+        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, new Separator(), costInfoLabel);
+
+        // Wrap in ScrollPane for vertical scrolling
+        ScrollPane scrollPane = new ScrollPane(pane);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        return scrollPane;
+    }
+
+    private void testGeminiApi(Label statusLabel) {
+        statusLabel.setText("Testing...");
+        statusLabel.setStyle("-fx-text-fill: #666;");
+
+        String apiKey = geminiApiKeyField.getText().trim();
+        if (apiKey.isEmpty()) {
+            statusLabel.setText("Please enter an API key");
+            statusLabel.setStyle("-fx-text-fill: #cc0000;");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                com.google.genai.Client client = com.google.genai.Client.builder()
+                        .apiKey(apiKey)
+                        .build();
+
+                // Simple test - list models or generate minimal content
+                com.google.genai.types.Content content = com.google.genai.types.Content.fromParts(
+                        com.google.genai.types.Part.fromText("Hi")
+                );
+                com.google.genai.types.GenerateContentResponse response =
+                        client.models.generateContent("gemini-2.0-flash", content, null);
+
+                Platform.runLater(() -> {
+                    if (response != null && response.text() != null) {
+                        statusLabel.setText("API key is valid!");
+                        statusLabel.setStyle("-fx-text-fill: #00aa00;");
+                    } else {
+                        statusLabel.setText("Invalid response");
+                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    String msg = e.getMessage();
+                    if (msg != null && msg.contains("API_KEY_INVALID")) {
+                        statusLabel.setText("Invalid API key");
+                    } else {
+                        statusLabel.setText("Error: " + (msg != null ? msg.substring(0, Math.min(30, msg.length())) : "Unknown"));
+                    }
+                    statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                });
+            }
+        }).start();
     }
 
     private void testClaudeApi(Label statusLabel) {
@@ -516,9 +635,17 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Sidecar settings
         sidecarEnabledCheckbox.setSelected(configService.isSidecarEnabled());
 
+        // AI Provider settings
+        String provider = configService.getAiProvider();
+        aiProviderCombo.setValue("gemini".equalsIgnoreCase(provider) ? "Gemini" : "Claude");
+
         // Claude API settings
         claudeApiKeyField.setText(configService.getClaudeApiKey());
         claudeModelCombo.setValue(configService.getClaudeModel());
+
+        // Gemini API settings
+        geminiApiKeyField.setText(configService.getGeminiApiKey());
+        geminiModelCombo.setValue(configService.getGeminiModel());
     }
 
     private void saveSettings() {
@@ -550,10 +677,20 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Sidecar settings
         configService.setSidecarEnabled(sidecarEnabledCheckbox.isSelected());
 
+        // AI Provider settings
+        String selectedProvider = aiProviderCombo.getValue();
+        configService.setAiProvider("Gemini".equals(selectedProvider) ? "gemini" : "claude");
+
         // Claude API settings
         configService.setClaudeApiKey(claudeApiKeyField.getText().trim());
         if (claudeModelCombo.getValue() != null) {
             configService.setClaudeModel(claudeModelCombo.getValue());
+        }
+
+        // Gemini API settings
+        configService.setGeminiApiKey(geminiApiKeyField.getText().trim());
+        if (geminiModelCombo.getValue() != null) {
+            configService.setGeminiModel(geminiModelCombo.getValue());
         }
 
         configService.saveConfig();

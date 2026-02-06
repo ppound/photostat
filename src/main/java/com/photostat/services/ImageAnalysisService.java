@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.genai.Client;
+import com.google.genai.types.Content;
+import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Part;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -30,7 +34,7 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Service for analyzing images using Claude's vision API.
+ * Service for analyzing images using Claude or Gemini vision APIs.
  */
 public class ImageAnalysisService {
 
@@ -87,9 +91,21 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Analyze an image using Claude's vision API.
+     * Analyze an image using the configured AI provider (Claude or Gemini).
      */
     public AnalysisResult analyzeImage(String imagePath) {
+        String provider = configService.getAiProvider();
+        if ("gemini".equalsIgnoreCase(provider)) {
+            return analyzeImageWithGemini(imagePath);
+        } else {
+            return analyzeImageWithClaude(imagePath);
+        }
+    }
+
+    /**
+     * Analyze an image using Claude's vision API.
+     */
+    private AnalysisResult analyzeImageWithClaude(String imagePath) {
         AnalysisResult result = new AnalysisResult();
 
         String apiKey = configService.getClaudeApiKey();
@@ -162,6 +178,137 @@ public class ImageAnalysisService {
         }
 
         return result;
+    }
+
+    /**
+     * Analyze an image using Google's Gemini vision API.
+     */
+    private AnalysisResult analyzeImageWithGemini(String imagePath) {
+        AnalysisResult result = new AnalysisResult();
+
+        String apiKey = configService.getGeminiApiKey();
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            result.setError("Gemini API key not configured. Please set it in Settings.");
+            return result;
+        }
+
+        try {
+            // Read and optimize the image
+            Path path = Path.of(imagePath);
+            if (!Files.exists(path)) {
+                result.setError("Image file not found: " + imagePath);
+                return result;
+            }
+
+            // Optimize image for API (resize and compress)
+            byte[] optimizedBytes = optimizeImageForApi(path.toFile());
+            if (optimizedBytes == null) {
+                result.setError("Failed to process image");
+                return result;
+            }
+
+            logger.debug("ImageAnalysisService", "Optimized image size for Gemini: " + (optimizedBytes.length / 1024) + " KB");
+
+            // Create Gemini client with API key
+            Client client = Client.builder()
+                    .apiKey(apiKey)
+                    .build();
+
+            // Build content with image and prompt
+            Content content = Content.fromParts(
+                    Part.fromBytes(optimizedBytes, "image/jpeg"),
+                    Part.fromText(getAnalysisPrompt())
+            );
+
+            String model = configService.getGeminiModel();
+            logger.info("ImageAnalysisService", "Sending image to Gemini API (" + model + "): " + imagePath);
+
+            // Generate content
+            GenerateContentResponse response = client.models.generateContent(model, content, null);
+
+            // Get response text
+            String responseText = response.text();
+            logger.debug("ImageAnalysisService", "Gemini raw response: " + responseText);
+
+            if (responseText == null || responseText.isEmpty()) {
+                result.setError("Empty response from Gemini API");
+                return result;
+            }
+
+            // Parse the response (same format as Claude)
+            parseGeminiResponse(responseText, result);
+            logger.debug("ImageAnalysisService", "Parsed result - Tags: " + result.getTags() +
+                    ", Persons: " + result.getPersons() + ", Place: " + result.getPlace() +
+                    ", Rating: " + result.getRating() + ", Error: " + result.getError());
+
+            // Save analysis cache if successful
+            if (!result.hasError()) {
+                saveAnalysisCache(imagePath);
+            }
+
+            logger.info("ImageAnalysisService", "Gemini analysis complete. Tags: " + result.getTags().size() +
+                    ", Persons: " + result.getPersons().size() + ", Rating: " + result.getRating());
+
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to analyze image with Gemini", e);
+            result.setError("Gemini analysis failed: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Parse Gemini response text into AnalysisResult.
+     */
+    private void parseGeminiResponse(String responseText, AnalysisResult result) {
+        try {
+            // Extract JSON from the response (same logic as Claude)
+            String json = extractJson(responseText);
+
+            if (json != null) {
+                JsonNode analysis = objectMapper.readTree(json);
+
+                // Parse tags
+                JsonNode tags = analysis.path("tags");
+                if (tags.isArray()) {
+                    List<String> tagList = new ArrayList<>();
+                    for (JsonNode tag : tags) {
+                        tagList.add(tag.asText());
+                    }
+                    result.setTags(tagList);
+                }
+
+                // Parse persons
+                JsonNode persons = analysis.path("persons");
+                if (persons.isArray()) {
+                    List<String> personList = new ArrayList<>();
+                    for (JsonNode person : persons) {
+                        personList.add(person.asText());
+                    }
+                    result.setPersons(personList);
+                }
+
+                // Parse place
+                JsonNode place = analysis.path("place");
+                if (!place.isNull() && !place.isMissingNode()) {
+                    String placeText = place.asText();
+                    if (!"null".equalsIgnoreCase(placeText) && !placeText.isEmpty()) {
+                        result.setPlace(placeText);
+                    }
+                }
+
+                // Parse rating
+                JsonNode rating = analysis.path("rating");
+                if (!rating.isNull() && !rating.isMissingNode()) {
+                    result.setRating(rating.asText());
+                }
+            } else {
+                result.setError("Could not parse JSON from Gemini response");
+            }
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to parse Gemini response", e);
+            result.setError("Failed to parse Gemini response: " + e.getMessage());
+        }
     }
 
     private String getMediaType(String imagePath) {
@@ -386,15 +533,33 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Check if the API key is configured.
+     * Check if the API key is configured for the current provider.
      */
     public boolean isConfigured() {
-        String apiKey = configService.getClaudeApiKey();
+        String provider = configService.getAiProvider();
+        String apiKey;
+        if ("gemini".equalsIgnoreCase(provider)) {
+            apiKey = configService.getGeminiApiKey();
+        } else {
+            apiKey = configService.getClaudeApiKey();
+        }
         return apiKey != null && !apiKey.trim().isEmpty();
     }
 
     /**
-     * Compute a combined hash of model + prompt + image info (size + modification time).
+     * Get the name of the currently configured AI provider.
+     */
+    public String getProviderName() {
+        String provider = configService.getAiProvider();
+        if ("gemini".equalsIgnoreCase(provider)) {
+            return "Gemini";
+        } else {
+            return "Claude";
+        }
+    }
+
+    /**
+     * Compute a combined hash of provider + model + prompt + image info (size + modification time).
      * This single hash detects any change that would require re-analysis.
      */
     private String computeAnalysisHash(String imagePath) {
@@ -402,10 +567,18 @@ public class ImageAnalysisService {
             Path path = Path.of(imagePath);
             BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
 
-            // Combine: model + prompt + image path + file size + modification time
-            String model = configService.getClaudeModel();
+            // Get provider and model
+            String provider = configService.getAiProvider();
+            String model;
+            if ("gemini".equalsIgnoreCase(provider)) {
+                model = configService.getGeminiModel();
+            } else {
+                model = configService.getClaudeModel();
+            }
             String prompt = configService.getClaudeAnalysisPrompt();
-            String hashInput = model + "|" + prompt + "|" + imagePath + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+
+            // Combine: provider + model + prompt + image path + file size + modification time
+            String hashInput = provider + "|" + model + "|" + prompt + "|" + imagePath + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(hashInput.getBytes("UTF-8"));

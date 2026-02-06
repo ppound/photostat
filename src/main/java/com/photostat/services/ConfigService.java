@@ -121,6 +121,23 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure ai section exists (provider selection)
+        if (!config.containsKey("ai")) {
+            Map<String, Object> ai = new HashMap<>();
+            ai.put("provider", "claude");
+            config.put("ai", ai);
+            changed = true;
+        }
+
+        // Ensure gemini section exists
+        if (!config.containsKey("gemini")) {
+            Map<String, Object> gemini = new HashMap<>();
+            gemini.put("api_key", "");
+            gemini.put("model", "gemini-2.0-flash");
+            config.put("gemini", gemini);
+            changed = true;
+        }
+
         if (changed) {
             saveConfig();
             System.out.println("Config migrated with new default values");
@@ -181,12 +198,23 @@ public class ConfigService {
         sidecar.put("enabled", true);      // Sidecar files enabled by default
         defaultConfig.put("sidecar", sidecar);
 
+        // AI settings (provider selection)
+        Map<String, Object> ai = new HashMap<>();
+        ai.put("provider", "claude");  // "claude" or "gemini"
+        defaultConfig.put("ai", ai);
+
         // Claude API settings
         Map<String, Object> claude = new HashMap<>();
         claude.put("api_key", "");
         claude.put("model", "claude-sonnet-4-20250514");
         claude.put("analysis_prompt", getDefaultAnalysisPrompt());
         defaultConfig.put("claude", claude);
+
+        // Gemini API settings
+        Map<String, Object> gemini = new HashMap<>();
+        gemini.put("api_key", "");
+        gemini.put("model", "gemini-2.0-flash");
+        defaultConfig.put("gemini", gemini);
 
         return defaultConfig;
     }
@@ -405,6 +433,32 @@ public class ConfigService {
 
     public void setClaudeAnalysisPrompt(String prompt) {
         setNestedValue("claude", "analysis_prompt", prompt);
+    }
+
+    // AI Provider settings
+    public String getAiProvider() {
+        return getNestedString("ai", "provider", "claude");
+    }
+
+    public void setAiProvider(String provider) {
+        setNestedValue("ai", "provider", provider);
+    }
+
+    // Gemini API settings
+    public String getGeminiApiKey() {
+        return getNestedString("gemini", "api_key", "");
+    }
+
+    public void setGeminiApiKey(String apiKey) {
+        setNestedValue("gemini", "api_key", apiKey);
+    }
+
+    public String getGeminiModel() {
+        return getNestedString("gemini", "model", "gemini-2.0-flash");
+    }
+
+    public void setGeminiModel(String model) {
+        setNestedValue("gemini", "model", model);
     }
 
     public static String getDefaultAnalysisPrompt() {

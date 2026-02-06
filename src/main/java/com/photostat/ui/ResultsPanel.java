@@ -105,7 +105,7 @@ public class ResultsPanel extends VBox {
         // Toolbar for bulk operations
         analyzeSelectedBtn = new Button("Analyze Selected");
         analyzeSelectedBtn.setOnAction(e -> analyzeSelectedImages());
-        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with Claude AI"));
+        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with AI"));
 
         Button copySelectedBtn = new Button("Copy Selected...");
         copySelectedBtn.setOnAction(e -> copySelectedImages());
@@ -525,7 +525,7 @@ public class ResultsPanel extends VBox {
 
         if (!imageAnalysisService.isConfigured()) {
             showAlert(Alert.AlertType.ERROR, "API Key Required",
-                    "Please configure your Claude API key in Settings (Claude AI tab).");
+                    "Please configure your API key in Settings (AI Analysis tab).");
             return;
         }
 
@@ -549,9 +549,10 @@ public class ResultsPanel extends VBox {
                 "\n(" + unsupported + " unsupported format(s) will be skipped)" : "";
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        String providerName = imageAnalysisService.getProviderName();
         confirm.setTitle("Analyze Images");
-        confirm.setHeaderText("Analyze " + supportedImages.size() + " image(s) with Claude AI?");
-        confirm.setContentText("This will use the Claude API to analyze each image and populate metadata fields (tags, persons, place, rating)." +
+        confirm.setHeaderText("Analyze " + supportedImages.size() + " image(s) with " + providerName + "?");
+        confirm.setContentText("This will use the " + providerName + " API to analyze each image and populate metadata fields (tags, persons, place, rating)." +
                 unsupportedMsg + "\n\nNote: API usage incurs costs.");
 
         confirm.showAndWait().ifPresent(response -> {
@@ -580,7 +581,8 @@ public class ResultsPanel extends VBox {
         progressContent.setAlignment(Pos.CENTER);
         progressContent.setPrefWidth(450);
 
-        Label titleLabel = new Label("Analyzing images with Claude AI...");
+        String providerName = imageAnalysisService.getProviderName();
+        Label titleLabel = new Label("Analyzing images with " + providerName + "...");
         titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
 
         ProgressBar progressBar = new ProgressBar(0);
@@ -737,6 +739,12 @@ public class ResultsPanel extends VBox {
                 // (just redraws - data is already updated in memory)
                 if (finalSuccessCount > 0) {
                     refreshTableDisplay();
+
+                    // Re-trigger selection callback to refresh the detail panel
+                    ImageMetadata selected = resultsTable.getSelectionModel().getSelectedItem();
+                    if (selected != null && selectionCallback != null) {
+                        selectionCallback.accept(selected);
+                    }
                 }
             });
         }).start();
