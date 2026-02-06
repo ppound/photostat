@@ -17,7 +17,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Cross-Platform** - Runs on Windows, macOS, and Linux with a single executable JAR
 - **Backup-Friendly** - Sidecar files travel with your images, so custom metadata survives backups, moves, and drive migrations
 - **Open Standards** - Built on OpenSearch for powerful, fast searching with a query syntax you may already know
-- **AI-Powered Organization** - Leverage Claude AI to automatically tag and categorize your photos, making it easier to find images even if you never manually tagged them
+- **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos, making it easier to find images even if you never manually tagged them
 
 Whether you're consolidating years of photos from different tools, migrating to a new system, or just want a fast way to search and organize your collection, PhotoStat gives you control over your photo library.
 
@@ -44,7 +44,8 @@ Whether you're consolidating years of photos from different tools, migrating to 
   - [Viewing Image Details](#viewing-image-details)
   - [Adding Custom Metadata](#adding-custom-metadata)
   - [AI Image Analysis](#ai-image-analysis)
-  - [Configuring Claude AI](#configuring-claude-ai)
+  - [Configuring AI Providers](#configuring-ai-providers)
+  - [Command-Line Interface (CLI)](#command-line-interface-cli)
   - [Managing Files](#managing-files)
   - [Exploring Charts](#exploring-charts)
   - [Thumbnail Cache](#thumbnail-cache)
@@ -102,14 +103,15 @@ Whether you're consolidating years of photos from different tools, migrating to 
 
 ### AI Image Analysis
 
-- **Claude Vision API** - Analyze images using Claude AI to auto-populate metadata
-- **Batch Processing** - Analyze multiple selected images at once
+- **Multiple AI Providers** - Choose between Claude (Anthropic) or Gemini (Google) for analysis
+- **Batch Processing** - Analyze multiple selected images at once via GUI or CLI
 - **Smart Tagging** - Automatically detect subjects, styles, and moods
 - **Quality Rating** - AI-generated rating based on composition, sharpness, and artistic value
 - **Person Detection** - Describe people visible in images
 - **Location Recognition** - Identify places and settings
 - **Analysis Caching** - Skips API calls for unchanged images to reduce costs
 - **Customizable Prompt** - Modify the analysis prompt in config.json
+- **CLI Batch Mode** - Run analysis from command line for background processing
 
 ### Thumbnail Caching
 
@@ -534,7 +536,10 @@ This is useful when multiple photos share the same people, location, or tags.
 
 ### AI Image Analysis
 
-PhotoStat can automatically analyze your images using Claude AI's vision capabilities to populate metadata fields.
+PhotoStat can automatically analyze your images using AI vision capabilities to populate metadata fields. Two providers are supported:
+
+- **Claude** (Anthropic) - High-quality analysis with excellent scene understanding
+- **Gemini** (Google) - Cost-effective alternative with fast processing
 
 **What the AI Analyzes:**
 
@@ -577,11 +582,12 @@ PhotoStat can automatically analyze your images using Claude AI's vision capabil
 PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
 
 - An `analysisHash` is stored in the sidecar file after each analysis
-- The hash combines: model + prompt + image (file size + modification time)
+- The hash combines: provider + model + prompt + image (file size + modification time)
 - When re-analyzing, images with matching hashes are skipped
 - The progress dialog shows "Cached (skipped)" count for unchanged images
 - Cache is invalidated when you:
-  - Change the Claude model in settings
+  - Switch AI providers (Claude ↔ Gemini)
+  - Change the model in settings
   - Modify the analysis prompt in config.json
   - Edit or replace the image file
 
@@ -611,9 +617,18 @@ Changing the prompt will invalidate the cache, causing all images to be re-analy
 | **** | Good - strong composition, good technique, visually appealing |
 | ***** | Excellent - exceptional composition, masterful technique |
 
-### Configuring Claude AI
+### Configuring AI Providers
 
-To use the AI analysis feature, you need to configure your Claude API key.
+To use AI analysis, configure at least one provider in Settings.
+
+#### Choosing a Provider
+
+| Provider | Pros | Cons |
+|----------|------|------|
+| **Claude** | Excellent scene understanding, detailed descriptions | Higher cost |
+| **Gemini** | Very cost-effective, fast processing | May be less detailed |
+
+#### Configuring Claude (Anthropic)
 
 **Getting an API Key:**
 
@@ -622,17 +637,13 @@ To use the AI analysis feature, you need to configure your Claude API key.
 3. Navigate to **API Keys**
 4. Click **Create Key** and copy the key
 
-**Configuring in PhotoStat:**
+**Setup in PhotoStat:**
 
 1. Open **File > Settings**
-
-2. Navigate to the **Claude AI** tab
-
-   ![Claude AI Settings](docs/screenshots/claude-settings.png)
-
-3. Enter your **API Key** (starts with `sk-ant-...`)
-
-4. Select a **Model**:
+2. Navigate to the **AI Analysis** tab
+3. Select **Claude** as the provider
+4. Enter your **API Key** (starts with `sk-ant-...`)
+5. Select a **Model**:
 
    | Model | Description |
    |-------|-------------|
@@ -641,25 +652,156 @@ To use the AI analysis feature, you need to configure your Claude API key.
    | claude-3-5-sonnet-20241022 | Previous generation Sonnet |
    | claude-3-5-haiku-20241022 | Fastest, lowest cost |
 
-5. Click **Test API Key** to verify your key works
+6. Click **Test API Key** to verify
+7. Click **OK** to save
 
-6. Click **OK** to save
+#### Configuring Gemini (Google)
 
-**API Costs:**
+**Getting an API Key:**
 
-- Each image analyzed uses API credits
-- Costs depend on image size and selected model
-- Sonnet models offer the best balance of quality and cost
-- Monitor usage at [console.anthropic.com](https://console.anthropic.com/)
+1. Visit [Google AI Studio](https://aistudio.google.com/)
+2. Sign in with your Google account
+3. Click **Get API Key**
+4. Create a new API key and copy it
 
-**Troubleshooting:**
+**Setup in PhotoStat:**
+
+1. Open **File > Settings**
+2. Navigate to the **AI Analysis** tab
+3. Select **Gemini** as the provider
+4. Enter your **API Key**
+5. Select a **Model**:
+
+   | Model | Description |
+   |-------|-------------|
+   | gemini-2.0-flash | Latest, fastest (recommended) |
+   | gemini-1.5-flash | Previous generation, very fast |
+   | gemini-1.5-pro | Most capable, slower |
+
+6. Click **Test API Key** to verify
+7. Click **OK** to save
+
+#### API Costs
+
+| Provider | Cost Level | Best For |
+|----------|------------|----------|
+| Claude Haiku | Low | Large batches, basic tagging |
+| Gemini Flash | Very Low | Cost-sensitive batch processing |
+| Claude Sonnet | Medium | Balanced quality and cost |
+| Gemini Pro | Medium | Detailed analysis |
+| Claude Opus | High | Maximum quality |
+
+Monitor usage:
+- Claude: [console.anthropic.com](https://console.anthropic.com/)
+- Gemini: [aistudio.google.com](https://aistudio.google.com/)
+
+#### Troubleshooting
 
 | Error | Solution |
 |-------|----------|
-| "API Key Required" | Configure your API key in Settings > Claude AI |
+| "API Key Required" | Configure your API key in Settings > AI Analysis |
 | "Invalid API key" | Check that the key is correct and active |
 | "API error: 429" | Rate limited - wait and try again with fewer images |
 | "Analysis failed" | Check internet connection; verify image format is supported |
+
+### Command-Line Interface (CLI)
+
+PhotoStat includes a CLI mode for batch image analysis that can run in the background without tying up the GUI.
+
+**Basic Usage:**
+
+```bash
+# Show help
+java -jar photostat-java-1.5.1-executable.jar --help
+
+# Show CLI analysis help
+java -jar photostat-java-1.5.1-executable.jar --analyze --help
+
+# Run analysis on configured directories
+java -jar photostat-java-1.5.1-executable.jar --analyze
+
+# Preview what would be analyzed (no API calls)
+java -jar photostat-java-1.5.1-executable.jar --analyze --dry-run
+```
+
+**CLI Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--analyze` | Run batch analysis mode |
+| `--dir <path>` | Analyze specific directory (overrides config) |
+| `--provider <name>` | Use 'claude' or 'gemini' (overrides config) |
+| `--dry-run` | Show what would be analyzed without making API calls |
+| `--force` | Re-analyze all images, ignoring cache |
+| `--quiet, -q` | Minimal output |
+| `--no-progress` | Disable progress updates |
+| `--help, -h` | Show help |
+
+**Examples:**
+
+```bash
+# Analyze with Gemini instead of configured provider
+java -jar photostat-java-1.5.1-executable.jar --analyze --provider gemini
+
+# Analyze a specific directory
+java -jar photostat-java-1.5.1-executable.jar --analyze --dir /path/to/photos
+
+# Re-analyze everything (ignore cache)
+java -jar photostat-java-1.5.1-executable.jar --analyze --force
+
+# Quiet mode for scripts
+java -jar photostat-java-1.5.1-executable.jar --analyze --quiet
+```
+
+**Running in Background (Windows PowerShell):**
+
+```powershell
+Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.5.1-executable.jar", "--analyze"
+```
+
+**Running in Background (Linux/macOS):**
+
+```bash
+nohup java -jar photostat-java-1.5.1-executable.jar --analyze > analysis.log 2>&1 &
+```
+
+**What the CLI Does:**
+
+1. Reads configuration from `~/.photostat/config.json`
+2. Connects to OpenSearch
+3. Scans configured directories for images
+4. Checks sidecar files for cached analysis (skips if hash matches)
+5. Analyzes uncached images using the configured AI provider
+6. Updates OpenSearch with results
+7. Writes results to sidecar files
+
+**Output Example:**
+
+```
+PhotoStat CLI - Batch Image Analysis
+=====================================
+AI Provider: Gemini
+Config: /home/user/.photostat/config.json
+
+Scanning directories for images...
+Found 150 images, 142 supported for analysis.
+Skipping 98 cached images, 44 to analyze.
+
+Starting analysis of 44 images using Gemini...
+
+[1/44] Analyzing: IMG_1234.jpg... OK (tags: 8, rating: ****)
+[2/44] Analyzing: IMG_1235.jpg... OK (tags: 5, rating: ***)
+...
+
+=====================================
+Analysis Complete
+=====================================
+Total:     44
+Success:   43
+Failed:    1
+Time:      3.2 minutes
+Avg:       4.5 seconds/image
+```
 
 ### Managing Files
 
@@ -901,9 +1043,16 @@ Configuration is stored in `~/.photostat/config.json`:
   "sidecar": {
     "enabled": true
   },
+  "ai": {
+    "provider": "claude"
+  },
   "claude": {
     "api_key": "",
     "model": "claude-sonnet-4-20250514"
+  },
+  "gemini": {
+    "api_key": "",
+    "model": "gemini-2.0-flash"
   }
 }
 ```
@@ -927,9 +1076,12 @@ Configuration is stored in `~/.photostat/config.json`:
 | `cache.enabled` | Enable thumbnail disk cache (default: true) |
 | `cache.max_size_mb` | Maximum cache size in MB (default: 500) |
 | `sidecar.enabled` | Save custom metadata to sidecar files (default: true) |
-| `claude.api_key` | Your Anthropic API key for AI analysis |
+| `ai.provider` | AI provider to use: "claude" or "gemini" (default: claude) |
+| `claude.api_key` | Your Anthropic API key for Claude analysis |
 | `claude.model` | Claude model to use (default: claude-sonnet-4-20250514) |
 | `claude.analysis_prompt` | Customizable prompt for image analysis |
+| `gemini.api_key` | Your Google API key for Gemini analysis |
+| `gemini.model` | Gemini model to use (default: gemini-2.0-flash) |
 
 ---
 
@@ -1051,7 +1203,9 @@ photostat-java/
 │   └── screenshots/                     # Documentation screenshots
 ├── src/main/java/com/photostat/
 │   ├── App.java                         # Main application entry
-│   ├── Launcher.java                    # JAR launcher (JavaFX workaround)
+│   ├── Launcher.java                    # JAR launcher (handles CLI vs GUI)
+│   ├── cli/
+│   │   └── AnalyzeCli.java              # Command-line batch analysis
 │   ├── models/
 │   │   └── ImageMetadata.java           # Image metadata model
 │   ├── services/
@@ -1088,7 +1242,7 @@ photostat-java/
 |-----------|------------|
 | GUI Framework | JavaFX 21 |
 | Search Engine | OpenSearch 2.x |
-| AI Analysis | Claude API (Anthropic) |
+| AI Analysis | Claude API (Anthropic), Gemini API (Google) |
 | EXIF Extraction | metadata-extractor + ExifTool |
 | JSON Processing | Jackson |
 | HTTP Client | Apache HttpClient 5 / Java HttpClient |
