@@ -163,6 +163,7 @@ The **Facets Panel** on the left shows aggregated counts for quick filtering:
 - **Camera Make** - Click to filter by manufacturer
 - **Camera Model** - Click to filter by specific model
 - **Lens Model** - Click to filter by lens
+- **Software** - Click to filter by editing software
 - **File Type** - Click to filter by format
 - **ISO Range** - Click to filter by ISO bracket
 - **Year/Month** - Click to filter by time period
@@ -317,6 +318,7 @@ Navigate to the **Charts** tab to visualize your collection:
 1. **Overview**
    - Camera makes bar chart
    - File types pie chart
+   - Editing software bar chart
 
    ![Overview Charts](screenshots/charts-overview.png)
 

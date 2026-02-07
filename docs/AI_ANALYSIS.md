@@ -203,16 +203,16 @@ PhotoStat includes a CLI mode for batch image analysis that can run in the backg
 
 ```bash
 # Show help
-java -jar photostat-java-1.6.1-executable.jar --help
+java -jar photostat-java-1.6.2-executable.jar --help
 
 # Show CLI analysis help
-java -jar photostat-java-1.6.1-executable.jar --analyze --help
+java -jar photostat-java-1.6.2-executable.jar --analyze --help
 
 # Run analysis on configured directories
-java -jar photostat-java-1.6.1-executable.jar --analyze
+java -jar photostat-java-1.6.2-executable.jar --analyze
 
 # Preview what would be analyzed (no API calls)
-java -jar photostat-java-1.6.1-executable.jar --analyze --dry-run
+java -jar photostat-java-1.6.2-executable.jar --analyze --dry-run
 ```
 
 ### CLI Options
@@ -233,19 +233,19 @@ java -jar photostat-java-1.6.1-executable.jar --analyze --dry-run
 
 ```bash
 # Analyze with Gemini instead of configured provider
-java -jar photostat-java-1.6.1-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.6.2-executable.jar --analyze --provider gemini
 
 # Analyze a specific directory
-java -jar photostat-java-1.6.1-executable.jar --analyze --dir /path/to/photos
+java -jar photostat-java-1.6.2-executable.jar --analyze --dir /path/to/photos
 
 # Re-analyze everything (ignore cache)
-java -jar photostat-java-1.6.1-executable.jar --analyze --force
+java -jar photostat-java-1.6.2-executable.jar --analyze --force
 
 # Quiet mode for scripts
-java -jar photostat-java-1.6.1-executable.jar --analyze --quiet
+java -jar photostat-java-1.6.2-executable.jar --analyze --quiet
 
 # Run with 4 parallel threads for faster processing
-java -jar photostat-java-1.6.1-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.6.2-executable.jar --analyze --parallel 4
 ```
 
 ### Running in Background
@@ -253,13 +253,13 @@ java -jar photostat-java-1.6.1-executable.jar --analyze --parallel 4
 **Windows PowerShell:**
 
 ```powershell
-Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.6.1-executable.jar", "--analyze"
+Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.6.2-executable.jar", "--analyze"
 ```
 
 **Linux/macOS:**
 
 ```bash
-nohup java -jar photostat-java-1.6.1-executable.jar --analyze > analysis.log 2>&1 &
+nohup java -jar photostat-java-1.6.2-executable.jar --analyze > analysis.log 2>&1 &
 ```
 
 ### What the CLI Does
