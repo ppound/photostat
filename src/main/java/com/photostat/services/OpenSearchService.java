@@ -38,6 +38,7 @@ import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -629,11 +630,35 @@ public class OpenSearchService {
 
     /**
      * Generate a consistent document ID from file path.
+     * Normalizes path to handle case-insensitivity on Windows.
      */
     private String generateDocumentId(String filePath) {
-        return Base64.getEncoder().encodeToString(filePath.getBytes())
+        // Normalize the path for consistent ID generation
+        String normalizedPath = normalizePath(filePath);
+        return Base64.getEncoder().encodeToString(normalizedPath.getBytes())
                 .replace("/", "_")
                 .replace("+", "-");
+    }
+
+    /**
+     * Normalize a file path for consistent comparison and ID generation.
+     * On Windows, converts to lowercase since the filesystem is case-insensitive.
+     */
+    private String normalizePath(String filePath) {
+        try {
+            // Use Path to normalize the path structure (resolve . and ..)
+            Path path = Path.of(filePath).toAbsolutePath().normalize();
+            String normalized = path.toString();
+
+            // On Windows, convert to lowercase for case-insensitive matching
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                normalized = normalized.toLowerCase();
+            }
+            return normalized;
+        } catch (Exception e) {
+            // Fallback: just return the original path
+            return filePath;
+        }
     }
 
     /**
