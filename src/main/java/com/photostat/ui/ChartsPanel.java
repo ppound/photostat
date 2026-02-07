@@ -8,6 +8,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Side;
 import javafx.scene.chart.*;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.layout.BorderPane;
@@ -69,7 +70,7 @@ public class ChartsPanel extends BorderPane {
         setCenter(chartTabs);
     }
 
-    private VBox createOverviewTab() {
+    private ScrollPane createOverviewTab() {
         VBox content = new VBox(20);
         content.setPadding(new Insets(10));
 
@@ -82,13 +83,17 @@ public class ChartsPanel extends BorderPane {
         cameraMakeChart = new BarChart<>(cameraMakeXAxis, cameraMakeYAxis);
         cameraMakeChart.setTitle("Photos by Camera Make");
         cameraMakeChart.setLegendVisible(false);
-        cameraMakeChart.setPrefHeight(300);
+        cameraMakeChart.setAnimated(false);
+        cameraMakeChart.setMinHeight(300);
+        cameraMakeChart.setPrefHeight(350);
 
         // File type pie chart
         fileTypeChart = new PieChart();
         fileTypeChart.setTitle("Photos by File Type");
         fileTypeChart.setLegendSide(Side.RIGHT);
-        fileTypeChart.setPrefHeight(300);
+        fileTypeChart.setAnimated(false);
+        fileTypeChart.setMinHeight(300);
+        fileTypeChart.setPrefHeight(350);
 
         // Software bar chart
         CategoryAxis softwareXAxis = new CategoryAxis();
@@ -99,14 +104,19 @@ public class ChartsPanel extends BorderPane {
         softwareChart = new BarChart<>(softwareXAxis, softwareYAxis);
         softwareChart.setTitle("Photos by Editing Software");
         softwareChart.setLegendVisible(false);
-        softwareChart.setPrefHeight(300);
+        softwareChart.setAnimated(false);
+        softwareChart.setMinHeight(300);
+        softwareChart.setPrefHeight(350);
 
         content.getChildren().addAll(cameraMakeChart, fileTypeChart, softwareChart);
-        VBox.setVgrow(cameraMakeChart, Priority.ALWAYS);
-        VBox.setVgrow(fileTypeChart, Priority.ALWAYS);
-        VBox.setVgrow(softwareChart, Priority.ALWAYS);
 
-        return content;
+        // Wrap in ScrollPane for scrolling when charts don't fit
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        return scrollPane;
     }
 
     private VBox createEquipmentTab() {
