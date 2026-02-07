@@ -362,6 +362,7 @@ public class OpenSearchService {
         searchBuilder.aggregations("camera_model", Aggregation.of(a -> a.terms(t -> t.field("camera_model").size(50))));
         searchBuilder.aggregations("lens_model", Aggregation.of(a -> a.terms(t -> t.field("lens_model").size(50))));
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
+        searchBuilder.aggregations("software", Aggregation.of(a -> a.terms(t -> t.field("software").size(30))));
 
         // Custom metadata aggregations
         searchBuilder.aggregations("persons", Aggregation.of(a -> a.terms(t -> t.field("persons").size(50))));
@@ -599,6 +600,9 @@ public class OpenSearchService {
 
         // File types
         searchBuilder.aggregations("file_type", Aggregation.of(a -> a.terms(t -> t.field("file_type").size(20))));
+
+        // Software
+        searchBuilder.aggregations("software", Aggregation.of(a -> a.terms(t -> t.field("software").size(30))));
 
         // Custom metadata
         searchBuilder.aggregations("persons", Aggregation.of(a -> a.terms(t -> t.field("persons").size(30))));

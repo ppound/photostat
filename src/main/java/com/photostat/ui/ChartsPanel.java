@@ -30,6 +30,7 @@ public class ChartsPanel extends BorderPane {
     private BarChart<String, Number> cameraMakeChart;
     private BarChart<String, Number> cameraModelChart;
     private BarChart<String, Number> lensChart;
+    private BarChart<String, Number> softwareChart;
     private PieChart fileTypeChart;
     private LineChart<String, Number> timelineChart;
     private BarChart<String, Number> isoChart;
@@ -89,9 +90,21 @@ public class ChartsPanel extends BorderPane {
         fileTypeChart.setLegendSide(Side.RIGHT);
         fileTypeChart.setPrefHeight(300);
 
-        content.getChildren().addAll(cameraMakeChart, fileTypeChart);
+        // Software bar chart
+        CategoryAxis softwareXAxis = new CategoryAxis();
+        softwareXAxis.setLabel("Software");
+        NumberAxis softwareYAxis = new NumberAxis();
+        softwareYAxis.setLabel("Photo Count");
+
+        softwareChart = new BarChart<>(softwareXAxis, softwareYAxis);
+        softwareChart.setTitle("Photos by Editing Software");
+        softwareChart.setLegendVisible(false);
+        softwareChart.setPrefHeight(300);
+
+        content.getChildren().addAll(cameraMakeChart, fileTypeChart, softwareChart);
         VBox.setVgrow(cameraMakeChart, Priority.ALWAYS);
         VBox.setVgrow(fileTypeChart, Priority.ALWAYS);
+        VBox.setVgrow(softwareChart, Priority.ALWAYS);
 
         return content;
     }
@@ -208,6 +221,7 @@ public class ChartsPanel extends BorderPane {
                     updateCameraMakeChart(chartData.get("camera_make"));
                     updateCameraModelChart(chartData.get("camera_model"));
                     updateLensChart(chartData.get("lens_model"));
+                    updateSoftwareChart(chartData.get("software"));
                     updateFileTypeChart(chartData.get("file_type"));
                     updateTimelineChart(chartData.get("monthly"));
                     updateIsoChart(chartData.get("iso"));
@@ -286,6 +300,31 @@ public class ChartsPanel extends BorderPane {
                 });
 
         lensChart.getData().add(series);
+    }
+
+    private void updateSoftwareChart(Map<String, Long> data) {
+        softwareChart.getData().clear();
+
+        if (data == null || data.isEmpty()) {
+            return;
+        }
+
+        XYChart.Series<String, Number> series = new XYChart.Series<>();
+
+        // Sort by count and take top 10
+        data.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(10)
+                .forEach(entry -> {
+                    // Truncate long software names for display
+                    String label = entry.getKey();
+                    if (label.length() > 25) {
+                        label = label.substring(0, 22) + "...";
+                    }
+                    series.getData().add(new XYChart.Data<>(label, entry.getValue()));
+                });
+
+        softwareChart.getData().add(series);
     }
 
     private void updateFileTypeChart(Map<String, Long> data) {

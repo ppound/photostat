@@ -31,6 +31,7 @@ public class SearchPanel extends VBox {
     private ComboBox<String> cameraMakeCombo;
     private ComboBox<String> cameraModelCombo;
     private ComboBox<String> lensCombo;
+    private ComboBox<String> softwareCombo;
     private ComboBox<String> fileTypeCombo;
     private DatePicker dateFromPicker;
     private DatePicker dateToPicker;
@@ -107,6 +108,14 @@ public class SearchPanel extends VBox {
         lensCombo.setPrefWidth(150);
         setupAutoComplete(lensCombo);
         filterGrid.add(lensCombo, 1, row++);
+
+        // Software
+        filterGrid.add(new Label("Software:"), 0, row);
+        softwareCombo = new ComboBox<>();
+        softwareCombo.setPromptText("All");
+        softwareCombo.setPrefWidth(150);
+        setupAutoComplete(softwareCombo);
+        filterGrid.add(softwareCombo, 1, row++);
 
         // File Type
         filterGrid.add(new Label("File Type:"), 0, row);
@@ -292,6 +301,12 @@ public class SearchPanel extends VBox {
             filters.put("lens_model", lens.trim());
         }
 
+        // Software
+        String software = softwareCombo.getEditor().getText();
+        if (software != null && !software.trim().isEmpty()) {
+            filters.put("software", software.trim());
+        }
+
         // File type
         String fileType = fileTypeCombo.getValue();
         if (fileType != null && !fileType.trim().isEmpty()) {
@@ -373,6 +388,8 @@ public class SearchPanel extends VBox {
         cameraModelCombo.setValue(null);
         lensCombo.getEditor().clear();
         lensCombo.setValue(null);
+        softwareCombo.getEditor().clear();
+        softwareCombo.setValue(null);
         fileTypeCombo.setValue(null);
         dateFromPicker.setValue(null);
         dateToPicker.setValue(null);
@@ -409,6 +426,9 @@ public class SearchPanel extends VBox {
                 break;
             case "lens_model":
                 lensCombo.getEditor().setText(value);
+                break;
+            case "software":
+                softwareCombo.getEditor().setText(value);
                 break;
             case "file_type":
                 fileTypeCombo.setValue(value);
@@ -485,6 +505,12 @@ public class SearchPanel extends VBox {
         Map<String, Long> lenses = aggregations.get("lens_model");
         if (lenses != null) {
             updateOriginalItems(lensCombo, new ArrayList<>(lenses.keySet()));
+        }
+
+        // Software
+        Map<String, Long> software = aggregations.get("software");
+        if (software != null) {
+            updateOriginalItems(softwareCombo, new ArrayList<>(software.keySet()));
         }
 
         // Persons (multi-select)

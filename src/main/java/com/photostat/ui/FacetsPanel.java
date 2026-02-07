@@ -19,6 +19,7 @@ public class FacetsPanel extends VBox {
     private TitledPane cameraMakePane;
     private TitledPane cameraModelPane;
     private TitledPane lensPane;
+    private TitledPane softwarePane;
     private TitledPane fileTypePane;
     private TitledPane isoRangePane;
     private TitledPane yearPane;
@@ -45,6 +46,7 @@ public class FacetsPanel extends VBox {
         cameraMakePane = createFacetPane("Camera Make", "camera_make");
         cameraModelPane = createFacetPane("Camera Model", "camera_model");
         lensPane = createFacetPane("Lens", "lens_model");
+        softwarePane = createFacetPane("Software", "software");
         fileTypePane = createFacetPane("File Type", "file_type");
         isoRangePane = createFacetPane("ISO Range", "iso");
         yearPane = createFacetPane("Year", "year");
@@ -64,6 +66,7 @@ public class FacetsPanel extends VBox {
                 cameraMakePane,
                 cameraModelPane,
                 lensPane,
+                softwarePane,
                 fileTypePane,
                 isoRangePane,
                 yearPane,
@@ -108,6 +111,7 @@ public class FacetsPanel extends VBox {
         updateFacetPane(cameraMakePane, "camera_make", aggregations.get("camera_make"));
         updateFacetPane(cameraModelPane, "camera_model", aggregations.get("camera_model"));
         updateFacetPane(lensPane, "lens_model", aggregations.get("lens_model"));
+        updateFacetPane(softwarePane, "software", aggregations.get("software"));
         updateFacetPane(fileTypePane, "file_type", aggregations.get("file_type"));
         updateFacetPane(isoRangePane, "iso", aggregations.get("iso_ranges"));
         updateFacetPane(yearPane, "year", aggregations.get("year"));
