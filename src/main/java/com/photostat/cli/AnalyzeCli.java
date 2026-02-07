@@ -8,10 +8,11 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Command-line interface for batch image analysis.
@@ -42,6 +43,11 @@ public class AnalyzeCli {
     private boolean showProgress = true;
     private String specificDir = null;
     private String providerOverride = null;
+    private int parallelThreads = 1;
+
+    // Retry settings for rate limit errors
+    private static final int MAX_RETRIES = 3;
+    private static final long INITIAL_RETRY_DELAY_MS = 1000;
 
     public AnalyzeCli() {
         this.configService = ConfigService.getInstance();
@@ -202,6 +208,24 @@ public class AnalyzeCli {
                 case "--no-progress":
                     showProgress = false;
                     break;
+                case "--parallel":
+                    if (i + 1 < args.length) {
+                        try {
+                            parallelThreads = Integer.parseInt(args[++i]);
+                            if (parallelThreads < 1 || parallelThreads > 8) {
+                                System.err.println("Error: --parallel must be between 1 and 8");
+                                return false;
+                            }
+                        } catch (NumberFormatException e) {
+                            System.err.println("Error: --parallel requires a number");
+                            return false;
+                        }
+                    } else {
+                        System.err.println("Error: --parallel requires a number (1-8)");
+                        printUsage();
+                        return false;
+                    }
+                    break;
                 case "--help":
                 case "-h":
                     printUsage();
@@ -226,6 +250,7 @@ public class AnalyzeCli {
         System.out.println("Options:");
         System.out.println("  --dir <path>           Analyze specific directory (overrides config)");
         System.out.println("  --provider <name>      Use 'claude' or 'gemini' (overrides config)");
+        System.out.println("  --parallel <n>         Run n parallel analyses (1-8, default: 1)");
         System.out.println("  --dry-run              Show what would be analyzed without calling API");
         System.out.println("  --force                Re-analyze even if cached");
         System.out.println("  --quiet, -q            Minimal output");
@@ -245,6 +270,7 @@ public class AnalyzeCli {
         System.out.println("PhotoStat CLI - Batch Image Analysis");
         System.out.println("=====================================");
         System.out.println("AI Provider: " + imageAnalysisService.getProviderName());
+        System.out.println("Parallel:    " + parallelThreads + " thread" + (parallelThreads > 1 ? "s" : ""));
         System.out.println("Config: " + configService.getConfigPath());
     }
 
@@ -328,9 +354,9 @@ public class AnalyzeCli {
         AtomicInteger failed = new AtomicInteger(0);
         AtomicInteger current = new AtomicInteger(0);
 
-        // Token usage tracking for cost estimation
-        long totalInputTokens = 0;
-        long totalOutputTokens = 0;
+        // Token usage tracking for cost estimation (thread-safe)
+        AtomicLong totalInputTokens = new AtomicLong(0);
+        AtomicLong totalOutputTokens = new AtomicLong(0);
 
         String provider = configService.getAiProvider();
         String model = "gemini".equalsIgnoreCase(provider) ?
@@ -338,73 +364,18 @@ public class AnalyzeCli {
 
         if (!quiet) {
             System.out.println("\nStarting analysis of " + total + " images using " +
-                    imageAnalysisService.getProviderName() + " (" + model + ")...\n");
+                    imageAnalysisService.getProviderName() + " (" + model + ")" +
+                    (parallelThreads > 1 ? " with " + parallelThreads + " parallel threads" : "") + "...\n");
         }
 
         long startTime = System.currentTimeMillis();
 
-        for (File file : files) {
-            current.incrementAndGet();
-            String filePath = file.getAbsolutePath();
-
-            if (showProgress) {
-                String progress = String.format("[%d/%d] ", current.get(), total);
-                System.out.print(progress + "Analyzing: " + file.getName() + "... ");
-                System.out.flush();
-            }
-
-            try {
-                // Run analysis
-                ImageAnalysisService.AnalysisResult result = imageAnalysisService.analyzeImage(filePath);
-
-                // Accumulate token usage
-                totalInputTokens += result.getInputTokens();
-                totalOutputTokens += result.getOutputTokens();
-
-                if (result.hasError()) {
-                    failed.incrementAndGet();
-                    if (showProgress) {
-                        System.out.println("FAILED: " + result.getError());
-                    }
-                    continue;
-                }
-
-                // Get or create metadata
-                ImageMetadata metadata = getOrCreateMetadata(filePath);
-
-                // Update metadata with analysis results
-                if (result.getTags() != null && !result.getTags().isEmpty()) {
-                    metadata.setTags(result.getTags());
-                }
-                if (result.getPersons() != null && !result.getPersons().isEmpty()) {
-                    metadata.setPersons(result.getPersons());
-                }
-                if (result.getPlace() != null && !result.getPlace().isEmpty()) {
-                    metadata.setPlace(result.getPlace());
-                }
-                if (result.getRating() != null && !result.getRating().isEmpty()) {
-                    metadata.setRating(result.getRating());
-                }
-
-                // Save to OpenSearch
-                openSearchService.updateDocument(metadata);
-
-                // Save to sidecar
-                sidecarService.writeSidecar(metadata);
-
-                success.incrementAndGet();
-
-                if (showProgress) {
-                    System.out.println("OK (tags: " + result.getTags().size() +
-                            ", rating: " + result.getRating() + ")");
-                }
-
-            } catch (Exception e) {
-                failed.incrementAndGet();
-                if (showProgress) {
-                    System.out.println("ERROR: " + e.getMessage());
-                }
-            }
+        if (parallelThreads > 1) {
+            // Parallel processing
+            runParallelAnalysis(files, total, success, failed, current, totalInputTokens, totalOutputTokens);
+        } else {
+            // Sequential processing (original behavior)
+            runSequentialAnalysis(files, total, success, failed, current, totalInputTokens, totalOutputTokens);
         }
 
         long elapsed = System.currentTimeMillis() - startTime;
@@ -423,21 +394,178 @@ public class AnalyzeCli {
         }
 
         // Display token usage and cost estimate (for Gemini)
-        if (totalInputTokens > 0 || totalOutputTokens > 0) {
+        if (totalInputTokens.get() > 0 || totalOutputTokens.get() > 0) {
             System.out.println();
             System.out.println("Token Usage:");
-            System.out.printf("  Input:   %,d tokens%n", totalInputTokens);
-            System.out.printf("  Output:  %,d tokens%n", totalOutputTokens);
-            System.out.printf("  Total:   %,d tokens%n", totalInputTokens + totalOutputTokens);
+            System.out.printf("  Input:   %,d tokens%n", totalInputTokens.get());
+            System.out.printf("  Output:  %,d tokens%n", totalOutputTokens.get());
+            System.out.printf("  Total:   %,d tokens%n", totalInputTokens.get() + totalOutputTokens.get());
 
             // Estimate cost based on model
-            double estimatedCost = estimateCost(model, totalInputTokens, totalOutputTokens);
+            double estimatedCost = estimateCost(model, totalInputTokens.get(), totalOutputTokens.get());
             if (estimatedCost > 0) {
                 System.out.printf("Est. Cost: $%.4f%n", estimatedCost);
             }
         }
 
         return failed.get() > 0 ? 1 : 0;
+    }
+
+    /**
+     * Run sequential (single-threaded) analysis.
+     */
+    private void runSequentialAnalysis(List<File> files, int total,
+                                        AtomicInteger success, AtomicInteger failed, AtomicInteger current,
+                                        AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
+        for (File file : files) {
+            current.incrementAndGet();
+            processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens);
+        }
+    }
+
+    /**
+     * Run parallel (multi-threaded) analysis using ExecutorService.
+     */
+    private void runParallelAnalysis(List<File> files, int total,
+                                      AtomicInteger success, AtomicInteger failed, AtomicInteger current,
+                                      AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
+        ExecutorService executor = Executors.newFixedThreadPool(parallelThreads);
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (File file : files) {
+            futures.add(executor.submit(() -> {
+                current.incrementAndGet();
+                processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens);
+            }));
+        }
+
+        // Wait for all tasks to complete
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                // Errors are already handled in processFile
+            }
+        }
+
+        executor.shutdown();
+        try {
+            executor.awaitTermination(1, TimeUnit.HOURS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Process a single file with retry logic for rate limit errors.
+     */
+    private void processFile(File file, int total,
+                              AtomicInteger success, AtomicInteger failed, AtomicInteger current,
+                              AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
+        String filePath = file.getAbsolutePath();
+
+        if (showProgress) {
+            synchronized (System.out) {
+                String progress = String.format("[%d/%d] ", current.get(), total);
+                System.out.print(progress + "Analyzing: " + file.getName() + "... ");
+                System.out.flush();
+            }
+        }
+
+        try {
+            // Run analysis with retry logic
+            ImageAnalysisService.AnalysisResult result = analyzeWithRetry(filePath);
+
+            // Accumulate token usage
+            totalInputTokens.addAndGet(result.getInputTokens());
+            totalOutputTokens.addAndGet(result.getOutputTokens());
+
+            if (result.hasError()) {
+                failed.incrementAndGet();
+                if (showProgress) {
+                    synchronized (System.out) {
+                        System.out.println("FAILED: " + result.getError());
+                    }
+                }
+                return;
+            }
+
+            // Get or create metadata
+            ImageMetadata metadata = getOrCreateMetadata(filePath);
+
+            // Update metadata with analysis results
+            if (result.getTags() != null && !result.getTags().isEmpty()) {
+                metadata.setTags(result.getTags());
+            }
+            if (result.getPersons() != null && !result.getPersons().isEmpty()) {
+                metadata.setPersons(result.getPersons());
+            }
+            if (result.getPlace() != null && !result.getPlace().isEmpty()) {
+                metadata.setPlace(result.getPlace());
+            }
+            if (result.getRating() != null && !result.getRating().isEmpty()) {
+                metadata.setRating(result.getRating());
+            }
+
+            // Save to OpenSearch (synchronized to avoid conflicts)
+            synchronized (openSearchService) {
+                openSearchService.updateDocument(metadata);
+            }
+
+            // Save to sidecar
+            sidecarService.writeSidecar(metadata);
+
+            success.incrementAndGet();
+
+            if (showProgress) {
+                synchronized (System.out) {
+                    System.out.println("OK (tags: " + result.getTags().size() +
+                            ", rating: " + result.getRating() + ")");
+                }
+            }
+
+        } catch (Exception e) {
+            failed.incrementAndGet();
+            if (showProgress) {
+                synchronized (System.out) {
+                    System.out.println("ERROR: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Analyze an image with retry logic for rate limit (429) errors.
+     */
+    private ImageAnalysisService.AnalysisResult analyzeWithRetry(String filePath) {
+        ImageAnalysisService.AnalysisResult result = null;
+        long delayMs = INITIAL_RETRY_DELAY_MS;
+
+        for (int attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            result = imageAnalysisService.analyzeImage(filePath);
+
+            // Check if it's a rate limit error (429)
+            if (result.hasError() && result.getError() != null &&
+                    (result.getError().contains("429") || result.getError().toLowerCase().contains("rate limit"))) {
+
+                if (attempt < MAX_RETRIES) {
+                    // Wait with exponential backoff
+                    try {
+                        Thread.sleep(delayMs);
+                        delayMs *= 2;  // Exponential backoff
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return result;
+                    }
+                    continue;
+                }
+            }
+
+            // Success or non-retryable error
+            break;
+        }
+
+        return result;
     }
 
     /**
