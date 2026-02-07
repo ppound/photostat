@@ -74,13 +74,13 @@ Or download from [opensearch.org](https://opensearch.org/downloads.html).
 
 Download the latest release from **[GitHub Releases](https://github.com/ppound/photostat/releases)**:
 ```
-photostat-java-1.6.0-executable.jar
+photostat-java-1.6.1-executable.jar
 ```
 
 ### 4. Launch
 
 ```bash
-java -jar photostat-java-1.6.0-executable.jar
+java -jar photostat-java-1.6.1-executable.jar
 ```
 
 **Apple Silicon Mac (M1/M2/M3):** See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-apple-silicon-mac-no-suitable-pipeline-found-or-graphics-errors).
@@ -112,16 +112,16 @@ PhotoStat includes a CLI for batch image analysis:
 
 ```bash
 # Analyze all configured directories
-java -jar photostat-java-1.6.0-executable.jar --analyze
+java -jar photostat-java-1.6.1-executable.jar --analyze
 
 # Preview what would be analyzed
-java -jar photostat-java-1.6.0-executable.jar --analyze --dry-run
+java -jar photostat-java-1.6.1-executable.jar --analyze --dry-run
 
 # Run with 4 parallel threads
-java -jar photostat-java-1.6.0-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.6.1-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
-java -jar photostat-java-1.6.0-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.6.1-executable.jar --analyze --provider gemini
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
