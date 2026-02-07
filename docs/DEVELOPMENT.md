@@ -1,0 +1,253 @@
+# Development Guide
+
+This guide covers building PhotoStat from source and understanding the project structure.
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Building from Source](#building-from-source)
+- [Running from Source](#running-from-source)
+- [Running Tests](#running-tests)
+- [Project Structure](#project-structure)
+- [Technology Stack](#technology-stack)
+- [Architecture Overview](#architecture-overview)
+
+---
+
+## Prerequisites
+
+| Requirement | Version |
+|-------------|---------|
+| Java JDK | 21 or later |
+| Maven | 3.6 or later |
+| Git | Any recent version |
+| OpenSearch | 2.x (for testing) |
+
+---
+
+## Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/ppound/photostat.git
+cd photostat-java
+
+# Build the project
+mvn clean package
+
+# The executable JAR will be at:
+# target/photostat-java-1.6.0-executable.jar
+```
+
+### Build Output
+
+| File | Description |
+|------|-------------|
+| `target/photostat-java-1.6.0.jar` | Main JAR (requires external JavaFX) |
+| `target/photostat-java-1.6.0-executable.jar` | Fat JAR with all dependencies |
+
+---
+
+## Running from Source
+
+```bash
+# Run with Maven JavaFX plugin
+mvn javafx:run
+```
+
+Or run the main class directly:
+```bash
+mvn compile exec:java -Dexec.mainClass="com.photostat.App"
+```
+
+---
+
+## Running Tests
+
+```bash
+# Run all tests
+mvn test
+
+# Run a specific test class
+mvn test -Dtest=ExifServiceTest
+
+# Run with coverage report
+mvn test jacoco:report
+```
+
+---
+
+## Project Structure
+
+```
+photostat-java/
+├── pom.xml                              # Maven configuration
+├── README.md                            # Main documentation
+├── docs/
+│   ├── USER_GUIDE.md                    # User guide
+│   ├── AI_ANALYSIS.md                   # AI analysis documentation
+│   ├── CONFIGURATION.md                 # Configuration reference
+│   ├── TROUBLESHOOTING.md               # Troubleshooting guide
+│   ├── DEVELOPMENT.md                   # This file
+│   └── screenshots/                     # Documentation screenshots
+├── src/main/java/com/photostat/
+│   ├── App.java                         # Main application entry (JavaFX)
+│   ├── Launcher.java                    # JAR launcher (handles CLI vs GUI)
+│   ├── cli/
+│   │   └── AnalyzeCli.java              # Command-line batch analysis
+│   ├── models/
+│   │   └── ImageMetadata.java           # Image metadata model
+│   ├── services/
+│   │   ├── ConfigService.java           # Configuration management
+│   │   ├── ExifService.java             # EXIF metadata extraction
+│   │   ├── FileOperationsService.java   # Copy, move, delete operations
+│   │   ├── ImageAnalysisService.java    # AI image analysis (Claude/Gemini)
+│   │   ├── OpenSearchService.java       # OpenSearch client
+│   │   ├── IndexerService.java          # Background indexing
+│   │   ├── ThumbnailService.java        # Thumbnail generation & caching
+│   │   ├── SidecarService.java          # Sidecar file management
+│   │   └── LoggingService.java          # File-based logging
+│   └── ui/
+│       ├── MainWindow.java              # Main application window
+│       ├── SearchPanel.java             # Search controls
+│       ├── ResultsPanel.java            # Results table
+│       ├── FacetsPanel.java             # Faceted navigation
+│       ├── IndexPanel.java              # Directory management
+│       ├── ChartsPanel.java             # Charts and visualizations
+│       ├── DetailPanel.java             # Image detail view
+│       ├── DirectoryBrowserDialog.java  # Directory browser
+│       ├── SettingsDialog.java          # Settings dialog
+│       └── MultiSelectAutoComplete.java # Chip-style multi-select component
+└── src/main/resources/
+    ├── styles.css                       # JavaFX stylesheet
+    └── application.properties           # Default configuration
+```
+
+---
+
+## Technology Stack
+
+| Component | Technology | Version |
+|-----------|------------|---------|
+| GUI Framework | JavaFX | 21 |
+| Search Engine | OpenSearch | 2.x |
+| OpenSearch Client | opensearch-java | 2.10.0 |
+| AI Analysis | Claude API (Anthropic) | - |
+| AI Analysis | Gemini API (Google) | 1.5.0 |
+| EXIF Extraction | metadata-extractor | 2.19.0 |
+| HTTP Client | Apache HttpClient 5 | 5.3 |
+| JSON Processing | Jackson | 2.17.0 |
+| Build System | Maven | 3.6+ |
+| Logging | SLF4J | 2.0.12 |
+
+---
+
+## Architecture Overview
+
+### Entry Points
+
+- **`Launcher.java`** - Main entry point for the executable JAR
+  - Detects CLI mode (`--analyze`, `--help`) vs GUI mode
+  - Routes to `AnalyzeCli` or `App` accordingly
+
+- **`App.java`** - JavaFX application entry
+  - Initializes the GUI
+  - Creates the main window
+
+- **`AnalyzeCli.java`** - Command-line interface
+  - Parses CLI arguments
+  - Runs batch analysis without GUI
+
+### Services (Singleton Pattern)
+
+All services use the singleton pattern with `getInstance()`:
+
+- **`ConfigService`** - Loads/saves configuration from JSON
+- **`OpenSearchService`** - Manages OpenSearch connection and queries
+- **`ExifService`** - Extracts EXIF metadata from images
+- **`IndexerService`** - Background indexing with progress reporting
+- **`ThumbnailService`** - Generates and caches thumbnails
+- **`SidecarService`** - Manages `.photostat.json` sidecar files
+- **`ImageAnalysisService`** - AI image analysis (Claude/Gemini)
+- **`FileOperationsService`** - Copy/move/delete operations
+- **`LoggingService`** - File-based logging
+
+### UI Components
+
+- **`MainWindow`** - Main window with TabPane (Search, Index, Charts)
+- **`SearchPanel`** - Search input and filters
+- **`ResultsPanel`** - TableView with thumbnails
+- **`FacetsPanel`** - Faceted navigation sidebar
+- **`DetailPanel`** - Image preview and metadata
+- **`IndexPanel`** - Directory management and indexing controls
+- **`ChartsPanel`** - Visualization charts
+
+### Data Flow
+
+1. **Indexing:**
+   ```
+   IndexPanel → IndexerService → ExifService → OpenSearchService
+                                 ↓
+                           SidecarService (read existing metadata)
+   ```
+
+2. **Search:**
+   ```
+   SearchPanel → OpenSearchService → ResultsPanel
+                                   → FacetsPanel
+   ```
+
+3. **AI Analysis:**
+   ```
+   ResultsPanel → ImageAnalysisService → Claude/Gemini API
+                                       → SidecarService (save)
+                                       → OpenSearchService (update)
+   ```
+
+### Threading Model
+
+- **JavaFX Application Thread** - All UI updates
+- **Background Tasks** - Indexing, analysis, thumbnail generation
+- **ExecutorService** - Parallel CLI analysis
+
+### Configuration
+
+Configuration is stored in `~/.photostat/config.json` and managed by `ConfigService`. Changes made in `SettingsDialog` are persisted to this file.
+
+---
+
+## Adding New Features
+
+### Adding a New Service
+
+1. Create the service class in `src/main/java/com/photostat/services/`
+2. Implement singleton pattern:
+   ```java
+   public class MyService {
+       private static MyService instance;
+
+       public static synchronized MyService getInstance() {
+           if (instance == null) {
+               instance = new MyService();
+           }
+           return instance;
+       }
+
+       private MyService() {
+           // Initialize
+       }
+   }
+   ```
+3. Add configuration options to `ConfigService` if needed
+
+### Adding a New UI Panel
+
+1. Create the panel class in `src/main/java/com/photostat/ui/`
+2. Extend `VBox`, `HBox`, or `BorderPane` as appropriate
+3. Add to `MainWindow` or the relevant parent component
+
+### Adding a New CLI Command
+
+1. Add argument parsing in `AnalyzeCli.parseArgs()`
+2. Implement the command logic
+3. Update help text
