@@ -328,9 +328,17 @@ public class AnalyzeCli {
         AtomicInteger failed = new AtomicInteger(0);
         AtomicInteger current = new AtomicInteger(0);
 
+        // Token usage tracking for cost estimation
+        long totalInputTokens = 0;
+        long totalOutputTokens = 0;
+
+        String provider = configService.getAiProvider();
+        String model = "gemini".equalsIgnoreCase(provider) ?
+                configService.getGeminiModel() : configService.getClaudeModel();
+
         if (!quiet) {
             System.out.println("\nStarting analysis of " + total + " images using " +
-                    imageAnalysisService.getProviderName() + "...\n");
+                    imageAnalysisService.getProviderName() + " (" + model + ")...\n");
         }
 
         long startTime = System.currentTimeMillis();
@@ -348,6 +356,10 @@ public class AnalyzeCli {
             try {
                 // Run analysis
                 ImageAnalysisService.AnalysisResult result = imageAnalysisService.analyzeImage(filePath);
+
+                // Accumulate token usage
+                totalInputTokens += result.getInputTokens();
+                totalOutputTokens += result.getOutputTokens();
 
                 if (result.hasError()) {
                     failed.incrementAndGet();
@@ -410,7 +422,59 @@ public class AnalyzeCli {
             System.out.printf("Avg:       %.1f seconds/image%n", (elapsed / 1000.0) / success.get());
         }
 
+        // Display token usage and cost estimate (for Gemini)
+        if (totalInputTokens > 0 || totalOutputTokens > 0) {
+            System.out.println();
+            System.out.println("Token Usage:");
+            System.out.printf("  Input:   %,d tokens%n", totalInputTokens);
+            System.out.printf("  Output:  %,d tokens%n", totalOutputTokens);
+            System.out.printf("  Total:   %,d tokens%n", totalInputTokens + totalOutputTokens);
+
+            // Estimate cost based on model
+            double estimatedCost = estimateCost(model, totalInputTokens, totalOutputTokens);
+            if (estimatedCost > 0) {
+                System.out.printf("Est. Cost: $%.4f%n", estimatedCost);
+            }
+        }
+
         return failed.get() > 0 ? 1 : 0;
+    }
+
+    /**
+     * Estimate cost based on model and token usage.
+     * Prices are approximate and may change.
+     */
+    private double estimateCost(String model, long inputTokens, long outputTokens) {
+        // Gemini pricing (per 1M tokens) - approximate as of early 2025
+        double inputPricePer1M;
+        double outputPricePer1M;
+
+        String modelLower = model.toLowerCase();
+        if (modelLower.contains("gemini-2.0-flash") || modelLower.contains("gemini-2.0-flash-exp")) {
+            // Gemini 2.0 Flash - very affordable
+            inputPricePer1M = 0.10;
+            outputPricePer1M = 0.40;
+        } else if (modelLower.contains("gemini-1.5-flash")) {
+            // Gemini 1.5 Flash
+            inputPricePer1M = 0.075;
+            outputPricePer1M = 0.30;
+        } else if (modelLower.contains("gemini-1.5-pro")) {
+            // Gemini 1.5 Pro
+            inputPricePer1M = 1.25;
+            outputPricePer1M = 5.00;
+        } else if (modelLower.contains("claude")) {
+            // Claude models - we don't have token counts for Claude currently
+            return 0;
+        } else {
+            // Unknown model - use conservative estimate
+            inputPricePer1M = 0.10;
+            outputPricePer1M = 0.40;
+        }
+
+        double inputCost = (inputTokens / 1_000_000.0) * inputPricePer1M;
+        double outputCost = (outputTokens / 1_000_000.0) * outputPricePer1M;
+
+        return inputCost + outputCost;
     }
 
     private ImageMetadata getOrCreateMetadata(String filePath) {

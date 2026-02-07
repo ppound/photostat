@@ -77,6 +77,10 @@ public class ImageAnalysisService {
         private String rating;
         private String error;
 
+        // Token usage tracking (for cost estimation)
+        private int inputTokens = 0;
+        private int outputTokens = 0;
+
         public List<String> getTags() { return tags; }
         public void setTags(List<String> tags) { this.tags = tags; }
         public List<String> getPersons() { return persons; }
@@ -88,6 +92,12 @@ public class ImageAnalysisService {
         public String getError() { return error; }
         public void setError(String error) { this.error = error; }
         public boolean hasError() { return error != null && !error.isEmpty(); }
+
+        public int getInputTokens() { return inputTokens; }
+        public void setInputTokens(int inputTokens) { this.inputTokens = inputTokens; }
+        public int getOutputTokens() { return outputTokens; }
+        public void setOutputTokens(int outputTokens) { this.outputTokens = outputTokens; }
+        public int getTotalTokens() { return inputTokens + outputTokens; }
     }
 
     /**
@@ -225,6 +235,19 @@ public class ImageAnalysisService {
 
             // Generate content
             GenerateContentResponse response = client.models.generateContent(model, content, null);
+
+            // Extract token usage if available
+            if (response.usageMetadata().isPresent()) {
+                var usage = response.usageMetadata().get();
+                if (usage.promptTokenCount().isPresent()) {
+                    result.setInputTokens(usage.promptTokenCount().get());
+                }
+                if (usage.candidatesTokenCount().isPresent()) {
+                    result.setOutputTokens(usage.candidatesTokenCount().get());
+                }
+                logger.debug("ImageAnalysisService", "Gemini tokens - input: " + result.getInputTokens() +
+                        ", output: " + result.getOutputTokens());
+            }
 
             // Get response text
             String responseText = response.text();
