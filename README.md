@@ -731,6 +731,7 @@ java -jar photostat-java-1.6.0-executable.jar --analyze --dry-run
 | `--analyze` | Run batch analysis mode |
 | `--dir <path>` | Analyze specific directory (overrides config) |
 | `--provider <name>` | Use 'claude' or 'gemini' (overrides config) |
+| `--parallel <n>` | Run n parallel analyses (1-8, default: 1) |
 | `--dry-run` | Show what would be analyzed without making API calls |
 | `--force` | Re-analyze all images, ignoring cache |
 | `--quiet, -q` | Minimal output |
@@ -751,6 +752,9 @@ java -jar photostat-java-1.6.0-executable.jar --analyze --force
 
 # Quiet mode for scripts
 java -jar photostat-java-1.6.0-executable.jar --analyze --quiet
+
+# Run with 4 parallel threads for faster processing
+java -jar photostat-java-1.6.0-executable.jar --analyze --parallel 4
 ```
 
 **Running in Background (Windows PowerShell):**
@@ -782,12 +786,13 @@ PhotoStat CLI - Batch Image Analysis
 =====================================
 AI Provider: Gemini
 Config: /home/user/.photostat/config.json
+Parallel Threads: 4
 
 Scanning directories for images...
 Found 150 images, 142 supported for analysis.
 Skipping 98 cached images, 44 to analyze.
 
-Starting analysis of 44 images using Gemini...
+Starting analysis of 44 images using Gemini (4 threads)...
 
 [1/44] Analyzing: IMG_1234.jpg... OK (tags: 8, rating: ****)
 [2/44] Analyzing: IMG_1235.jpg... OK (tags: 5, rating: ***)
@@ -799,9 +804,27 @@ Analysis Complete
 Total:     44
 Success:   43
 Failed:    1
-Time:      3.2 minutes
-Avg:       4.5 seconds/image
+Time:      1.2 minutes
+Avg:       1.6 seconds/image
+
+Token Usage:
+  Input:   125,432 tokens
+  Output:  8,521 tokens
+  Total:   133,953 tokens
+Est. Cost: $0.0159
 ```
+
+**Token Usage and Cost Tracking (Gemini only):**
+
+The CLI displays token usage and estimated costs for Gemini API calls. This helps you monitor API usage and costs during batch processing. Costs are estimated based on current Gemini pricing:
+
+| Model | Input (per 1M tokens) | Output (per 1M tokens) |
+|-------|----------------------|------------------------|
+| gemini-2.0-flash | $0.10 | $0.40 |
+| gemini-1.5-flash | $0.075 | $0.30 |
+| gemini-1.5-pro | $1.25 | $5.00 |
+
+Note: Claude API does not provide token usage in responses, so cost tracking is only available for Gemini.
 
 ### Managing Files
 
