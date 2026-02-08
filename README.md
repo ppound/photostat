@@ -60,12 +60,29 @@ After years of photography and using various software like Lightroom, Capture On
 ### 2. Install OpenSearch
 
 **Docker (Recommended):**
+
+Pull the OpenSearch image:
 ```bash
+docker pull opensearchproject/opensearch:2.11.0
+```
+
+Create a volume for persistent storage and run the container:
+```bash
+docker volume create opensearch-data
+
 docker run -d --name opensearch \
   -p 9200:9200 \
+  -v opensearch-data:/usr/share/opensearch/data \
   -e "discovery.type=single-node" \
   -e "DISABLE_SECURITY_PLUGIN=true" \
   opensearchproject/opensearch:2.11.0
+```
+
+This ensures your indexed data survives container restarts and removals. To manage the container:
+```bash
+docker stop opensearch     # Stop the container
+docker start opensearch    # Start it again (data is preserved)
+docker rm opensearch       # Remove the container (volume keeps data)
 ```
 
 Or download from [opensearch.org](https://opensearch.org/downloads.html).
