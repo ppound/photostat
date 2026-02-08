@@ -356,7 +356,47 @@ PhotoStat caches generated thumbnails to disk for faster loading on subsequent v
    | Max Cache Size | Maximum disk space for cache (100-5000 MB) |
 
 4. View cache statistics (file count and size)
-5. Click **Clear Cache** to remove all cached thumbnails
+5. Click **Refresh Stats** to update the cache statistics
+6. Click **Clear Cache** to remove all cached thumbnails
+7. Click **Pre-cache Thumbnails** to generate thumbnails in advance
+
+**Pre-caching Thumbnails:**
+
+The Pre-cache Thumbnails feature generates thumbnails for all indexed images:
+
+1. Click **Pre-cache Thumbnails** in the Cache settings
+2. A progress dialog shows the caching progress
+3. Statistics display: cached, skipped (already cached or unsupported), and failed counts
+4. Caching stops automatically when the cache size limit is reached
+5. Click **Cancel** to stop early, or **Close** when complete
+
+Pre-caching improves the GUI experience by having thumbnails ready before you browse.
+
+**CLI Pre-caching:**
+
+You can also pre-cache thumbnails from the command line:
+
+```bash
+java -jar photostat.jar --cache-thumbnails
+```
+
+Options:
+- `--parallel N` or `-p N` - Number of parallel threads (1-16, default: 4)
+- `--dry-run` - Show what would be cached without actually caching
+- `--quiet` or `-q` - Minimal output
+- `--help` - Show help message
+
+Examples:
+```bash
+# Use default 4 threads
+java -jar photostat.jar --cache-thumbnails
+
+# Use 8 threads for faster processing
+java -jar photostat.jar --cache-thumbnails --parallel 8
+
+# Use 2 threads with minimal output
+java -jar photostat.jar --cache-thumbnails -p 2 --quiet
+```
 
 **Cache Location:** `~/.photostat/cache/`
 

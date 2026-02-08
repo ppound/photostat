@@ -1,6 +1,7 @@
 package com.photostat;
 
 import com.photostat.cli.AnalyzeCli;
+import com.photostat.cli.ThumbnailCacheCli;
 
 /**
  * Launcher class for creating executable JAR.
@@ -28,12 +29,13 @@ public class Launcher {
      */
     private static boolean isCliMode(String[] args) {
         for (String arg : args) {
-            if ("--analyze".equals(arg) || "--help".equals(arg) || "-h".equals(arg)) {
-                // --help should show CLI help if it's the only arg or paired with --analyze
+            if ("--analyze".equals(arg) || "--cache-thumbnails".equals(arg) ||
+                    "--help".equals(arg) || "-h".equals(arg)) {
+                // --help should show CLI help if it's the only arg or paired with a CLI command
                 if ("--help".equals(arg) || "-h".equals(arg)) {
-                    // Check if --analyze is also present
+                    // Check if a CLI command is also present
                     for (String a : args) {
-                        if ("--analyze".equals(a)) {
+                        if ("--analyze".equals(a) || "--cache-thumbnails".equals(a)) {
                             return true;
                         }
                     }
@@ -43,18 +45,35 @@ public class Launcher {
                         System.exit(0);
                     }
                 }
-                return "--analyze".equals(arg);
+                return "--analyze".equals(arg) || "--cache-thumbnails".equals(arg);
             }
         }
         return false;
     }
 
     /**
-     * Run the CLI analyzer.
+     * Run the appropriate CLI based on the command.
      */
     private static void runCli(String[] args) {
-        AnalyzeCli cli = new AnalyzeCli();
-        int exitCode = cli.run(args);
+        int exitCode;
+
+        // Determine which CLI to run
+        boolean isCacheThumbnails = false;
+        for (String arg : args) {
+            if ("--cache-thumbnails".equals(arg)) {
+                isCacheThumbnails = true;
+                break;
+            }
+        }
+
+        if (isCacheThumbnails) {
+            ThumbnailCacheCli cli = new ThumbnailCacheCli();
+            exitCode = cli.run(args);
+        } else {
+            AnalyzeCli cli = new AnalyzeCli();
+            exitCode = cli.run(args);
+        }
+
         System.exit(exitCode);
     }
 
@@ -65,11 +84,13 @@ public class Launcher {
         System.out.println("PhotoStat - Photo Library Manager");
         System.out.println();
         System.out.println("Usage:");
-        System.out.println("  java -jar photostat.jar              Launch GUI application");
-        System.out.println("  java -jar photostat.jar --analyze    Run CLI batch analysis");
-        System.out.println("  java -jar photostat.jar --help       Show this help");
+        System.out.println("  java -jar photostat.jar                    Launch GUI application");
+        System.out.println("  java -jar photostat.jar --analyze          Run CLI batch analysis");
+        System.out.println("  java -jar photostat.jar --cache-thumbnails Pre-generate thumbnail cache");
+        System.out.println("  java -jar photostat.jar --help             Show this help");
         System.out.println();
-        System.out.println("For CLI analysis options:");
+        System.out.println("For command-specific options:");
         System.out.println("  java -jar photostat.jar --analyze --help");
+        System.out.println("  java -jar photostat.jar --cache-thumbnails --help");
     }
 }
