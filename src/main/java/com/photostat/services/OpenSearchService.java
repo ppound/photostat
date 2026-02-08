@@ -666,6 +666,46 @@ public class OpenSearchService {
     }
 
     /**
+     * Returns all indexed file paths using search_after pagination.
+     * Unlike search(), this has no 10,000 result limit and skips aggregations.
+     */
+    public List<String> searchAllFilePaths(int batchSize) throws IOException {
+        String indexName = configService.getIndexName();
+        List<String> allPaths = new ArrayList<>();
+        List<String> searchAfter = null;
+
+        while (true) {
+            SearchRequest.Builder builder = new SearchRequest.Builder()
+                    .index(indexName)
+                    .query(Query.of(q -> q.matchAll(m -> m)))
+                    .size(batchSize)
+                    .sort(s -> s.field(f -> f.field("file_path").order(SortOrder.Asc)));
+
+            if (searchAfter != null) {
+                builder.searchAfter(searchAfter);
+            }
+
+            SearchResponse<ImageMetadata> response = client.search(builder.build(), ImageMetadata.class);
+            List<Hit<ImageMetadata>> hits = response.hits().hits();
+
+            if (hits.isEmpty()) {
+                break;
+            }
+
+            for (Hit<ImageMetadata> hit : hits) {
+                if (hit.source() != null) {
+                    allPaths.add(hit.source().getFilePath());
+                }
+            }
+
+            // Use the sort values from the last hit for the next page
+            searchAfter = hits.get(hits.size() - 1).sort();
+        }
+
+        return allPaths;
+    }
+
+    /**
      * Search result container class.
      */
     public static class SearchResult {

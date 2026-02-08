@@ -1,6 +1,5 @@
 package com.photostat.cli;
 
-import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
@@ -8,9 +7,7 @@ import javafx.application.Platform;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,16 +28,13 @@ public class ThumbnailCacheCli {
     private boolean dryRun = false;
     private int parallelThreads = 4;
 
-    // Supported image extensions for thumbnails
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif",
-            ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf", ".pef"
-    );
+    private final Set<String> supportedExtensions;
 
     public ThumbnailCacheCli() {
         this.configService = ConfigService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
         this.thumbnailService = ThumbnailService.getInstance();
+        this.supportedExtensions = new HashSet<>(configService.getFileExtensions());
     }
 
     public int run(String[] args) {
@@ -112,6 +106,19 @@ public class ThumbnailCacheCli {
                 return 0;
             }
 
+            // Fetch all file paths from OpenSearch using search_after pagination
+            if (!quiet) {
+                System.out.println("Fetching file paths from OpenSearch...");
+            }
+            List<String> allFilePaths = openSearchService.searchAllFilePaths(1000);
+            final long totalDocs = allFilePaths.size();
+
+            if (!quiet) {
+                System.out.println("Found " + totalDocs + " file paths.");
+                System.out.println("Generating thumbnails with " + parallelThreads + " threads...");
+                System.out.println();
+            }
+
             // Create thread pool for parallel thumbnail generation
             ExecutorService executor = Executors.newFixedThreadPool(parallelThreads);
 
@@ -123,102 +130,68 @@ public class ThumbnailCacheCli {
             AtomicBoolean cacheFull = new AtomicBoolean(false);
             AtomicLong lastProgressUpdate = new AtomicLong(0);
 
-            int batchSize = 1000;  // Large batch to reduce OpenSearch queries
             long startTime = System.currentTimeMillis();
 
-            if (!quiet) {
-                System.out.println("Generating thumbnails with " + parallelThreads + " threads...");
-                System.out.println();
+            // Process all file paths in parallel
+            List<Future<?>> futures = new ArrayList<>();
+
+            for (String filePath : allFilePaths) {
+                if (cacheFull.get()) break;
+
+                futures.add(executor.submit(() -> {
+                    if (cacheFull.get()) return;
+
+                    int currentProcessed = processed.incrementAndGet();
+
+                    // Check if file exists
+                    if (!Files.exists(Path.of(filePath))) {
+                        skipped.incrementAndGet();
+                        return;
+                    }
+
+                    // Check if extension is supported
+                    String ext = getFileExtension(filePath).toLowerCase();
+                    if (!supportedExtensions.contains(ext)) {
+                        skipped.incrementAndGet();
+                        return;
+                    }
+
+                    // Check if already cached
+                    if (isThumbnailCached(filePath)) {
+                        skipped.incrementAndGet();
+                        updateProgress(currentProcessed, totalDocs, filePath, "Skipped",
+                                lastProgressUpdate, cached.get(), skipped.get(), failed.get());
+                        return;
+                    }
+
+                    // Generate thumbnail
+                    try {
+                        updateProgress(currentProcessed, totalDocs, filePath, "Caching",
+                                lastProgressUpdate, cached.get(), skipped.get(), failed.get());
+
+                        thumbnailService.getThumbnail(filePath);
+                        int newCached = cached.incrementAndGet();
+
+                        // Periodically check cache size
+                        if (newCached % 20 == 0) {
+                            long cacheSize = thumbnailService.getDiskCacheSize();
+                            if (cacheSize >= maxCacheSizeBytes * 0.95) {
+                                cacheFull.set(true);
+                            }
+                        }
+
+                    } catch (Exception e) {
+                        failed.incrementAndGet();
+                    }
+                }));
             }
 
-            // Fetch batches from OpenSearch sequentially, process thumbnails in parallel
-            for (int offset = 0; offset < totalDocuments && !cacheFull.get(); offset += batchSize) {
-                // Check cache size at start of each batch
-                long currentSize = thumbnailService.getDiskCacheSize();
-                if (currentSize >= maxCacheSizeBytes * 0.95) {
-                    if (!quiet) {
-                        System.out.println("\nCache size limit reached (" + (currentSize / 1024 / 1024) + " MB).");
-                    }
-                    cacheFull.set(true);
-                    break;
-                }
-
-                // Fetch batch from OpenSearch (sequential - single request at a time)
-                OpenSearchService.SearchResult result = openSearchService.search("", null, offset, batchSize);
-                List<ImageMetadata> images = result.getResults();
-
-                if (images.isEmpty()) {
-                    break;
-                }
-
-                // Extract file paths from the batch
-                List<String> filePaths = new ArrayList<>();
-                for (ImageMetadata image : images) {
-                    filePaths.add(image.getFilePath());
-                }
-
-                // Process this batch's thumbnails in parallel
-                List<Future<?>> futures = new ArrayList<>();
-                final long totalDocs = totalDocuments;
-
-                for (String filePath : filePaths) {
-                    if (cacheFull.get()) break;
-
-                    futures.add(executor.submit(() -> {
-                        if (cacheFull.get()) return;
-
-                        int currentProcessed = processed.incrementAndGet();
-
-                        // Check if file exists
-                        if (!Files.exists(Path.of(filePath))) {
-                            skipped.incrementAndGet();
-                            return;
-                        }
-
-                        // Check if extension is supported
-                        String ext = getFileExtension(filePath).toLowerCase();
-                        if (!SUPPORTED_EXTENSIONS.contains(ext)) {
-                            skipped.incrementAndGet();
-                            return;
-                        }
-
-                        // Check if already cached
-                        if (isThumbnailCached(filePath)) {
-                            skipped.incrementAndGet();
-                            updateProgress(currentProcessed, totalDocs, filePath, "Skipped",
-                                    lastProgressUpdate, cached.get(), skipped.get(), failed.get());
-                            return;
-                        }
-
-                        // Generate thumbnail
-                        try {
-                            updateProgress(currentProcessed, totalDocs, filePath, "Caching",
-                                    lastProgressUpdate, cached.get(), skipped.get(), failed.get());
-
-                            thumbnailService.getThumbnail(filePath);
-                            int newCached = cached.incrementAndGet();
-
-                            // Periodically check cache size
-                            if (newCached % 20 == 0) {
-                                long cacheSize = thumbnailService.getDiskCacheSize();
-                                if (cacheSize >= maxCacheSizeBytes * 0.95) {
-                                    cacheFull.set(true);
-                                }
-                            }
-
-                        } catch (Exception e) {
-                            failed.incrementAndGet();
-                        }
-                    }));
-                }
-
-                // Wait for this batch to complete before fetching the next
-                for (Future<?> future : futures) {
-                    try {
-                        future.get();
-                    } catch (Exception e) {
-                        // Task failed, already counted
-                    }
+            // Wait for all tasks to complete
+            for (Future<?> future : futures) {
+                try {
+                    future.get();
+                } catch (Exception e) {
+                    // Task failed, already counted
                 }
             }
 

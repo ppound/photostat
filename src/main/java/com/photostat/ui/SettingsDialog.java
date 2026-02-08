@@ -66,6 +66,9 @@ public class SettingsDialog extends Dialog<Boolean> {
     private PasswordField geminiApiKeyField;
     private ComboBox<String> geminiModelCombo;
 
+    // Analysis prompt
+    private TextArea analysisPromptArea;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -495,7 +498,25 @@ public class SettingsDialog extends Dialog<Boolean> {
         costInfoLabel.setWrapText(true);
         costInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
 
-        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, new Separator(), costInfoLabel);
+        // Analysis Prompt section
+        TitledPane promptSection = new TitledPane();
+        promptSection.setText("Analysis Prompt");
+        promptSection.setCollapsible(false);
+
+        VBox promptContent = new VBox(10);
+        promptContent.setPadding(new Insets(10));
+
+        analysisPromptArea = new TextArea(configService.getClaudeAnalysisPrompt());
+        analysisPromptArea.setWrapText(true);
+        analysisPromptArea.setPrefRowCount(8);
+
+        Button resetPromptButton = new Button("Reset to Default");
+        resetPromptButton.setOnAction(e -> analysisPromptArea.setText(ConfigService.getDefaultAnalysisPrompt()));
+
+        promptContent.getChildren().addAll(analysisPromptArea, resetPromptButton);
+        promptSection.setContent(promptContent);
+
+        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, new Separator(), costInfoLabel, promptSection);
 
         // Wrap in ScrollPane for vertical scrolling
         ScrollPane scrollPane = new ScrollPane(pane);
@@ -708,6 +729,9 @@ public class SettingsDialog extends Dialog<Boolean> {
         if (geminiModelCombo.getValue() != null) {
             configService.setGeminiModel(geminiModelCombo.getValue());
         }
+
+        // Analysis prompt
+        configService.setClaudeAnalysisPrompt(analysisPromptArea.getText());
 
         configService.saveConfig();
     }
@@ -933,117 +957,96 @@ public class SettingsDialog extends Dialog<Boolean> {
                 AtomicBoolean cacheFull = new AtomicBoolean(false);
                 AtomicLong lastUIUpdate = new AtomicLong(0);
 
-                int batchSize = 1000;  // Large batch to reduce OpenSearch queries
                 long startTime = System.currentTimeMillis();
 
                 try {
-                    // Fetch batches from OpenSearch sequentially, process thumbnails in parallel
-                    for (int offset = 0; offset < totalDocs && !cancelled.get() && !cacheFull.get(); offset += batchSize) {
-                        // Check cache size at start of each batch
-                        long currentCacheSize = thumbnailService.getDiskCacheSize();
-                        if (currentCacheSize >= maxCacheSizeBytes * 0.95) {
-                            Platform.runLater(() -> statusLabel.setText("Cache size limit reached!"));
-                            cacheFull.set(true);
-                            break;
-                        }
+                    // Fetch all file paths using search_after pagination (no 10k limit)
+                    Platform.runLater(() -> statusLabel.setText("Fetching file paths from OpenSearch..."));
+                    List<String> allFilePaths = openSearchService.searchAllFilePaths(1000);
+                    final long totalFiles = allFilePaths.size();
 
-                        // Fetch batch from OpenSearch (sequential - single request at a time)
-                        OpenSearchService.SearchResult result = openSearchService.search("", null, offset, batchSize);
-                        List<ImageMetadata> images = result.getResults();
+                    // Process all file paths in parallel
+                    List<Future<?>> futures = new ArrayList<>();
 
-                        if (images.isEmpty()) {
-                            break;
-                        }
+                    for (String filePath : allFilePaths) {
+                        if (cancelled.get() || cacheFull.get()) break;
 
-                        // Extract file paths from the batch
-                        List<String> filePaths = new ArrayList<>();
-                        for (ImageMetadata image : images) {
-                            filePaths.add(image.getFilePath());
-                        }
+                        futures.add(executor.submit(() -> {
+                            if (cancelled.get() || cacheFull.get()) return;
 
-                        // Process this batch's thumbnails in parallel
-                        List<Future<?>> futures = new ArrayList<>();
+                            int currentProcessed = processed.incrementAndGet();
+                            String fileName = Path.of(filePath).getFileName().toString();
 
-                        for (String filePath : filePaths) {
-                            if (cancelled.get() || cacheFull.get()) break;
-
-                            futures.add(executor.submit(() -> {
-                                if (cancelled.get() || cacheFull.get()) return;
-
-                                int currentProcessed = processed.incrementAndGet();
-                                String fileName = Path.of(filePath).getFileName().toString();
-
-                                // Check if file exists
-                                if (!Files.exists(Path.of(filePath))) {
-                                    skipped.incrementAndGet();
-                                    return;
-                                }
-
-                                // Check if extension is supported
-                                String ext = getFileExtension(filePath).toLowerCase();
-                                if (!SUPPORTED_EXTENSIONS.contains(ext)) {
-                                    skipped.incrementAndGet();
-                                    return;
-                                }
-
-                                // Check if already cached
-                                if (isThumbnailCached(filePath, thumbnailService)) {
-                                    skipped.incrementAndGet();
-                                    throttledUIUpdate(lastUIUpdate, () -> {
-                                        double progress = (double) currentProcessed / totalDocs;
-                                        progressBar.setProgress(progress);
-                                        statusLabel.setText("[" + currentProcessed + "/" + totalDocs + "] Skipped: " +
-                                                truncateFilename(fileName));
-                                        statsLabel.setText(String.format("Cached: %d  |  Skipped: %d  |  Failed: %d",
-                                                cached.get(), skipped.get(), failed.get()));
-                                    });
-                                    return;
-                                }
-
-                                // Generate thumbnail
-                                try {
-                                    throttledUIUpdate(lastUIUpdate, () -> {
-                                        double progress = (double) currentProcessed / totalDocs;
-                                        progressBar.setProgress(progress);
-                                        statusLabel.setText("[" + currentProcessed + "/" + totalDocs + "] Caching: " +
-                                                truncateFilename(fileName));
-                                    });
-
-                                    thumbnailService.getThumbnail(filePath);
-                                    int newCached = cached.incrementAndGet();
-
-                                    // Update stats periodically
-                                    throttledUIUpdate(lastUIUpdate, () -> {
-                                        statsLabel.setText(String.format("Cached: %d  |  Skipped: %d  |  Failed: %d",
-                                                cached.get(), skipped.get(), failed.get()));
-                                        // Update speed
-                                        double elapsed = (System.currentTimeMillis() - startTime) / 1000.0;
-                                        if (elapsed > 0 && cached.get() > 0) {
-                                            speedLabel.setText(String.format("Speed: %.1f thumbnails/sec", cached.get() / elapsed));
-                                        }
-                                    });
-
-                                    // Periodically check cache size
-                                    if (newCached % 20 == 0) {
-                                        long cacheSize = thumbnailService.getDiskCacheSize();
-                                        if (cacheSize >= maxCacheSizeBytes * 0.95) {
-                                            cacheFull.set(true);
-                                        }
-                                    }
-
-                                } catch (Exception e) {
-                                    failed.incrementAndGet();
-                                }
-                            }));
-                        }
-
-                        // Wait for this batch to complete before fetching the next
-                        for (Future<?> future : futures) {
-                            try {
-                                future.get();
-                            } catch (Exception e) {
-                                // Task failed, already counted
+                            // Check if file exists
+                            if (!Files.exists(Path.of(filePath))) {
+                                skipped.incrementAndGet();
+                                return;
                             }
+
+                            // Check if extension is supported
+                            String ext = getFileExtension(filePath).toLowerCase();
+                            if (!SUPPORTED_EXTENSIONS.contains(ext)) {
+                                skipped.incrementAndGet();
+                                return;
+                            }
+
+                            // Check if already cached
+                            if (isThumbnailCached(filePath, thumbnailService)) {
+                                skipped.incrementAndGet();
+                                throttledUIUpdate(lastUIUpdate, () -> {
+                                    double progress = (double) currentProcessed / totalFiles;
+                                    progressBar.setProgress(progress);
+                                    statusLabel.setText("[" + currentProcessed + "/" + totalFiles + "] Skipped: " +
+                                            truncateFilename(fileName));
+                                    statsLabel.setText(String.format("Cached: %d  |  Skipped: %d  |  Failed: %d",
+                                            cached.get(), skipped.get(), failed.get()));
+                                });
+                                return;
+                            }
+
+                            // Generate thumbnail
+                            try {
+                                throttledUIUpdate(lastUIUpdate, () -> {
+                                    double progress = (double) currentProcessed / totalFiles;
+                                    progressBar.setProgress(progress);
+                                    statusLabel.setText("[" + currentProcessed + "/" + totalFiles + "] Caching: " +
+                                            truncateFilename(fileName));
+                                });
+
+                                thumbnailService.getThumbnail(filePath);
+                                int newCached = cached.incrementAndGet();
+
+                                // Update stats periodically
+                                throttledUIUpdate(lastUIUpdate, () -> {
+                                    statsLabel.setText(String.format("Cached: %d  |  Skipped: %d  |  Failed: %d",
+                                            cached.get(), skipped.get(), failed.get()));
+                                    // Update speed
+                                    double elapsed = (System.currentTimeMillis() - startTime) / 1000.0;
+                                    if (elapsed > 0 && cached.get() > 0) {
+                                        speedLabel.setText(String.format("Speed: %.1f thumbnails/sec", cached.get() / elapsed));
+                                    }
+                                });
+
+                                // Periodically check cache size
+                                if (newCached % 20 == 0) {
+                                    long cacheSize = thumbnailService.getDiskCacheSize();
+                                    if (cacheSize >= maxCacheSizeBytes * 0.95) {
+                                        cacheFull.set(true);
+                                    }
+                                }
+
+                            } catch (Exception e) {
+                                failed.incrementAndGet();
+                            }
+                        }));
+                    }
+
+                    // Wait for all tasks to complete
+                    for (Future<?> future : futures) {
+                        try {
+                            future.get();
+                        } catch (Exception e) {
+                            // Task failed, already counted
                         }
                     }
                 } finally {
