@@ -321,6 +321,10 @@ public class ConfigService {
         return List.of(".jpg", ".jpeg", ".png");
     }
 
+    public void setFileExtensions(List<String> extensions) {
+        setNestedValue("indexing", "file_extensions", new ArrayList<>(extensions));
+    }
+
     // UI settings
     public int getThumbnailSize() {
         return getNestedInt("ui", "thumbnail_size", DEFAULT_THUMBNAIL_SIZE);

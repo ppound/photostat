@@ -98,11 +98,16 @@ When you first launch PhotoStat, you'll see the main window with three tabs:
 
 4. Wait for "Indexing complete" message
 
+**Configuring File Types:**
+
+You can choose which file types to index in **File > Settings > Indexing**. Each supported extension has a checkbox — uncheck TIFF and RAW formats if you want faster indexing of just standard image formats.
+
 **Notes:**
 - Indexing runs in the background - you can switch tabs
 - Large collections may take several minutes
 - Only new/modified files are re-indexed on subsequent runs
 - Click **Stop Indexing** to cancel if needed
+- TIFF and RAW files are slower to index and require ExifTool
 
 ---
 

@@ -8,6 +8,7 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -16,9 +17,7 @@ import javafx.scene.layout.VBox;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,6 +53,9 @@ public class SettingsDialog extends Dialog<Boolean> {
 
     // Sidecar settings
     private CheckBox sidecarEnabledCheckbox;
+
+    // File extension checkboxes
+    private final Map<String, CheckBox> extensionCheckboxes = new LinkedHashMap<>();
 
     // AI Provider settings
     private ComboBox<String> aiProviderCombo;
@@ -224,6 +226,29 @@ public class SettingsDialog extends Dialog<Boolean> {
         sidecarEnabledCheckbox = new CheckBox("Save custom metadata to sidecar files");
         grid.add(sidecarEnabledCheckbox, 1, row++, 2, 1);
 
+        // File types to index
+        Label fileTypesLabel = new Label("File Types to Index:");
+        fileTypesLabel.setStyle("-fx-font-weight: bold;");
+
+        FlowPane extensionsPane = new FlowPane(10, 5);
+        String[] allExtensions = {
+            ".jpg", ".jpeg", ".png", ".tiff", ".tif",
+            ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf"
+        };
+        List<String> enabledExtensions = configService.getFileExtensions();
+        for (String ext : allExtensions) {
+            CheckBox cb = new CheckBox(ext);
+            cb.setSelected(enabledExtensions.contains(ext));
+            extensionCheckboxes.put(ext, cb);
+            extensionsPane.getChildren().add(cb);
+        }
+
+        Label fileTypesInfoLabel = new Label(
+                "TIFF and RAW file types (CR2, NEF, ARW, etc.) are slower to index and require ExifTool."
+        );
+        fileTypesInfoLabel.setWrapText(true);
+        fileTypesInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+
         // Info labels
         Label exifToolInfoLabel = new Label(
                 "ExifTool is required for extracting metadata from RAW files (CR2, NEF, ARW, etc.). " +
@@ -239,7 +264,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         sidecarInfoLabel.setWrapText(true);
         sidecarInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
 
-        pane.getChildren().addAll(grid, new Separator(), exifToolInfoLabel, sidecarInfoLabel);
+        pane.getChildren().addAll(grid, new Separator(), fileTypesLabel, extensionsPane, fileTypesInfoLabel, new Separator(), exifToolInfoLabel, sidecarInfoLabel);
 
         return pane;
     }
@@ -713,6 +738,15 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Sidecar settings
         configService.setSidecarEnabled(sidecarEnabledCheckbox.isSelected());
+
+        // File extensions
+        List<String> selectedExtensions = new ArrayList<>();
+        for (Map.Entry<String, CheckBox> entry : extensionCheckboxes.entrySet()) {
+            if (entry.getValue().isSelected()) {
+                selectedExtensions.add(entry.getKey());
+            }
+        }
+        configService.setFileExtensions(selectedExtensions);
 
         // AI Provider settings
         String selectedProvider = aiProviderCombo.getValue();

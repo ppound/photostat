@@ -56,7 +56,8 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
   },
   "claude": {
     "api_key": "",
-    "model": "claude-sonnet-4-20250514"
+    "model": "claude-sonnet-4-20250514",
+    "analysis_prompt": "(built-in default)"
   },
   "gemini": {
     "api_key": "",
@@ -90,10 +91,11 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
 
 **Default file extensions:**
 ```json
-[".jpg", ".jpeg", ".png", ".tiff", ".tif", ".gif", ".bmp", ".webp",
- ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".sr2", ".raf",
- ".orf", ".rw2", ".pef", ".dng", ".rwl", ".srw"]
+[".jpg", ".jpeg", ".png", ".tiff", ".tif",
+ ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf"]
 ```
+
+File extensions can be configured in **Settings > Indexing** using checkboxes, or by editing `config.json` directly.
 
 ### UI Settings
 
