@@ -93,20 +93,20 @@ Download the latest release from **[GitHub Releases](https://github.com/ppound/p
 
 #### Option A: Windows Installer (.msi)
 
-Download `PhotoStat-1.6.3.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
+Download `PhotoStat-1.6.4.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
 
 #### Option B: macOS Installer (.dmg)
 
-Download `PhotoStat-1.6.3.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+Download `PhotoStat-1.6.4.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
 > **Note:** The macOS installer is unsigned. On first launch, right-click the app and select **Open**, then confirm.
 
 #### Option C: Cross-platform JAR
 
-Download `photostat-java-1.6.3-executable.jar`. Requires Java 21+.
+Download `photostat-java-1.6.4-executable.jar`. Requires Java 21+.
 
 ```bash
-java -jar photostat-java-1.6.3-executable.jar
+java -jar photostat-java-1.6.4-executable.jar
 ```
 
 **Apple Silicon Mac (M1/M2/M3):** See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-apple-silicon-mac-no-suitable-pipeline-found-or-graphics-errors).
@@ -138,16 +138,16 @@ PhotoStat includes a CLI for batch image analysis:
 
 ```bash
 # Analyze all configured directories
-java -jar photostat-java-1.6.3-executable.jar --analyze
+java -jar photostat-java-1.6.4-executable.jar --analyze
 
 # Preview what would be analyzed
-java -jar photostat-java-1.6.3-executable.jar --analyze --dry-run
+java -jar photostat-java-1.6.4-executable.jar --analyze --dry-run
 
 # Run with 4 parallel threads
-java -jar photostat-java-1.6.3-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.6.4-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
-java -jar photostat-java-1.6.3-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.6.4-executable.jar --analyze --provider gemini
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
