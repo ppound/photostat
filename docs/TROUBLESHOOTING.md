@@ -15,6 +15,8 @@ This guide covers common issues and their solutions.
 
 ## Application Won't Start
 
+> **Using the MSI or DMG installer?** The native installers bundle their own Java runtime, so the "UnsupportedClassVersionError" and "JavaFX missing" errors below only apply to the cross-platform JAR.
+
 ### Error: "UnsupportedClassVersionError"
 
 **Cause:** You're using an older Java version.
@@ -30,7 +32,7 @@ java -version
 
 **Solution:** Use the `-executable.jar` file which includes JavaFX:
 ```bash
-java -jar photostat-java-1.6.2-executable.jar
+java -jar photostat-java-1.6.3-executable.jar
 ```
 
 ### Error on Apple Silicon Mac: "no suitable pipeline found" or graphics errors
@@ -45,7 +47,7 @@ java -jar photostat-java-1.6.2-executable.jar
 ```bash
 java --module-path /path/to/javafx-sdk-21/lib \
      --add-modules javafx.controls,javafx.fxml,javafx.swing \
-     -jar photostat-java-1.6.2-executable.jar
+     -jar photostat-java-1.6.3-executable.jar
 ```
 
 ---

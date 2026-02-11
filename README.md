@@ -14,7 +14,7 @@ After years of photography and using various software like Lightroom, Capture On
 
 - **Unified Search Across All Your Photos** - Index images from multiple directories and drives into a single searchable database
 - **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files
-- **Cross-Platform** - Runs on Windows, macOS, and Linux with a single executable JAR
+- **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
 
 ---
@@ -52,10 +52,10 @@ After years of photography and using various software like Lightroom, Capture On
 
 ### 1. Prerequisites
 
-| Requirement | Version |
-|-------------|---------|
-| Java | 21 or later |
-| OpenSearch | 2.x |
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| OpenSearch | 2.x | Required for all installation methods |
+| Java | 21 or later | Only needed for the cross-platform JAR — installers bundle their own runtime |
 
 ### 2. Install OpenSearch
 
@@ -87,14 +87,23 @@ docker rm opensearch       # Remove the container (volume keeps data)
 
 Or download from [opensearch.org](https://opensearch.org/downloads.html).
 
-### 3. Download PhotoStat
+### 3. Download & Install PhotoStat
 
-Download the latest release from **[GitHub Releases](https://github.com/ppound/photostat/releases)**:
-```
-photostat-java-1.6.3-executable.jar
-```
+Download the latest release from **[GitHub Releases](https://github.com/ppound/photostat/releases)**. Choose the option that fits your platform:
 
-### 4. Launch
+#### Option A: Windows Installer (.msi)
+
+Download `PhotoStat-1.6.3.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
+
+#### Option B: macOS Installer (.dmg)
+
+Download `PhotoStat-1.6.3.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+
+> **Note:** The macOS installer is unsigned. On first launch, right-click the app and select **Open**, then confirm.
+
+#### Option C: Cross-platform JAR
+
+Download `photostat-java-1.6.3-executable.jar`. Requires Java 21+.
 
 ```bash
 java -jar photostat-java-1.6.3-executable.jar
@@ -102,7 +111,7 @@ java -jar photostat-java-1.6.3-executable.jar
 
 **Apple Silicon Mac (M1/M2/M3):** See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-apple-silicon-mac-no-suitable-pipeline-found-or-graphics-errors).
 
-### 5. Get Started
+### 4. Get Started
 
 1. Configure OpenSearch connection via **File > Settings**
 2. Add photo directories in the **Index** tab
