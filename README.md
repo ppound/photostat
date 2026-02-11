@@ -134,7 +134,7 @@ java -jar photostat-java-1.6.4-executable.jar
 
 ## Command-Line Interface
 
-PhotoStat includes a CLI for batch image analysis:
+PhotoStat includes a CLI for batch image analysis. The CLI requires the cross-platform JAR and Java 21+ — the native installers (MSI/DMG) are for the GUI only.
 
 ```bash
 # Analyze all configured directories

@@ -212,6 +212,8 @@ Changing the prompt will invalidate the cache, causing all images to be re-analy
 
 PhotoStat includes a CLI mode for batch image analysis that can run in the background without tying up the GUI.
 
+> **Note:** The CLI requires the cross-platform JAR (`photostat-java-*-executable.jar`) and Java 21+. The native installers (MSI/DMG) are for the GUI only.
+
 ### Basic Usage
 
 ```bash
