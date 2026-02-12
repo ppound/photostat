@@ -247,6 +247,17 @@ You can add your own metadata to photos for better organization:
 
 5. The search will automatically refresh
 
+**Keyboard Rating Shortcuts:**
+
+For fast photo culling, you can rate images directly from the results table using keyboard shortcuts:
+
+1. Click the results table to give it focus
+2. Use **Arrow Up/Down** to navigate between images
+3. Press **1-5** to set a rating (1 = \*, 2 = \*\*, ..., 5 = \*\*\*\*\*)
+4. Press **0** to clear the rating
+
+Ratings are saved immediately to OpenSearch and sidecar files — no need to click Save. The Rating column in the table and the Detail Panel update instantly. These shortcuts only work when the results table has focus, so typing in the search box or metadata fields is unaffected.
+
 **Using Custom Metadata:**
 - Search for names, places, or tags in the search box
 - Use the **Persons**, **Places**, and **Tags** facets to filter
@@ -355,6 +366,7 @@ Hashes are computed during indexing. To populate hash data for your collection:
    - Thumbnail preview of each copy
    - Full file path, size, date taken, and dimensions
    - Checkboxes for selecting files to delete
+   - **Double-click** any image to open it in your system's default viewer
 
 7. **Delete duplicates:**
    - Check the copies you want to remove (you cannot select all files in a group)
