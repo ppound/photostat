@@ -39,7 +39,7 @@ java -jar photostat-java-1.7.0-executable.jar
 
 **Cause:** The executable JAR includes Intel Mac natives, not ARM64.
 
-**Solution:** Download JavaFX SDK for Mac ARM64 and run with module path:
+**Solution:** Use the cross platform executable jar (you will need java 21+ installed to run the jar) and Download JavaFX SDK for Mac ARM64 and run with module path:
 
 1. Download JavaFX SDK from https://gluonhq.com/products/javafx/
 2. Extract to a folder
