@@ -32,7 +32,7 @@ java -version
 
 **Solution:** Use the `-executable.jar` file which includes JavaFX:
 ```bash
-java -jar photostat-java-1.6.4-executable.jar
+java -jar photostat-java-1.7.0-executable.jar
 ```
 
 ### Error on Apple Silicon Mac: "no suitable pipeline found" or graphics errors
@@ -47,7 +47,7 @@ java -jar photostat-java-1.6.4-executable.jar
 ```bash
 java --module-path /path/to/javafx-sdk-21/lib \
      --add-modules javafx.controls,javafx.fxml,javafx.swing \
-     -jar photostat-java-1.6.4-executable.jar
+     -jar photostat-java-1.7.0-executable.jar
 ```
 
 ---
