@@ -126,6 +126,9 @@ public class MainWindow extends BorderPane {
         // Wire up results panel status updates to status bar
         resultsPanel.setStatusCallback(this::updateStatus);
 
+        // Wire up keyboard rating changes to sync detail panel
+        resultsPanel.setRatingChangedCallback(metadata -> detailPanel.updateRatingDisplay(metadata));
+
         // Layout
         VBox leftSide = new VBox(10);
         leftSide.setPadding(new Insets(10));

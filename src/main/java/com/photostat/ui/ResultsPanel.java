@@ -16,6 +16,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.stage.DirectoryChooser;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -60,6 +62,7 @@ public class ResultsPanel extends VBox {
     private Consumer<ImageMetadata> selectionCallback;
     private Consumer<Map<String, Map<String, Long>>> aggregationsCallback;
     private Consumer<String> statusCallback;
+    private Consumer<ImageMetadata> ratingChangedCallback;
 
     private Button analyzeSelectedBtn;
 
@@ -133,6 +136,28 @@ public class ResultsPanel extends VBox {
             }
         });
 
+        // Keyboard rating: 1-5 sets rating, 0 clears it
+        resultsTable.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
+            if (event.isControlDown() || event.isAltDown() || event.isMetaDown() || event.isShiftDown()) {
+                return;
+            }
+            ImageMetadata selected = resultsTable.getSelectionModel().getSelectedItem();
+            if (selected == null) {
+                return;
+            }
+            String rating = null;
+            KeyCode code = event.getCode();
+            if (code == KeyCode.DIGIT1 || code == KeyCode.NUMPAD1) rating = "*";
+            else if (code == KeyCode.DIGIT2 || code == KeyCode.NUMPAD2) rating = "**";
+            else if (code == KeyCode.DIGIT3 || code == KeyCode.NUMPAD3) rating = "***";
+            else if (code == KeyCode.DIGIT4 || code == KeyCode.NUMPAD4) rating = "****";
+            else if (code == KeyCode.DIGIT5 || code == KeyCode.NUMPAD5) rating = "*****";
+            else if (code == KeyCode.DIGIT0 || code == KeyCode.NUMPAD0) rating = "";
+            else return;
+            event.consume();
+            applyRating(selected, rating.isEmpty() ? null : rating);
+        });
+
         // Pagination
         int pageSize = configService.getResultsPerPage();
         pagination = new Pagination(1, 0);
@@ -167,6 +192,18 @@ public class ResultsPanel extends VBox {
         TableColumn<ImageMetadata, String> filenameCol = new TableColumn<>("Filename");
         filenameCol.setPrefWidth(200);
         filenameCol.setCellValueFactory(new PropertyValueFactory<>("fileName"));
+
+        // Rating column
+        TableColumn<ImageMetadata, String> ratingCol = new TableColumn<>("Rating");
+        ratingCol.setPrefWidth(70);
+        ratingCol.setCellValueFactory(cellData -> {
+            ImageMetadata m = cellData.getValue();
+            String rating = m.getRating();
+            if (rating == null || rating.isEmpty()) {
+                return new SimpleStringProperty("");
+            }
+            return new SimpleStringProperty(rating.replace('*', '\u2605'));
+        });
 
         // Camera column
         TableColumn<ImageMetadata, String> cameraCol = new TableColumn<>("Camera");
@@ -229,7 +266,7 @@ public class ResultsPanel extends VBox {
         typeCol.setCellValueFactory(new PropertyValueFactory<>("fileType"));
 
         resultsTable.getColumns().addAll(
-                thumbnailCol, filenameCol, cameraCol, dateCol,
+                thumbnailCol, filenameCol, ratingCol, cameraCol, dateCol,
                 isoCol, apertureCol, shutterCol, focalCol, typeCol
         );
     }
@@ -755,6 +792,43 @@ public class ResultsPanel extends VBox {
      */
     public void setStatusCallback(Consumer<String> callback) {
         this.statusCallback = callback;
+    }
+
+    /**
+     * Set callback for when rating changes via keyboard shortcut.
+     */
+    public void setRatingChangedCallback(Consumer<ImageMetadata> callback) {
+        this.ratingChangedCallback = callback;
+    }
+
+    /**
+     * Apply a rating to the given image and save in background.
+     */
+    private void applyRating(ImageMetadata metadata, String rating) {
+        metadata.setRating(rating);
+        resultsTable.refresh();
+
+        String stars = rating != null ? rating.replace('*', '\u2605') : "";
+        String statusMsg = rating != null
+                ? "Rated " + stars + " \u2014 " + metadata.getFileName()
+                : "Rating cleared \u2014 " + metadata.getFileName();
+        updateStatus(statusMsg);
+
+        if (ratingChangedCallback != null) {
+            ratingChangedCallback.accept(metadata);
+        }
+
+        Thread thread = new Thread(() -> {
+            try {
+                openSearchService.updateDocument(metadata);
+                sidecarService.writeSidecar(metadata);
+            } catch (Exception e) {
+                logger.error("ResultsPanel", "Failed to save rating for " + metadata.getFilePath(), e);
+                Platform.runLater(() -> updateStatus("Failed to save rating: " + e.getMessage()));
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**

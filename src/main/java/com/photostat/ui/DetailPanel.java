@@ -76,9 +76,9 @@ public class DetailPanel extends VBox {
 
         StackPane imageContainer = new StackPane(previewImage);
         imageContainer.setStyle("-fx-background-color: #333;");
-        imageContainer.setMinHeight(200);
-        imageContainer.setPrefHeight(250);
-        imageContainer.setMaxHeight(300);
+        imageContainer.setMinHeight(300);
+        imageContainer.setPrefHeight(400);
+        imageContainer.setMaxHeight(500);
         imageContainer.setAlignment(Pos.CENTER);
 
         // Bind image size to container size
@@ -383,6 +383,15 @@ public class DetailPanel extends VBox {
      */
     private static boolean hasClipboardData() {
         return copiedPersons != null || copiedPlace != null || copiedTags != null || copiedRating != null;
+    }
+
+    /**
+     * Update the rating field display when rating is changed externally (e.g., keyboard shortcut).
+     */
+    public void updateRatingDisplay(ImageMetadata metadata) {
+        if (metadata != null && metadata == currentMetadata) {
+            ratingField.setText(metadata.getRating() != null ? metadata.getRating() : "");
+        }
     }
 
     /**
