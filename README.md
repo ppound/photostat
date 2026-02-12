@@ -13,6 +13,7 @@ After years of photography and using various software like Lightroom, Capture On
 **PhotoStat was built to solve this problem:**
 
 - **Unified Search Across All Your Photos** - Index images from multiple directories and drives into a single searchable database
+- **Find Duplicates** - Find and manage duplicate images
 - **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
@@ -52,6 +53,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Camera Usage Charts** - See which cameras and lenses you use most
 - **Timeline View** - Visualize your collection over time
 - **Exposure Analysis** - ISO, aperture, and focal length distributions
+- **Processing Software** 
 
 ---
 
