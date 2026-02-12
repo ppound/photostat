@@ -8,8 +8,10 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -142,6 +144,7 @@ public class IndexerService {
             protected Void call() throws Exception {
                 isIndexing.set(true);
                 IndexingStats stats = new IndexingStats();
+                int indexingThreads = configService.getIndexingThreads();
 
                 try {
                     // Ensure OpenSearch is connected and index exists
@@ -157,9 +160,9 @@ public class IndexerService {
 
                     int batchSize = configService.getBatchSize();
 
-                    // First, count total files
+                    // Phase 1: Collect all file paths (fast, sequential)
                     updateStatus("Scanning directories...");
-                    AtomicLong totalFiles = new AtomicLong(0);
+                    List<Path> allFiles = new ArrayList<>();
 
                     for (String dirPath : directories) {
                         if (isCancelled()) break;
@@ -176,7 +179,7 @@ public class IndexerService {
 
                                 String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
                                 if (extensions.contains(ext)) {
-                                    totalFiles.incrementAndGet();
+                                    allFiles.add(file);
                                 }
                                 return FileVisitResult.CONTINUE;
                             }
@@ -188,104 +191,116 @@ public class IndexerService {
                         });
                     }
 
-                    stats.totalFiles = totalFiles.get();
-                    updateStatus("Found " + stats.totalFiles + " image files");
+                    stats.totalFiles.set(allFiles.size());
+                    updateStatus("Found " + stats.totalFiles.get() + " image files");
 
-                    if (stats.totalFiles == 0) {
+                    if (stats.totalFiles.get() == 0) {
                         notifyProgress(1.0);
                         notifyCompletion(stats);
                         return null;
                     }
 
-                    // Process files
+                    // Phase 2: Process files in parallel
                     AtomicInteger processedCount = new AtomicInteger(0);
-                    List<ImageMetadata> batch = new ArrayList<>();
+                    List<ImageMetadata> batch = Collections.synchronizedList(new ArrayList<>());
+                    AtomicLong lastUIUpdate = new AtomicLong(0);
+                    ExecutorService executor = Executors.newFixedThreadPool(indexingThreads);
 
-                    for (String dirPath : directories) {
+                    updateStatus("Indexing with " + indexingThreads + " threads...");
+
+                    List<Future<?>> futures = new ArrayList<>();
+
+                    for (Path file : allFiles) {
                         if (isCancelled()) break;
 
-                        Path dir = Paths.get(dirPath);
-                        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
-                            continue;
-                        }
+                        futures.add(executor.submit(() -> {
+                            if (isCancelled()) return;
 
-                        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
-                            @Override
-                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                                if (isCancelled()) return FileVisitResult.TERMINATE;
+                            try {
+                                String filePath = file.toAbsolutePath().toString();
 
-                                String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
-                                if (!extensions.contains(ext)) {
-                                    return FileVisitResult.CONTINUE;
+                                // Check if already indexed (unless force reindex)
+                                if (!forceReindex && openSearchService.isFileIndexed(filePath)) {
+                                    stats.skippedFiles.incrementAndGet();
+                                    int current = processedCount.incrementAndGet();
+                                    throttledProgressUpdate(lastUIUpdate, current, stats.totalFiles.get());
+                                    return;
                                 }
 
+                                // Extract metadata
+                                ImageMetadata metadata = exifService.extractMetadata(file);
+
+                                // Apply sidecar data if exists (preserves custom metadata on reindex)
+                                sidecarService.applySidecarToMetadata(metadata);
+
+                                // Compute content and perceptual hashes
                                 try {
-                                    String filePath = file.toAbsolutePath().toString();
+                                    metadata.setContentHash(hashService.computeContentHash(file));
+                                    metadata.setPerceptualHash(hashService.computePerceptualHash(file));
+                                } catch (Exception e) {
+                                    // Non-fatal: continue indexing even if hashing fails
+                                    System.err.println("Hash computation failed for " + file + ": " + e.getMessage());
+                                }
 
-                                    // Check if already indexed (unless force reindex)
-                                    if (!forceReindex && openSearchService.isFileIndexed(filePath)) {
-                                        stats.skippedFiles++;
-                                        processedCount.incrementAndGet();
-                                        updateProgressSafe(processedCount.get(), stats.totalFiles);
-                                        return FileVisitResult.CONTINUE;
-                                    }
+                                stats.processedFiles.incrementAndGet();
 
-                                    // Extract metadata
-                                    ImageMetadata metadata = exifService.extractMetadata(file);
-
-                                    // Apply sidecar data if exists (preserves custom metadata on reindex)
-                                    sidecarService.applySidecarToMetadata(metadata);
-
-                                    // Compute content and perceptual hashes
-                                    try {
-                                        metadata.setContentHash(hashService.computeContentHash(file));
-                                        metadata.setPerceptualHash(hashService.computePerceptualHash(file));
-                                    } catch (Exception e) {
-                                        // Non-fatal: continue indexing even if hashing fails
-                                        System.err.println("Hash computation failed for " + file + ": " + e.getMessage());
-                                    }
-
+                                // Add to batch and flush when full
+                                List<ImageMetadata> toFlush = null;
+                                synchronized (batch) {
                                     batch.add(metadata);
-                                    stats.processedFiles++;
-
-                                    // Bulk index when batch is full
                                     if (batch.size() >= batchSize) {
-                                        int indexed = openSearchService.bulkIndex(new ArrayList<>(batch));
-                                        stats.indexedFiles += indexed;
+                                        toFlush = new ArrayList<>(batch);
                                         batch.clear();
                                     }
-
-                                } catch (Exception e) {
-                                    stats.errorFiles++;
-                                    System.err.println("Error processing " + file + ": " + e.getMessage());
                                 }
 
-                                int current = processedCount.incrementAndGet();
-                                updateStatusSafe("Processing: " + file.getFileName() +
-                                        " (" + current + "/" + stats.totalFiles + ")");
-                                updateProgressSafe(current, stats.totalFiles);
+                                if (toFlush != null) {
+                                    int indexed = openSearchService.bulkIndex(toFlush);
+                                    stats.indexedFiles.addAndGet(indexed);
+                                }
 
-                                return FileVisitResult.CONTINUE;
+                            } catch (Exception e) {
+                                stats.errorFiles.incrementAndGet();
+                                System.err.println("Error processing " + file + ": " + e.getMessage());
                             }
 
-                            @Override
-                            public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                                stats.errorFiles++;
-                                return FileVisitResult.CONTINUE;
-                            }
-                        });
+                            int current = processedCount.incrementAndGet();
+                            throttledStatusUpdate(lastUIUpdate, file.getFileName().toString(),
+                                    current, stats.totalFiles.get());
+                        }));
                     }
 
-                    // Index remaining batch
-                    if (!batch.isEmpty() && !isCancelled()) {
-                        int indexed = openSearchService.bulkIndex(batch);
-                        stats.indexedFiles += indexed;
+                    // Wait for all tasks to complete
+                    for (Future<?> future : futures) {
+                        if (isCancelled()) break;
+                        try {
+                            future.get();
+                        } catch (Exception e) {
+                            // Task failed, already counted in errorFiles
+                        }
+                    }
+
+                    // Shutdown executor
+                    executor.shutdown();
+                    try {
+                        executor.awaitTermination(1, TimeUnit.MINUTES);
+                    } catch (InterruptedException e) {
+                        executor.shutdownNow();
+                    }
+
+                    // Flush remaining batch
+                    synchronized (batch) {
+                        if (!batch.isEmpty() && !isCancelled()) {
+                            int indexed = openSearchService.bulkIndex(new ArrayList<>(batch));
+                            stats.indexedFiles.addAndGet(indexed);
+                            batch.clear();
+                        }
                     }
 
                     if (isCancelled()) {
-                        updateStatus("Indexing cancelled. Indexed " + stats.indexedFiles + " files.");
+                        updateStatus("Indexing cancelled. Indexed " + stats.indexedFiles.get() + " files.");
                     } else {
-                        updateStatus("Indexing complete. Indexed " + stats.indexedFiles + " files.");
+                        updateStatus("Indexing complete. Indexed " + stats.indexedFiles.get() + " files.");
                     }
 
                     notifyCompletion(stats);
@@ -300,6 +315,23 @@ public class IndexerService {
                 return null;
             }
         };
+    }
+
+    private void throttledStatusUpdate(AtomicLong lastUpdate, String fileName, int current, long total) {
+        long now = System.currentTimeMillis();
+        if (now - lastUpdate.get() >= 100) { // Update at most every 100ms
+            lastUpdate.set(now);
+            updateStatusSafe("Processing: " + fileName + " (" + current + "/" + total + ")");
+            updateProgressSafe(current, total);
+        }
+    }
+
+    private void throttledProgressUpdate(AtomicLong lastUpdate, int current, long total) {
+        long now = System.currentTimeMillis();
+        if (now - lastUpdate.get() >= 100) {
+            lastUpdate.set(now);
+            updateProgressSafe(current, total);
+        }
     }
 
     /**
@@ -403,17 +435,18 @@ public class IndexerService {
      * Statistics about an indexing operation.
      */
     public static class IndexingStats {
-        public long totalFiles = 0;
-        public long processedFiles = 0;
-        public long indexedFiles = 0;
-        public long skippedFiles = 0;
-        public long errorFiles = 0;
+        public final AtomicLong totalFiles = new AtomicLong(0);
+        public final AtomicLong processedFiles = new AtomicLong(0);
+        public final AtomicLong indexedFiles = new AtomicLong(0);
+        public final AtomicLong skippedFiles = new AtomicLong(0);
+        public final AtomicLong errorFiles = new AtomicLong(0);
 
         @Override
         public String toString() {
             return String.format(
                     "Total: %d, Processed: %d, Indexed: %d, Skipped: %d, Errors: %d",
-                    totalFiles, processedFiles, indexedFiles, skippedFiles, errorFiles
+                    totalFiles.get(), processedFiles.get(), indexedFiles.get(),
+                    skippedFiles.get(), errorFiles.get()
             );
         }
     }

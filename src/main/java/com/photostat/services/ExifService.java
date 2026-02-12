@@ -357,7 +357,7 @@ public class ExifService {
     /**
      * Parse a date string to LocalDateTime.
      */
-    private LocalDateTime parseDate(String dateStr) {
+    LocalDateTime parseDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) {
             return null;
         }
@@ -390,7 +390,7 @@ public class ExifService {
     /**
      * Parse focal length string (e.g., "50 mm" or "50.0mm") to Double.
      */
-    private Double parseFocalLength(String value) {
+    Double parseFocalLength(String value) {
         if (value == null || value.isEmpty()) return null;
 
         Pattern pattern = Pattern.compile("([\\d.]+)\\s*(?:mm)?", Pattern.CASE_INSENSITIVE);
@@ -406,7 +406,7 @@ public class ExifService {
     /**
      * Get string value from ExifTool map, trying multiple keys.
      */
-    private String getStringValue(Map<String, Object> data, String... keys) {
+    String getStringValue(Map<String, Object> data, String... keys) {
         for (String key : keys) {
             Object value = data.get(key);
             if (value != null) {
@@ -419,7 +419,7 @@ public class ExifService {
     /**
      * Get integer value from ExifTool map, trying multiple keys.
      */
-    private Integer getIntValue(Map<String, Object> data, String... keys) {
+    Integer getIntValue(Map<String, Object> data, String... keys) {
         for (String key : keys) {
             Object value = data.get(key);
             if (value != null) {
@@ -437,7 +437,7 @@ public class ExifService {
     /**
      * Get double value from ExifTool map, trying multiple keys.
      */
-    private Double getDoubleValue(Map<String, Object> data, String... keys) {
+    Double getDoubleValue(Map<String, Object> data, String... keys) {
         for (String key : keys) {
             Object value = data.get(key);
             if (value != null) {
@@ -457,7 +457,7 @@ public class ExifService {
     /**
      * Clean string by trimming and removing control characters.
      */
-    private String cleanString(String value) {
+    String cleanString(String value) {
         if (value == null) return null;
         return value.trim().replaceAll("[\\x00-\\x1F]", "");
     }
@@ -465,7 +465,7 @@ public class ExifService {
     /**
      * Get file extension including the dot.
      */
-    private String getFileExtension(String filename) {
+    String getFileExtension(String filename) {
         int lastDot = filename.lastIndexOf('.');
         if (lastDot > 0) {
             return filename.substring(lastDot);

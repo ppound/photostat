@@ -33,6 +33,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Complete EXIF Support** - Camera, lens, exposure, GPS, and more
 - **Custom Metadata** - Add persons, places, tags, and ratings
 - **Keyboard Rating** - Press 1-5 to rate, 0 to clear — instant save for fast culling
+- **Slideshow Mode** - Full-screen browsing with keyboard navigation and quick rating
 - **Sidecar Files** - Metadata persists with your images
 - **Copy & Paste Metadata** - Quickly apply tags across multiple images
 

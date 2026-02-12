@@ -334,7 +334,7 @@ public class ImageAnalysisService {
         }
     }
 
-    private String getMediaType(String imagePath) {
+    String getMediaType(String imagePath) {
         String lower = imagePath.toLowerCase();
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
             return "image/jpeg";
@@ -523,7 +523,7 @@ public class ImageAnalysisService {
         }
     }
 
-    private String extractJson(String text) {
+    String extractJson(String text) {
         // Try to find JSON in the text (may be wrapped in markdown code blocks)
         String trimmed = text.trim();
 

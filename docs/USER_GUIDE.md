@@ -12,6 +12,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Using Faceted Navigation](#using-faceted-navigation)
 - [Viewing Image Details](#viewing-image-details)
 - [Adding Custom Metadata](#adding-custom-metadata)
+- [Slideshow Mode](#slideshow-mode)
 - [Managing Files](#managing-files)
 - [Finding Duplicates](#finding-duplicates)
 - [Exploring Charts](#exploring-charts)
@@ -274,6 +275,50 @@ You can copy custom metadata from one image and paste it to others:
 5. Click **Save** to apply the changes
 
 This is useful when multiple photos share the same people, location, or tags.
+
+---
+
+## Slideshow Mode
+
+PhotoStat includes a full-screen slideshow for browsing your current search results with keyboard navigation and quick rating — ideal for photo culling workflows.
+
+### Launching the Slideshow
+
+- Click the **Slideshow** button in the results toolbar, or
+- Press **F5** when the results table has focus
+
+The slideshow opens full-screen starting from the currently selected image (or the first result if none is selected).
+
+### Keyboard Controls
+
+| Key | Action |
+|-----|--------|
+| **Right / Down / Space / Page Down** | Next image |
+| **Left / Up / Page Up** | Previous image |
+| **Home** | Jump to first image |
+| **End** | Jump to last image |
+| **1-5** (digit or numpad) | Set rating (1 = ★, 5 = ★★★★★) |
+| **0** (digit or numpad) | Clear rating |
+| **I** | Toggle HUD info overlay |
+| **Escape** | Exit slideshow |
+
+### HUD Overlay
+
+A semi-transparent info bar appears at the bottom of the screen showing:
+- Current rating (gold stars)
+- Filename
+- EXIF summary (aperture, shutter speed, ISO, focal length)
+- Image counter (e.g., "3 / 150")
+
+The HUD auto-hides after 3 seconds and reappears on any key press or mouse movement. Press **I** to pin it on or off.
+
+### Rating in Slideshow
+
+Press **1-5** to rate the current image or **0** to clear the rating. A brief toast notification confirms the rating. Changes are saved immediately to OpenSearch and sidecar files, and the results table updates when you exit the slideshow.
+
+### RAW File Support
+
+Standard image formats (JPEG, PNG, etc.) are loaded at full screen resolution. RAW files (CR2, CR3, NEF, ARW, DNG, etc.) are displayed using embedded preview thumbnails extracted via the thumbnail cache.
 
 ---
 
