@@ -18,6 +18,8 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Exploring Charts](#exploring-charts)
 - [Thumbnail Cache](#thumbnail-cache)
 - [Sidecar Files](#sidecar-files)
+- [Large Collections](#large-collections)
+- [Dark Theme](#dark-theme)
 - [Enabling Logging](#enabling-logging)
 
 ---
@@ -576,6 +578,145 @@ Sidecar files allow custom metadata (persons, places, tags) to persist even when
 - Human-readable JSON format
 
 **Note:** If disabled, custom metadata is only stored in OpenSearch and will be lost if the index is deleted.
+
+---
+
+## Large Collections
+
+If you have tens of thousands of images or more, here are some tips to keep PhotoStat running smoothly.
+
+### Indexing Performance
+
+Indexing computes both a **SHA-256 content hash** (for exact duplicate detection) and a **perceptual hash** (for visual duplicate detection) for every image. This hashing is the most time-consuming part of indexing, so initial indexing of a large collection can take a while.
+
+**Increase indexing threads** to speed things up:
+
+1. Open **Settings > Indexing**
+2. Raise **Indexing Threads** (default is 4, try 8 or more if your system has the cores)
+3. Click **OK** and start indexing
+
+Or edit `~/.photostat/config.json` directly:
+
+```json
+{
+  "indexing": {
+    "indexing_threads": 8,
+    "batch_size": 100
+  }
+}
+```
+
+Increasing `batch_size` (default 50) reduces the number of OpenSearch bulk requests, which can also help with large collections.
+
+**Incremental indexing**: After the initial index, subsequent runs only process new or modified files. There's no need to re-index your entire collection each time.
+
+### Managing Directories
+
+Once a directory has been indexed, you can **remove it from the directory list** without losing the indexed data. The images remain searchable in OpenSearch. This is useful if you index photos from an external drive and then disconnect it — your metadata and search results are still available.
+
+To add new images from that directory later, simply re-add it to the directory list and run indexing again. Only the new/changed files will be processed.
+
+### Pre-cache Thumbnails via CLI
+
+Generating thumbnails on the fly while browsing can feel sluggish with very large result sets. Pre-caching builds all thumbnails in advance so browsing is instant.
+
+The CLI is the best way to pre-cache a large collection since it runs in the background without tying up the GUI:
+
+```bash
+# Pre-cache with default 4 threads
+java -jar photostat-java-1.7.0-executable.jar --cache-thumbnails
+
+# Use 8 threads for faster processing
+java -jar photostat-java-1.7.0-executable.jar --cache-thumbnails --parallel 8
+
+# Preview what would be cached
+java -jar photostat-java-1.7.0-executable.jar --cache-thumbnails --dry-run
+```
+
+Already-cached thumbnails are skipped automatically, so you can re-run this after adding new images.
+
+**Tip**: For very large collections, increase the cache size limit in **Settings > Cache** (default is 500 MB). A collection of 50,000 images typically needs around 2-3 GB of cache space.
+
+### Batch AI Analysis via CLI
+
+Analyzing thousands of images through the GUI is possible but the CLI is better suited for large batches — it supports parallel processing, runs in the background, and provides detailed progress output.
+
+```bash
+# Analyze all indexed images (skips already-analyzed ones)
+java -jar photostat-java-1.7.0-executable.jar --analyze
+
+# Run 4 analyses in parallel for faster throughput
+java -jar photostat-java-1.7.0-executable.jar --analyze --parallel 4
+
+# Use Gemini Flash for cheapest batch processing
+java -jar photostat-java-1.7.0-executable.jar --analyze --provider gemini
+
+# Preview what would be analyzed without making API calls
+java -jar photostat-java-1.7.0-executable.jar --analyze --dry-run
+```
+
+**Cost awareness**: AI analysis incurs API costs per image. For very large collections, consider:
+- Use `--dry-run` first to see how many images will be analyzed
+- Start with **Gemini Flash** (~$0.05-0.10 per 1000 images) for cost-effective batch processing
+- Use **Claude Sonnet** or **Haiku** for higher quality on a smaller subset
+- Analysis results are cached — re-running skips unchanged images with no additional cost
+
+Run it in the background on Linux/macOS:
+
+```bash
+nohup java -jar photostat-java-1.7.0-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
+```
+
+### RAW Files
+
+RAW files (CR2, CR3, NEF, ARW, DNG, etc.) are significantly slower to index than JPEGs because they require ExifTool for metadata extraction and their embedded previews are larger. If you're doing an initial index of a mixed collection and want faster results:
+
+1. Uncheck RAW extensions in **Settings > Indexing > File Types** to index JPEGs first
+2. Run indexing for the fast pass
+3. Re-enable RAW extensions and index again for the RAW files
+
+### OpenSearch Tuning
+
+For collections over 100,000 images, you may want to increase the OpenSearch Java heap size. If running via Docker:
+
+```bash
+docker run -d --name opensearch \
+  -p 9200:9200 \
+  -v opensearch-data:/usr/share/opensearch/data \
+  -e "discovery.type=single-node" \
+  -e "DISABLE_SECURITY_PLUGIN=true" \
+  -e "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g" \
+  opensearchproject/opensearch:2.11.0
+```
+
+The default heap is 512 MB which is fine for most collections, but bumping to 1-2 GB helps with heavy aggregation queries and large facet counts.
+
+---
+
+## Dark Theme
+
+PhotoStat includes a dark theme for comfortable use in low-light environments.
+
+### Switching Themes
+
+1. Click **Settings** in the toolbar
+2. Navigate to the **User Interface** tab
+3. Select **Dark** or **Light** from the **Theme** dropdown
+4. Click **OK** to save
+
+The theme switches instantly — no restart required. Your preference is saved to the config file and persists across sessions.
+
+### Theme Details
+
+| Element | Light | Dark |
+|---------|-------|------|
+| Background | Light grey | Dark grey (#1e1e1e) |
+| Panels | White | Dark surface (#2d2d2d) |
+| Text | Dark (#333) | Light (#e0e0e0) |
+| Accent | Blue (#0078d4) | Bright blue (#4ca6e8) |
+| Selected rows | Light blue | Deep blue (#264f78) |
+
+The dark theme covers all tabs (Search, Index, Duplicates, Charts), the Settings dialog, and all panels including facets, detail view, and file operations. The slideshow is unaffected as it always uses a black background.
 
 ---
 
