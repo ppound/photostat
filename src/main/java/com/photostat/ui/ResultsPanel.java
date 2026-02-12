@@ -170,14 +170,16 @@ public class ResultsPanel extends VBox {
     }
 
     private void createColumns() {
-        // Thumbnail column
+        // Thumbnail column - size driven by configured thumbnail size
+        int thumbSize = configService.getThumbnailSize();
+        int fitSize = Math.max(60, thumbSize / 2);
         TableColumn<ImageMetadata, ImageView> thumbnailCol = new TableColumn<>("Thumbnail");
-        thumbnailCol.setPrefWidth(80);
+        thumbnailCol.setPrefWidth(fitSize + 20);
         thumbnailCol.setCellValueFactory(cellData -> {
             ImageMetadata metadata = cellData.getValue();
             ImageView imageView = new ImageView();
-            imageView.setFitWidth(60);
-            imageView.setFitHeight(60);
+            imageView.setFitWidth(fitSize);
+            imageView.setFitHeight(fitSize);
             imageView.setPreserveRatio(true);
 
             // Load thumbnail asynchronously
