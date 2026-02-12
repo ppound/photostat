@@ -1,6 +1,7 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.ConfigService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
@@ -24,6 +25,7 @@ public class DuplicatesPanel extends BorderPane {
 
     private final OpenSearchService openSearchService;
     private final ThumbnailService thumbnailService;
+    private final ConfigService configService;
 
     private RadioButton exactRadio;
     private RadioButton visualRadio;
@@ -36,6 +38,7 @@ public class DuplicatesPanel extends BorderPane {
     public DuplicatesPanel() {
         this.openSearchService = OpenSearchService.getInstance();
         this.thumbnailService = ThumbnailService.getInstance();
+        this.configService = ConfigService.getInstance();
         initializeUI();
     }
 
@@ -213,9 +216,10 @@ public class DuplicatesPanel extends BorderPane {
         CheckBox checkBox = new CheckBox();
         checkBoxes.add(checkBox);
 
+        int fitSize = Math.max(60, configService.getThumbnailSize() / 2);
         ImageView imageView = new ImageView();
-        imageView.setFitWidth(60);
-        imageView.setFitHeight(60);
+        imageView.setFitWidth(fitSize);
+        imageView.setFitHeight(fitSize);
         imageView.setPreserveRatio(true);
 
         thumbnailService.getThumbnailAsync(img.getFilePath(), (path, thumbnail) -> {
