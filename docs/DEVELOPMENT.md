@@ -94,7 +94,9 @@ photostat-java/
 │   ├── App.java                         # Main application entry (JavaFX)
 │   ├── Launcher.java                    # JAR launcher (handles CLI vs GUI)
 │   ├── cli/
-│   │   └── AnalyzeCli.java              # Command-line batch analysis
+│   │   ├── AnalyzeCli.java              # Command-line batch analysis
+│   │   ├── DuplicatesCli.java           # Command-line duplicate finder
+│   │   └── ThumbnailCacheCli.java       # Command-line thumbnail caching
 │   ├── models/
 │   │   └── ImageMetadata.java           # Image metadata model
 │   ├── services/
@@ -105,6 +107,7 @@ photostat-java/
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
 │   │   ├── ThumbnailService.java        # Thumbnail generation & caching
+│   │   ├── HashService.java             # Content & perceptual image hashing
 │   │   ├── SidecarService.java          # Sidecar file management
 │   │   └── LoggingService.java          # File-based logging
 │   └── ui/
@@ -113,6 +116,7 @@ photostat-java/
 │       ├── ResultsPanel.java            # Results table
 │       ├── FacetsPanel.java             # Faceted navigation
 │       ├── IndexPanel.java              # Directory management
+│       ├── DuplicatesPanel.java         # Duplicate image detection
 │       ├── ChartsPanel.java             # Charts and visualizations
 │       ├── DetailPanel.java             # Image detail view
 │       ├── DirectoryBrowserDialog.java  # Directory browser
@@ -147,16 +151,16 @@ photostat-java/
 ### Entry Points
 
 - **`Launcher.java`** - Main entry point for the executable JAR
-  - Detects CLI mode (`--analyze`, `--help`) vs GUI mode
-  - Routes to `AnalyzeCli` or `App` accordingly
+  - Detects CLI mode (`--analyze`, `--cache-thumbnails`, `--find-duplicates`, `--help`) vs GUI mode
+  - Routes to `AnalyzeCli`, `ThumbnailCacheCli`, `DuplicatesCli`, or `App` accordingly
 
 - **`App.java`** - JavaFX application entry
   - Initializes the GUI
   - Creates the main window
 
-- **`AnalyzeCli.java`** - Command-line interface
-  - Parses CLI arguments
-  - Runs batch analysis without GUI
+- **`AnalyzeCli.java`** - CLI for batch AI analysis
+- **`ThumbnailCacheCli.java`** - CLI for thumbnail pre-caching
+- **`DuplicatesCli.java`** - CLI for finding duplicate images
 
 ### Services (Singleton Pattern)
 
@@ -167,6 +171,7 @@ All services use the singleton pattern with `getInstance()`:
 - **`ExifService`** - Extracts EXIF metadata from images
 - **`IndexerService`** - Background indexing with progress reporting
 - **`ThumbnailService`** - Generates and caches thumbnails
+- **`HashService`** - Computes SHA-256 content hashes and perceptual hashes (dHash) for duplicate detection
 - **`SidecarService`** - Manages `.photostat.json` sidecar files
 - **`ImageAnalysisService`** - AI image analysis (Claude/Gemini)
 - **`FileOperationsService`** - Copy/move/delete operations
@@ -174,21 +179,22 @@ All services use the singleton pattern with `getInstance()`:
 
 ### UI Components
 
-- **`MainWindow`** - Main window with TabPane (Search, Index, Charts)
+- **`MainWindow`** - Main window with TabPane (Search, Index, Duplicates, Charts)
 - **`SearchPanel`** - Search input and filters
 - **`ResultsPanel`** - TableView with thumbnails
 - **`FacetsPanel`** - Faceted navigation sidebar
 - **`DetailPanel`** - Image preview and metadata
 - **`IndexPanel`** - Directory management and indexing controls
+- **`DuplicatesPanel`** - Duplicate image detection and management
 - **`ChartsPanel`** - Visualization charts
 
 ### Data Flow
 
 1. **Indexing:**
    ```
-   IndexPanel → IndexerService → ExifService → OpenSearchService
-                                 ↓
-                           SidecarService (read existing metadata)
+   IndexPanel → IndexerService → ExifService    → OpenSearchService
+                                 HashService     ↗
+                                 SidecarService ↗
    ```
 
 2. **Search:**
@@ -202,6 +208,12 @@ All services use the singleton pattern with `getInstance()`:
    ResultsPanel → ImageAnalysisService → Claude/Gemini API
                                        → SidecarService (save)
                                        → OpenSearchService (update)
+   ```
+
+4. **Duplicate Detection:**
+   ```
+   DuplicatesPanel → OpenSearchService (terms aggregation on hash fields)
+                   → ThumbnailService (preview images)
    ```
 
 ### Threading Model

@@ -24,6 +24,7 @@ public class MainWindow extends BorderPane {
     private FacetsPanel facetsPanel;
     private DetailPanel detailPanel;
     private IndexPanel indexPanel;
+    private DuplicatesPanel duplicatesPanel;
     private ChartsPanel chartsPanel;
 
     private Label statusLabel;
@@ -51,12 +52,17 @@ public class MainWindow extends BorderPane {
         indexPanel = new IndexPanel();
         indexTab.setContent(indexPanel);
 
+        // Create Duplicates tab
+        Tab duplicatesTab = new Tab("Duplicates");
+        duplicatesPanel = new DuplicatesPanel();
+        duplicatesTab.setContent(duplicatesPanel);
+
         // Create Charts tab
         Tab chartsTab = new Tab("Charts");
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, chartsTab);
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, chartsTab);
 
         // Refresh charts when switching to charts tab
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {

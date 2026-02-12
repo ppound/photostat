@@ -26,6 +26,7 @@ public class IndexerService {
     private final ExifService exifService;
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
+    private final HashService hashService;
 
     private Task<Void> currentTask;
     private final AtomicBoolean isIndexing = new AtomicBoolean(false);
@@ -40,6 +41,7 @@ public class IndexerService {
         this.exifService = ExifService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
+        this.hashService = HashService.getInstance();
     }
 
     public static synchronized IndexerService getInstance() {
@@ -234,6 +236,15 @@ public class IndexerService {
                                     // Apply sidecar data if exists (preserves custom metadata on reindex)
                                     sidecarService.applySidecarToMetadata(metadata);
 
+                                    // Compute content and perceptual hashes
+                                    try {
+                                        metadata.setContentHash(hashService.computeContentHash(file));
+                                        metadata.setPerceptualHash(hashService.computePerceptualHash(file));
+                                    } catch (Exception e) {
+                                        // Non-fatal: continue indexing even if hashing fails
+                                        System.err.println("Hash computation failed for " + file + ": " + e.getMessage());
+                                    }
+
                                     batch.add(metadata);
                                     stats.processedFiles++;
 
@@ -330,6 +341,14 @@ public class IndexerService {
 
             // Apply sidecar data if exists
             sidecarService.applySidecarToMetadata(metadata);
+
+            // Compute content and perceptual hashes
+            try {
+                metadata.setContentHash(hashService.computeContentHash(file));
+                metadata.setPerceptualHash(hashService.computePerceptualHash(file));
+            } catch (Exception e) {
+                System.err.println("Hash computation failed for " + filePath + ": " + e.getMessage());
+            }
 
             // Index the document
             openSearchService.indexDocument(metadata);

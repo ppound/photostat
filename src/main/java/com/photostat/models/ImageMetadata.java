@@ -97,6 +97,12 @@ public class ImageMetadata {
     @JsonProperty("rating")
     private String rating;
 
+    @JsonProperty("content_hash")
+    private String contentHash;
+
+    @JsonProperty("perceptual_hash")
+    private String perceptualHash;
+
     public ImageMetadata() {
         this.allExif = new HashMap<>();
         this.persons = new ArrayList<>();
@@ -367,6 +373,22 @@ public class ImageMetadata {
 
     public void setRating(String rating) {
         this.rating = rating;
+    }
+
+    public String getContentHash() {
+        return contentHash;
+    }
+
+    public void setContentHash(String contentHash) {
+        this.contentHash = contentHash;
+    }
+
+    public String getPerceptualHash() {
+        return perceptualHash;
+    }
+
+    public void setPerceptualHash(String perceptualHash) {
+        this.perceptualHash = perceptualHash;
     }
 
     public String getPersonsString() {

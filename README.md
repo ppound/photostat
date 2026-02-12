@@ -41,6 +41,12 @@ After years of photography and using various software like Lightroom, Capture On
 - **Batch Processing** - Analyze via GUI or command-line
 - **Cost Tracking** - Monitor token usage and estimated costs
 
+### Duplicate Detection
+- **Exact Duplicates** - SHA-256 content hashing finds byte-for-byte copies
+- **Visual Duplicates** - Perceptual hashing (dHash) finds resized, recompressed, or re-exported copies
+- **Reclaimable Space** - See how much disk space you can recover
+- **Bulk Delete** - Select and remove duplicates with confirmation
+
 ### Visualizations
 - **Camera Usage Charts** - See which cameras and lenses you use most
 - **Timeline View** - Visualize your collection over time
@@ -148,6 +154,12 @@ java -jar photostat-java-1.6.4-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
 java -jar photostat-java-1.6.4-executable.jar --analyze --provider gemini
+
+# Find duplicate images
+java -jar photostat-java-1.6.4-executable.jar --find-duplicates
+
+# Find visually similar images
+java -jar photostat-java-1.6.4-executable.jar --find-duplicates --mode visual
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.

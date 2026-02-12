@@ -212,6 +212,10 @@ public class OpenSearchService {
             properties.put("tags", Property.of(p -> p.keyword(k -> k)));
             properties.put("rating", Property.of(p -> p.keyword(k -> k)));
 
+            // Hash fields for duplicate detection
+            properties.put("content_hash", Property.of(p -> p.keyword(k -> k)));
+            properties.put("perceptual_hash", Property.of(p -> p.keyword(k -> k)));
+
             // Raw EXIF data (not indexed)
             properties.put("all_exif", Property.of(p -> p.object(o -> o.enabled(false))));
 
@@ -703,6 +707,112 @@ public class OpenSearchService {
         }
 
         return allPaths;
+    }
+
+    /**
+     * Find duplicate images by grouping on a hash field.
+     * Uses terms aggregation with min_doc_count: 2 to find groups sharing the same hash.
+     *
+     * @param hashField "content_hash" for exact duplicates, "perceptual_hash" for visual duplicates
+     * @return list of duplicate groups, each containing the hash and matching images
+     */
+    public List<DuplicateGroup> findDuplicates(String hashField) throws IOException {
+        String indexName = configService.getIndexName();
+        List<DuplicateGroup> groups = new ArrayList<>();
+
+        // Terms aggregation to find hashes that appear more than once
+        SearchRequest.Builder searchBuilder = new SearchRequest.Builder()
+                .index(indexName)
+                .size(0)
+                .query(Query.of(q -> q.exists(e -> e.field(hashField))))
+                .aggregations("duplicate_hashes", Aggregation.of(a -> a
+                        .terms(t -> t
+                                .field(hashField)
+                                .size(1000)
+                                .minDocCount(2))));
+
+        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+
+        // Extract duplicate hash values
+        List<String> duplicateHashes = new ArrayList<>();
+        if (response.aggregations() != null && response.aggregations().containsKey("duplicate_hashes")) {
+            var agg = response.aggregations().get("duplicate_hashes");
+            if (agg.isSterms()) {
+                agg.sterms().buckets().array().forEach(bucket -> {
+                    duplicateHashes.add(bucket.key());
+                });
+            }
+        }
+
+        // For each duplicate hash, fetch the matching documents
+        for (String hash : duplicateHashes) {
+            SearchRequest.Builder docSearch = new SearchRequest.Builder()
+                    .index(indexName)
+                    .size(100)
+                    .query(Query.of(q -> q.term(t -> t
+                            .field(hashField)
+                            .value(FieldValue.of(hash)))))
+                    .sort(s -> s.field(f -> f.field("file_size").order(SortOrder.Desc)));
+
+            SearchResponse<ImageMetadata> docResponse = client.search(docSearch.build(), ImageMetadata.class);
+
+            List<ImageMetadata> images = docResponse.hits().hits().stream()
+                    .map(Hit::source)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+
+            if (images.size() >= 2) {
+                groups.add(new DuplicateGroup(hash, images));
+            }
+        }
+
+        return groups;
+    }
+
+    /**
+     * A group of duplicate images sharing the same hash.
+     */
+    public static class DuplicateGroup {
+        private final String hash;
+        private final List<ImageMetadata> images;
+
+        public DuplicateGroup(String hash, List<ImageMetadata> images) {
+            this.hash = hash;
+            this.images = images;
+        }
+
+        public String getHash() {
+            return hash;
+        }
+
+        public List<ImageMetadata> getImages() {
+            return images;
+        }
+
+        public int getCount() {
+            return images.size();
+        }
+
+        public long getTotalSize() {
+            return images.stream()
+                    .filter(img -> img.getFileSize() != null)
+                    .mapToLong(ImageMetadata::getFileSize)
+                    .sum();
+        }
+
+        /**
+         * Get the reclaimable size (total minus the largest file, which is the "original").
+         */
+        public long getReclaimableSize() {
+            if (images.size() < 2) return 0;
+            long total = getTotalSize();
+            long largest = images.stream()
+                    .filter(img -> img.getFileSize() != null)
+                    .mapToLong(ImageMetadata::getFileSize)
+                    .max()
+                    .orElse(0);
+            return total - largest;
+        }
     }
 
     /**

@@ -13,6 +13,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Viewing Image Details](#viewing-image-details)
 - [Adding Custom Metadata](#adding-custom-metadata)
 - [Managing Files](#managing-files)
+- [Finding Duplicates](#finding-duplicates)
 - [Exploring Charts](#exploring-charts)
 - [Thumbnail Cache](#thumbnail-cache)
 - [Sidecar Files](#sidecar-files)
@@ -22,10 +23,11 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 
 ## First Launch
 
-When you first launch PhotoStat, you'll see the main window with three tabs:
+When you first launch PhotoStat, you'll see the main window with four tabs:
 
 - **Search** - Find and browse your indexed photos
 - **Index** - Manage directories and run indexing
+- **Duplicates** - Find and manage duplicate images
 - **Charts** - View visualizations of your collection
 
 ![Application Tabs](screenshots/app-tabs.png)
@@ -309,6 +311,78 @@ You can copy, move, or delete images directly from search results:
 - Sidecar files (`.photostat.json`) are automatically copied/moved/deleted with their images
 - Move and delete operations update the search index automatically
 - Deleted files cannot be recovered - use with caution!
+
+---
+
+## Finding Duplicates
+
+PhotoStat can detect duplicate images using two methods:
+
+- **Exact Duplicates** - Uses SHA-256 content hashing to find byte-for-byte identical files
+- **Visual Duplicates** - Uses perceptual hashing (dHash) to find visually similar images, even if they've been resized, recompressed, or re-exported
+
+### Prerequisites
+
+Hashes are computed during indexing. To populate hash data for your collection:
+
+1. Go to the **Index** tab
+2. Click **Re-index All** to recompute hashes for existing images
+3. New images indexed going forward will automatically have hashes computed
+
+### Using the Duplicates Tab
+
+1. Navigate to the **Duplicates** tab
+
+2. **Choose a detection mode:**
+
+   | Mode | Description | Best For |
+   |------|-------------|----------|
+   | **Exact Duplicates** | SHA-256 hash of file bytes | Finding identical copies across drives |
+   | **Visual Duplicates** | Perceptual hash of image content | Finding resized, recompressed, or re-exported versions |
+
+3. Click **Scan for Duplicates**
+
+4. The summary shows:
+   - Number of duplicate groups found
+   - Total number of duplicate images
+   - Reclaimable disk space (total size minus one copy per group)
+
+5. **Browse duplicate groups** in the left panel:
+   - Each group shows a representative filename and copy count
+   - Total size and reclaimable space per group
+
+6. **Review details** by clicking a group:
+   - Thumbnail preview of each copy
+   - Full file path, size, date taken, and dimensions
+   - Checkboxes for selecting files to delete
+
+7. **Delete duplicates:**
+   - Check the copies you want to remove (you cannot select all files in a group)
+   - Click **Delete Selected Files**
+   - Confirm in the dialog
+   - Files are permanently deleted from disk and removed from the index
+
+**Tips:**
+- Start with **Exact Duplicates** mode to find safe-to-remove identical copies
+- Use **Visual Duplicates** to find images that may differ in resolution or compression
+- Always review before deleting — visual duplicates may include intentionally different versions (e.g., edited vs. original)
+
+### CLI Duplicate Finder
+
+You can also find duplicates from the command line:
+
+```bash
+# Find exact duplicates (default)
+java -jar photostat.jar --find-duplicates
+
+# Find visual duplicates
+java -jar photostat.jar --find-duplicates --mode visual
+
+# Minimal output
+java -jar photostat.jar --find-duplicates --quiet
+```
+
+The CLI outputs duplicate groups with file paths, sizes, dates, and reclaimable space.
 
 ---
 
