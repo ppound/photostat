@@ -178,7 +178,8 @@ public class DuplicatesPanel extends BorderPane {
         Label countLabel = new Label(group.getCount() + " files, " +
                 formatSize(group.getTotalSize()) + " total, " +
                 formatSize(group.getReclaimableSize()) + " reclaimable");
-        countLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #666;");
+        countLabel.setStyle("-fx-font-size: 12px;");
+        countLabel.getStyleClass().add("text-muted");
 
         detailBox.getChildren().addAll(header, countLabel, new Separator());
 
@@ -191,7 +192,7 @@ public class DuplicatesPanel extends BorderPane {
 
         // Delete selected button
         Button deleteButton = new Button("Delete Selected Files");
-        deleteButton.setStyle("-fx-text-fill: #cc0000;");
+        deleteButton.getStyleClass().add("delete-button");
         deleteButton.setOnAction(e -> deleteSelected(group, checkBoxes));
         deleteButton.setDisable(true);
 
@@ -211,7 +212,7 @@ public class DuplicatesPanel extends BorderPane {
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
         row.setPadding(new Insets(5));
-        row.setStyle("-fx-border-color: #eee; -fx-border-width: 0 0 1 0;");
+        row.getStyleClass().add("detail-row-border");
 
         CheckBox checkBox = new CheckBox();
         checkBoxes.add(checkBox);
@@ -231,7 +232,7 @@ public class DuplicatesPanel extends BorderPane {
         nameLabel.setStyle("-fx-font-weight: bold;");
 
         Label pathLabel = new Label(img.getFilePath());
-        pathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        pathLabel.getStyleClass().add("info-label-small");
         pathLabel.setWrapText(true);
 
         String details = "";
@@ -245,7 +246,8 @@ public class DuplicatesPanel extends BorderPane {
             details += "  |  " + img.getDimensionsString();
         }
         Label detailLabel = new Label(details);
-        detailLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #888;");
+        detailLabel.setStyle("-fx-font-size: 11px;");
+        detailLabel.getStyleClass().add("text-muted");
 
         info.getChildren().addAll(nameLabel, pathLabel, detailLabel);
         HBox.setHgrow(info, Priority.ALWAYS);
@@ -356,7 +358,8 @@ public class DuplicatesPanel extends BorderPane {
 
                 Label sizeLabel = new Label(formatSize(group.getTotalSize()) +
                         " total, " + formatSize(group.getReclaimableSize()) + " reclaimable");
-                sizeLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+                sizeLabel.setStyle("-fx-font-size: 11px;");
+                sizeLabel.getStyleClass().add("text-muted");
 
                 box.getChildren().addAll(nameLabel, sizeLabel);
                 setGraphic(box);

@@ -18,6 +18,7 @@ import javafx.stage.Stage;
 public class App extends Application {
 
     private static final String APP_TITLE = "PhotoStat - Image Metadata Indexer";
+    private static Scene mainScene;
 
     @Override
     public void start(Stage primaryStage) {
@@ -43,14 +44,10 @@ public class App extends Application {
         }
 
         Scene scene = new Scene(mainWindow, width, height);
+        mainScene = scene;
 
-        // Load stylesheet
-        try {
-            String css = getClass().getResource("/styles.css").toExternalForm();
-            scene.getStylesheets().add(css);
-        } catch (Exception e) {
-            System.err.println("Could not load stylesheet: " + e.getMessage());
-        }
+        // Load stylesheet based on theme setting
+        applyTheme(scene, configService.getTheme());
 
         // Configure stage
         primaryStage.setTitle(APP_TITLE);
@@ -76,6 +73,21 @@ public class App extends Application {
     public void stop() {
         // Cleanup on application exit
         System.out.println("PhotoStat shutting down...");
+    }
+
+    public static Scene getMainScene() {
+        return mainScene;
+    }
+
+    public static void applyTheme(Scene scene, String theme) {
+        scene.getStylesheets().clear();
+        try {
+            String cssFile = "dark".equalsIgnoreCase(theme) ? "/styles-dark.css" : "/styles.css";
+            String css = App.class.getResource(cssFile).toExternalForm();
+            scene.getStylesheets().add(css);
+        } catch (Exception e) {
+            System.err.println("Could not load stylesheet: " + e.getMessage());
+        }
     }
 
     public static void main(String[] args) {

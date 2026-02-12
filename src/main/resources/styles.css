@@ -417,3 +417,76 @@
 .alert .dialog-pane .header-panel {
     -fx-background-color: #f0f0f0;
 }
+
+/* Utility classes */
+.text-muted {
+    -fx-text-fill: #666;
+}
+
+.text-error {
+    -fx-text-fill: #cc0000;
+}
+
+.text-success {
+    -fx-text-fill: #00aa00;
+}
+
+.text-warning {
+    -fx-text-fill: #996600;
+}
+
+.section-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+}
+
+.info-label {
+    -fx-font-style: italic;
+    -fx-text-fill: #666;
+}
+
+.info-label-small {
+    -fx-font-size: 11px;
+    -fx-text-fill: #666;
+}
+
+.panel-background {
+    -fx-background-color: #fafafa;
+    -fx-border-color: #ddd;
+    -fx-border-radius: 5;
+}
+
+.image-container-bg {
+    -fx-background-color: #333;
+}
+
+.delete-button {
+    -fx-text-fill: #cc0000;
+}
+
+.chip {
+    -fx-background-color: #e0e0e0;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+}
+
+.chip:hover {
+    -fx-background-color: #d0d0d0;
+}
+
+.chip-input {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+    -fx-padding: 2;
+}
+
+.chips-container {
+    -fx-background-color: white;
+    -fx-border-color: #ccc;
+    -fx-border-radius: 3;
+}
+
+.detail-row-border {
+    -fx-border-color: #eee;
+    -fx-border-width: 0 0 1 0;
+}

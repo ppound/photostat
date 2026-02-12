@@ -189,11 +189,11 @@ public class MainWindow extends BorderPane {
     private HBox createStatusBar() {
         HBox statusBar = new HBox(20);
         statusBar.setPadding(new Insets(5, 10, 5, 10));
-        statusBar.setStyle("-fx-background-color: #f0f0f0; -fx-border-color: #ccc; -fx-border-width: 1 0 0 0;");
+        statusBar.getStyleClass().add("status-bar");
 
         statusLabel = new Label("Ready");
         connectionLabel = new Label("Disconnected");
-        connectionLabel.setStyle("-fx-text-fill: #cc0000;");
+        connectionLabel.getStyleClass().add("text-error");
 
         HBox spacer = new HBox();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -215,7 +215,8 @@ public class MainWindow extends BorderPane {
 
                     Platform.runLater(() -> {
                         connectionLabel.setText("Connected (" + docCount + " documents)");
-                        connectionLabel.setStyle("-fx-text-fill: #00aa00;");
+                        connectionLabel.getStyleClass().removeAll("text-error", "text-success");
+                        connectionLabel.getStyleClass().add("text-success");
                         updateStatus("Connected to OpenSearch");
 
                         // Initial search
@@ -226,14 +227,16 @@ public class MainWindow extends BorderPane {
                 } else {
                     Platform.runLater(() -> {
                         connectionLabel.setText("Connection failed");
-                        connectionLabel.setStyle("-fx-text-fill: #cc0000;");
+                        connectionLabel.getStyleClass().removeAll("text-error", "text-success");
+                        connectionLabel.getStyleClass().add("text-error");
                         updateStatus("Failed to connect to OpenSearch");
                     });
                 }
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     connectionLabel.setText("Error: " + e.getMessage());
-                    connectionLabel.setStyle("-fx-text-fill: #cc0000;");
+                    connectionLabel.getStyleClass().removeAll("text-error", "text-success");
+                    connectionLabel.getStyleClass().add("text-error");
                     updateStatus("Connection error: " + e.getMessage());
                 });
             }
@@ -286,8 +289,8 @@ public class MainWindow extends BorderPane {
     public void updateConnectionStatus(String message, boolean connected) {
         Platform.runLater(() -> {
             connectionLabel.setText(message);
-            connectionLabel.setStyle(connected ?
-                    "-fx-text-fill: #00aa00;" : "-fx-text-fill: #cc0000;");
+            connectionLabel.getStyleClass().removeAll("text-error", "text-success");
+            connectionLabel.getStyleClass().add(connected ? "text-success" : "text-error");
         });
     }
 }

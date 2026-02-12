@@ -60,7 +60,7 @@ public class SearchPanel extends VBox {
     private void initializeUI() {
         setSpacing(0);
         setPadding(new Insets(0));
-        setStyle("-fx-background-color: #fafafa; -fx-border-color: #ddd; -fx-border-radius: 5;");
+        getStyleClass().add("panel-background");
         setMinHeight(200);
         setPrefHeight(350);
         setMaxHeight(450);

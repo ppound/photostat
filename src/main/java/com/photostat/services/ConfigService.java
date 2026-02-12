@@ -30,6 +30,7 @@ public class ConfigService {
     private static final boolean DEFAULT_OPENSEARCH_SSL = false;
     private static final String DEFAULT_INDEX_NAME = "photostat";
     private static final int DEFAULT_BATCH_SIZE = 50;
+    private static final int DEFAULT_INDEXING_THREADS = 4;
     private static final int DEFAULT_THUMBNAIL_SIZE = 200;
 
     private ConfigService() {
@@ -104,6 +105,15 @@ public class ConfigService {
             }
         }
 
+        // Ensure indexing.indexing_threads exists
+        if (config.containsKey("indexing")) {
+            Map<String, Object> indexing = (Map<String, Object>) config.get("indexing");
+            if (!indexing.containsKey("indexing_threads")) {
+                indexing.put("indexing_threads", DEFAULT_INDEXING_THREADS);
+                changed = true;
+            }
+        }
+
         // Ensure sidecar section exists
         if (!config.containsKey("sidecar")) {
             Map<String, Object> sidecar = new HashMap<>();
@@ -160,6 +170,7 @@ public class ConfigService {
         // Indexing settings
         Map<String, Object> indexing = new HashMap<>();
         indexing.put("batch_size", DEFAULT_BATCH_SIZE);
+        indexing.put("indexing_threads", DEFAULT_INDEXING_THREADS);
         indexing.put("directories", new ArrayList<String>());
         indexing.put("file_extensions", List.of(
             ".jpg", ".jpeg", ".png", ".tiff", ".tif",
@@ -173,6 +184,7 @@ public class ConfigService {
         ui.put("results_per_page", 50);
         ui.put("window_width", 1400);
         ui.put("window_height", 900);
+        ui.put("theme", "light");
         defaultConfig.put("ui", ui);
 
         // ExifTool settings
@@ -285,6 +297,14 @@ public class ConfigService {
         setNestedValue("indexing", "batch_size", batchSize);
     }
 
+    public int getIndexingThreads() {
+        return getNestedInt("indexing", "indexing_threads", DEFAULT_INDEXING_THREADS);
+    }
+
+    public void setIndexingThreads(int threads) {
+        setNestedValue("indexing", "indexing_threads", threads);
+    }
+
     @SuppressWarnings("unchecked")
     public List<String> getDirectories() {
         Map<String, Object> indexing = (Map<String, Object>) config.get("indexing");
@@ -356,6 +376,15 @@ public class ConfigService {
 
     public void setWindowHeight(int height) {
         setNestedValue("ui", "window_height", height);
+    }
+
+    // Theme settings
+    public String getTheme() {
+        return getNestedString("ui", "theme", "light");
+    }
+
+    public void setTheme(String theme) {
+        setNestedValue("ui", "theme", theme);
     }
 
     // ExifTool settings

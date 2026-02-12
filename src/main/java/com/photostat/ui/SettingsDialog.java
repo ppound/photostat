@@ -1,5 +1,6 @@
 package com.photostat.ui;
 
+import com.photostat.App;
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
 import com.photostat.services.OpenSearchService;
@@ -39,6 +40,8 @@ public class SettingsDialog extends Dialog<Boolean> {
     private TextField indexNameField;
     private TextField exifToolPathField;
     private Spinner<Integer> batchSizeSpinner;
+    private Spinner<Integer> indexingThreadsSpinner;
+    private ComboBox<String> themeCombo;
     private Spinner<Integer> thumbnailSizeSpinner;
     private Spinner<Integer> resultsPerPageSpinner;
 
@@ -210,6 +213,14 @@ public class SettingsDialog extends Dialog<Boolean> {
         grid.add(batchSizeSpinner, 1, row);
         grid.add(new Label("(documents per batch)"), 2, row++);
 
+        // Indexing threads
+        grid.add(new Label("Indexing Threads:"), 0, row);
+        indexingThreadsSpinner = new Spinner<>(1, 16, 4);
+        indexingThreadsSpinner.setEditable(true);
+        indexingThreadsSpinner.setPrefWidth(100);
+        grid.add(indexingThreadsSpinner, 1, row);
+        grid.add(new Label("(parallel threads for indexing)"), 2, row++);
+
         // ExifTool path
         grid.add(new Label("ExifTool Path:"), 0, row);
         exifToolPathField = new TextField();
@@ -247,7 +258,7 @@ public class SettingsDialog extends Dialog<Boolean> {
                 "TIFF and RAW file types (CR2, NEF, ARW, etc.) are slower to index and require ExifTool."
         );
         fileTypesInfoLabel.setWrapText(true);
-        fileTypesInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        fileTypesInfoLabel.getStyleClass().add("info-label");
 
         // Info labels
         Label exifToolInfoLabel = new Label(
@@ -255,14 +266,14 @@ public class SettingsDialog extends Dialog<Boolean> {
                         "Download from: https://exiftool.org/"
         );
         exifToolInfoLabel.setWrapText(true);
-        exifToolInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        exifToolInfoLabel.getStyleClass().add("info-label");
 
         Label sidecarInfoLabel = new Label(
                 "Sidecar files (.photostat.json) store custom metadata (persons, places, tags) alongside images. " +
                         "This preserves metadata when rebuilding the index."
         );
         sidecarInfoLabel.setWrapText(true);
-        sidecarInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        sidecarInfoLabel.getStyleClass().add("info-label");
 
         pane.getChildren().addAll(grid, new Separator(), fileTypesLabel, extensionsPane, fileTypesInfoLabel, new Separator(), exifToolInfoLabel, sidecarInfoLabel);
 
@@ -278,6 +289,13 @@ public class SettingsDialog extends Dialog<Boolean> {
         grid.setVgap(10);
 
         int row = 0;
+
+        // Theme
+        grid.add(new Label("Theme:"), 0, row);
+        themeCombo = new ComboBox<>();
+        themeCombo.getItems().addAll("Light", "Dark");
+        themeCombo.setPrefWidth(100);
+        grid.add(themeCombo, 1, row++);
 
         // Thumbnail size
         grid.add(new Label("Thumbnail Size:"), 0, row);
@@ -296,7 +314,7 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Config file location
         Label configPathLabel = new Label("Config file: " + configService.getConfigPath());
-        configPathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        configPathLabel.getStyleClass().add("info-label-small");
 
         pane.getChildren().addAll(grid, new Separator(), configPathLabel);
 
@@ -332,12 +350,12 @@ public class SettingsDialog extends Dialog<Boolean> {
                 "WARN: Warnings and errors only\n" +
                 "ERROR: Errors only"
         );
-        levelDescLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        levelDescLabel.getStyleClass().add("info-label-small");
 
         // Log file location
         String logPath = System.getProperty("user.home") + "/.photostat/photostat.log";
         Label logPathLabel = new Label("Log file: " + logPath);
-        logPathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        logPathLabel.getStyleClass().add("info-label-small");
 
         // Log file buttons
         Button openLogButton = new Button("Open Log File");
@@ -351,7 +369,8 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Note about restart
         Label noteLabel = new Label("Note: Changes to logging settings require an application restart to take effect.");
         noteLabel.setWrapText(true);
-        noteLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #996600;");
+        noteLabel.setStyle("-fx-font-style: italic;");
+        noteLabel.getStyleClass().add("text-warning");
 
         pane.getChildren().addAll(grid, new Separator(), levelDescLabel, logPathLabel, logButtonsBox, new Separator(), noteLabel);
 
@@ -385,12 +404,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         ThumbnailService thumbnailService = ThumbnailService.getInstance();
         String cachePath = thumbnailService.getDiskCacheDir().toString();
         Label cachePathLabel = new Label("Cache location: " + cachePath);
-        cachePathLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        cachePathLabel.getStyleClass().add("info-label-small");
 
         // Cache statistics
         cacheStatsLabel = new Label();
         updateCacheStats();
-        cacheStatsLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        cacheStatsLabel.getStyleClass().add("info-label-small");
 
         // Cache buttons
         Button refreshStatsButton = new Button("Refresh Stats");
@@ -410,7 +429,7 @@ public class SettingsDialog extends Dialog<Boolean> {
                 "Old thumbnails are automatically removed when the cache exceeds the size limit."
         );
         infoLabel.setWrapText(true);
-        infoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        infoLabel.getStyleClass().add("info-label");
 
         pane.getChildren().addAll(grid, new Separator(), cachePathLabel, cacheStatsLabel, cacheButtonsBox, new Separator(), infoLabel);
 
@@ -433,7 +452,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         providerGrid.add(aiProviderCombo, 1, 0);
 
         Label providerInfoLabel = new Label("Select which AI service to use for image analysis");
-        providerInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        providerInfoLabel.getStyleClass().add("info-label-small");
         providerGrid.add(providerInfoLabel, 2, 0);
 
         // Claude settings section
@@ -470,7 +489,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         claudeGrid.add(claudeTestBox, 1, 2);
 
         Label claudeInfoLabel = new Label("Get API key: https://console.anthropic.com/");
-        claudeInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        claudeInfoLabel.getStyleClass().add("info-label-small");
         claudeGrid.add(claudeInfoLabel, 1, 3);
 
         claudeSection.setContent(claudeGrid);
@@ -508,7 +527,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         geminiGrid.add(geminiTestBox, 1, 2);
 
         Label geminiInfoLabel = new Label("Get API key: https://aistudio.google.com/apikey");
-        geminiInfoLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        geminiInfoLabel.getStyleClass().add("info-label-small");
         geminiGrid.add(geminiInfoLabel, 1, 3);
 
         geminiSection.setContent(geminiGrid);
@@ -521,7 +540,7 @@ public class SettingsDialog extends Dialog<Boolean> {
             "• Gemini Flash: ~$0.05-0.10 (cheapest)"
         );
         costInfoLabel.setWrapText(true);
-        costInfoLabel.setStyle("-fx-font-style: italic; -fx-text-fill: #666;");
+        costInfoLabel.getStyleClass().add("info-label");
 
         // Analysis Prompt section
         TitledPane promptSection = new TitledPane();
@@ -552,14 +571,19 @@ public class SettingsDialog extends Dialog<Boolean> {
         return scrollPane;
     }
 
+    private void setStatusStyle(Label label, String styleClass) {
+        label.getStyleClass().removeAll("text-muted", "text-error", "text-success");
+        label.getStyleClass().add(styleClass);
+    }
+
     private void testGeminiApi(Label statusLabel) {
         statusLabel.setText("Testing...");
-        statusLabel.setStyle("-fx-text-fill: #666;");
+        setStatusStyle(statusLabel, "text-muted");
 
         String apiKey = geminiApiKeyField.getText().trim();
         if (apiKey.isEmpty()) {
             statusLabel.setText("Please enter an API key");
-            statusLabel.setStyle("-fx-text-fill: #cc0000;");
+            setStatusStyle(statusLabel, "text-error");
             return;
         }
 
@@ -579,10 +603,10 @@ public class SettingsDialog extends Dialog<Boolean> {
                 Platform.runLater(() -> {
                     if (response != null && response.text() != null) {
                         statusLabel.setText("API key is valid!");
-                        statusLabel.setStyle("-fx-text-fill: #00aa00;");
+                        setStatusStyle(statusLabel, "text-success");
                     } else {
                         statusLabel.setText("Invalid response");
-                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                        setStatusStyle(statusLabel, "text-error");
                     }
                 });
             } catch (Exception e) {
@@ -593,7 +617,7 @@ public class SettingsDialog extends Dialog<Boolean> {
                     } else {
                         statusLabel.setText("Error: " + (msg != null ? msg.substring(0, Math.min(30, msg.length())) : "Unknown"));
                     }
-                    statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    setStatusStyle(statusLabel, "text-error");
                 });
             }
         }).start();
@@ -601,12 +625,12 @@ public class SettingsDialog extends Dialog<Boolean> {
 
     private void testClaudeApi(Label statusLabel) {
         statusLabel.setText("Testing...");
-        statusLabel.setStyle("-fx-text-fill: #666;");
+        setStatusStyle(statusLabel, "text-muted");
 
         String apiKey = claudeApiKeyField.getText().trim();
         if (apiKey.isEmpty()) {
             statusLabel.setText("Please enter an API key");
-            statusLabel.setStyle("-fx-text-fill: #cc0000;");
+            setStatusStyle(statusLabel, "text-error");
             return;
         }
 
@@ -629,19 +653,19 @@ public class SettingsDialog extends Dialog<Boolean> {
                 Platform.runLater(() -> {
                     if (response.statusCode() == 200) {
                         statusLabel.setText("API key is valid!");
-                        statusLabel.setStyle("-fx-text-fill: #00aa00;");
+                        setStatusStyle(statusLabel, "text-success");
                     } else if (response.statusCode() == 401) {
                         statusLabel.setText("Invalid API key");
-                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                        setStatusStyle(statusLabel, "text-error");
                     } else {
                         statusLabel.setText("Error: " + response.statusCode());
-                        statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                        setStatusStyle(statusLabel, "text-error");
                     }
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     statusLabel.setText("Error: " + e.getMessage());
-                    statusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    setStatusStyle(statusLabel, "text-error");
                 });
             }
         }).start();
@@ -683,6 +707,8 @@ public class SettingsDialog extends Dialog<Boolean> {
         indexNameField.setText(configService.getIndexName());
         exifToolPathField.setText(configService.getExifToolPath());
         batchSizeSpinner.getValueFactory().setValue(configService.getBatchSize());
+        indexingThreadsSpinner.getValueFactory().setValue(configService.getIndexingThreads());
+        themeCombo.setValue("dark".equalsIgnoreCase(configService.getTheme()) ? "Dark" : "Light");
         thumbnailSizeSpinner.getValueFactory().setValue(configService.getThumbnailSize());
         resultsPerPageSpinner.getValueFactory().setValue(configService.getResultsPerPage());
 
@@ -725,6 +751,17 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setIndexName(indexNameField.getText().trim());
         configService.setExifToolPath(exifToolPathField.getText().trim());
         configService.setBatchSize(batchSizeSpinner.getValue());
+        configService.setIndexingThreads(indexingThreadsSpinner.getValue());
+        // Theme
+        String selectedTheme = "Dark".equals(themeCombo.getValue()) ? "dark" : "light";
+        configService.setTheme(selectedTheme);
+
+        // Apply theme instantly
+        javafx.scene.Scene scene = App.getMainScene();
+        if (scene != null) {
+            App.applyTheme(scene, selectedTheme);
+        }
+
         configService.setThumbnailSize(thumbnailSizeSpinner.getValue());
         configService.setResultsPerPage(resultsPerPageSpinner.getValue());
 
@@ -772,7 +809,7 @@ public class SettingsDialog extends Dialog<Boolean> {
 
     private void testConnection() {
         connectionStatusLabel.setText("Testing...");
-        connectionStatusLabel.setStyle("-fx-text-fill: #666;");
+        setStatusStyle(connectionStatusLabel, "text-muted");
 
         String host = hostField.getText().trim();
         int port;
@@ -795,16 +832,16 @@ public class SettingsDialog extends Dialog<Boolean> {
                 Platform.runLater(() -> {
                     if (success) {
                         connectionStatusLabel.setText("Connection successful!");
-                        connectionStatusLabel.setStyle("-fx-text-fill: #00aa00;");
+                        setStatusStyle(connectionStatusLabel, "text-success");
                     } else {
                         connectionStatusLabel.setText("Connection failed");
-                        connectionStatusLabel.setStyle("-fx-text-fill: #cc0000;");
+                        setStatusStyle(connectionStatusLabel, "text-error");
                     }
                 });
             } catch (Exception e) {
                 Platform.runLater(() -> {
                     connectionStatusLabel.setText("Error: " + e.getMessage());
-                    connectionStatusLabel.setStyle("-fx-text-fill: #cc0000;");
+                    setStatusStyle(connectionStatusLabel, "text-error");
                 });
             }
         });

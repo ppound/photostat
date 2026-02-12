@@ -68,14 +68,14 @@ public class DetailPanel extends VBox {
     private void initializeUI() {
         setSpacing(10);
         setPadding(new Insets(10));
-        setStyle("-fx-background-color: #fafafa; -fx-border-color: #ddd; -fx-border-radius: 5;");
+        getStyleClass().add("panel-background");
 
         // Preview image
         previewImage = new ImageView();
         previewImage.setPreserveRatio(true);
 
         StackPane imageContainer = new StackPane(previewImage);
-        imageContainer.setStyle("-fx-background-color: #333;");
+        imageContainer.getStyleClass().add("image-container-bg");
         imageContainer.setMinHeight(300);
         imageContainer.setPrefHeight(400);
         imageContainer.setMaxHeight(500);

@@ -39,12 +39,12 @@ public class MultiSelectAutoComplete extends VBox {
         chipsPane.setHgap(4);
         chipsPane.setVgap(4);
         chipsPane.setPadding(new Insets(4));
-        chipsPane.setStyle("-fx-background-color: white; -fx-border-color: #ccc; -fx-border-radius: 3;");
+        chipsPane.getStyleClass().add("chips-container");
 
         // Input field for typing
         inputField = new TextField();
         inputField.setPromptText("Type to search...");
-        inputField.setStyle("-fx-background-color: transparent; -fx-border-width: 0; -fx-padding: 2;");
+        inputField.getStyleClass().add("chip-input");
         inputField.setMinWidth(80);
         inputField.setPrefWidth(100);
 
@@ -195,7 +195,7 @@ public class MultiSelectAutoComplete extends VBox {
         HBox chip = new HBox(4);
         chip.setAlignment(Pos.CENTER_LEFT);
         chip.setPadding(new Insets(2, 6, 2, 8));
-        chip.setStyle("-fx-background-color: #e0e0e0; -fx-background-radius: 12; -fx-border-radius: 12;");
+        chip.getStyleClass().add("chip");
 
         Label label = new Label(text);
         label.setStyle("-fx-font-size: 11px;");
@@ -203,10 +203,6 @@ public class MultiSelectAutoComplete extends VBox {
         Button removeBtn = new Button("\u00D7"); // × character
         removeBtn.setStyle("-fx-background-color: transparent; -fx-padding: 0 0 0 4; -fx-font-size: 12px; -fx-cursor: hand;");
         removeBtn.setOnAction(e -> removeItem(text));
-
-        // Hover effect
-        chip.setOnMouseEntered(e -> chip.setStyle("-fx-background-color: #d0d0d0; -fx-background-radius: 12; -fx-border-radius: 12;"));
-        chip.setOnMouseExited(e -> chip.setStyle("-fx-background-color: #e0e0e0; -fx-background-radius: 12; -fx-border-radius: 12;"));
 
         chip.getChildren().addAll(label, removeBtn);
         return chip;

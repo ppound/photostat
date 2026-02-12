@@ -37,7 +37,7 @@ public class FacetsPanel extends VBox {
     private void initializeUI() {
         setSpacing(5);
         setPadding(new Insets(10));
-        setStyle("-fx-background-color: #fafafa; -fx-border-color: #ddd; -fx-border-radius: 5;");
+        getStyleClass().add("panel-background");
 
         Label title = new Label("Filters");
         title.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");

@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -117,13 +118,17 @@ public class ResultsPanel extends VBox {
         moveSelectedBtn.setOnAction(e -> moveSelectedImages());
 
         Button deleteSelectedBtn = new Button("Delete Selected");
-        deleteSelectedBtn.setStyle("-fx-text-fill: #cc0000;");
+        deleteSelectedBtn.getStyleClass().add("delete-button");
         deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
 
         Label selectionLabel = new Label("(Use Ctrl+Click or Shift+Click to select multiple)");
-        selectionLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        selectionLabel.getStyleClass().add("info-label-small");
 
-        HBox toolbar = new HBox(10, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
+        Button slideshowBtn = new Button("Slideshow");
+        slideshowBtn.setOnAction(e -> launchSlideshow());
+        slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow (F5)"));
+
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -136,8 +141,13 @@ public class ResultsPanel extends VBox {
             }
         });
 
-        // Keyboard rating: 1-5 sets rating, 0 clears it
+        // Keyboard shortcuts
         resultsTable.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.F5) {
+                launchSlideshow();
+                event.consume();
+                return;
+            }
             if (event.isControlDown() || event.isAltDown() || event.isMetaDown() || event.isShiftDown()) {
                 return;
             }
@@ -632,12 +642,12 @@ public class ResultsPanel extends VBox {
         progressLabel.setStyle("-fx-font-size: 12px;");
 
         Label currentFileLabel = new Label("Preparing...");
-        currentFileLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        currentFileLabel.getStyleClass().add("info-label-small");
         currentFileLabel.setWrapText(true);
         currentFileLabel.setMaxWidth(400);
 
         Label statusLabel = new Label("");
-        statusLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: #666;");
+        statusLabel.getStyleClass().add("info-label-small");
 
         Button cancelButton = new Button("Cancel");
         final boolean[] cancelled = {false};
@@ -801,6 +811,32 @@ public class ResultsPanel extends VBox {
      */
     public void setRatingChangedCallback(Consumer<ImageMetadata> callback) {
         this.ratingChangedCallback = callback;
+    }
+
+    /**
+     * Launch full-screen slideshow from current results.
+     */
+    private void launchSlideshow() {
+        List<ImageMetadata> items = new ArrayList<>(resultsTable.getItems());
+        if (items.isEmpty()) {
+            return;
+        }
+        int selectedIndex = resultsTable.getSelectionModel().getSelectedIndex();
+        if (selectedIndex < 0) {
+            selectedIndex = 0;
+        }
+
+        BiConsumer<ImageMetadata, String> callback = (metadata, rating) -> {
+            Platform.runLater(() -> {
+                resultsTable.refresh();
+                if (ratingChangedCallback != null) {
+                    ratingChangedCallback.accept(metadata);
+                }
+            });
+        };
+
+        SlideshowStage slideshow = new SlideshowStage(items, selectedIndex, callback);
+        slideshow.show();
     }
 
     /**

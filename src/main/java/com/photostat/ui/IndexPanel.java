@@ -186,7 +186,7 @@ public class IndexPanel extends BorderPane {
         Label optionsLabel = new Label("Options:");
 
         Button deleteAllButton = new Button("Delete All Documents");
-        deleteAllButton.setStyle("-fx-text-fill: #cc0000;");
+        deleteAllButton.getStyleClass().add("delete-button");
         deleteAllButton.setOnAction(e -> deleteAllDocuments());
 
         // ExifTool status
@@ -194,8 +194,7 @@ public class IndexPanel extends BorderPane {
         Label exifToolStatus = new Label(
                 exifService.isExifToolAvailable() ? "Available" : "Not found (RAW support limited)"
         );
-        exifToolStatus.setStyle(exifService.isExifToolAvailable() ?
-                "-fx-text-fill: #00aa00;" : "-fx-text-fill: #cc6600;");
+        exifToolStatus.getStyleClass().add(exifService.isExifToolAvailable() ? "text-success" : "text-warning");
 
         HBox exifToolBox = new HBox(10, exifToolLabel, exifToolStatus);
 
@@ -322,6 +321,7 @@ public class IndexPanel extends BorderPane {
         stopButton.setDisable(false);
         reindexButton.setDisable(true);
         progressBar.setProgress(0);
+        statusLabel.setText("Indexing with " + configService.getIndexingThreads() + " threads...");
 
         indexerService.startIndexing();
     }
