@@ -247,7 +247,28 @@ public class DuplicatesPanel extends BorderPane {
         HBox.setHgrow(info, Priority.ALWAYS);
 
         row.getChildren().addAll(checkBox, imageView, info);
+
+        // Double-click to open file in system viewer
+        row.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                openFile(img.getFilePath());
+            }
+        });
+
         return row;
+    }
+
+    private void openFile(String filePath) {
+        try {
+            java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+            desktop.open(new java.io.File(filePath));
+        } catch (Exception e) {
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Cannot open file");
+            alert.setContentText("Failed to open: " + filePath + "\n" + e.getMessage());
+            alert.showAndWait();
+        }
     }
 
     private void deleteSelected(OpenSearchService.DuplicateGroup group, List<CheckBox> checkBoxes) {
