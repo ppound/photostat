@@ -23,6 +23,8 @@ public class LoggingService {
     private PrintWriter writer;
     private boolean enabled;
     private String logLevel;
+    private long maxLogSizeBytes;
+    private int maxLogFiles;
 
     private LoggingService() {
         // Create .photostat directory in user home
@@ -37,8 +39,11 @@ public class LoggingService {
             Path configPath = photostatDir.resolve("config.json");
             enabled = readLoggingEnabledFromConfig(configPath);
             logLevel = readLoggingLevelFromConfig(configPath);
+            maxLogSizeBytes = readIntFromConfig(configPath, "max_log_size_mb", 5) * 1024L * 1024L;
+            maxLogFiles = readIntFromConfig(configPath, "max_log_files", 3);
 
             if (enabled) {
+                rotateIfNeeded();
                 // Append mode
                 writer = new PrintWriter(new FileWriter(logFile.toFile(), true), true);
                 writeLog("INFO", "LoggingService", "=== PhotoStat Started ===");
@@ -70,6 +75,57 @@ public class LoggingService {
             // Ignore, return default
         }
         return false;  // Default: logging disabled
+    }
+
+    private int readIntFromConfig(Path configPath, String key, int defaultValue) {
+        try {
+            if (Files.exists(configPath)) {
+                String content = Files.readString(configPath);
+                if (content.contains("\"logging\"") && content.contains("\"" + key + "\"")) {
+                    int loggingIdx = content.indexOf("\"logging\"");
+                    int keyIdx = content.indexOf("\"" + key + "\"", loggingIdx);
+                    if (keyIdx > loggingIdx) {
+                        String afterKey = content.substring(keyIdx + key.length() + 2, Math.min(keyIdx + key.length() + 20, content.length()));
+                        // Extract number after colon
+                        int colonIdx = afterKey.indexOf(':');
+                        if (colonIdx >= 0) {
+                            String numStr = afterKey.substring(colonIdx + 1).trim().replaceAll("[^0-9]", "");
+                            if (!numStr.isEmpty()) {
+                                return Integer.parseInt(numStr);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore, return default
+        }
+        return defaultValue;
+    }
+
+    private void rotateIfNeeded() {
+        try {
+            if (!Files.exists(logFile)) return;
+
+            long fileSize = Files.size(logFile);
+            if (fileSize < maxLogSizeBytes) return;
+
+            // Rotate: delete oldest, shift others up, rename current to .1
+            for (int i = maxLogFiles; i >= 1; i--) {
+                Path older = logFile.resolveSibling("photostat.log." + i);
+                if (i == maxLogFiles) {
+                    Files.deleteIfExists(older);
+                } else {
+                    Path newer = logFile.resolveSibling("photostat.log." + (i + 1));
+                    if (Files.exists(older)) {
+                        Files.move(older, newer);
+                    }
+                }
+            }
+            Files.move(logFile, logFile.resolveSibling("photostat.log.1"));
+        } catch (IOException e) {
+            System.err.println("Log rotation failed: " + e.getMessage());
+        }
     }
 
     private String readLoggingLevelFromConfig(Path configPath) {

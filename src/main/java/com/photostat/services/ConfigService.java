@@ -197,6 +197,8 @@ public class ConfigService {
         Map<String, Object> logging = new HashMap<>();
         logging.put("enabled", false);  // Logging disabled by default
         logging.put("level", "INFO");   // DEBUG, INFO, WARN, ERROR
+        logging.put("max_log_size_mb", 5);  // Rotate when log exceeds this size
+        logging.put("max_log_files", 3);    // Number of rotated log files to keep
         defaultConfig.put("logging", logging);
 
         // Thumbnail cache settings
@@ -415,6 +417,14 @@ public class ConfigService {
 
     public void setLoggingLevel(String level) {
         setNestedValue("logging", "level", level);
+    }
+
+    public int getMaxLogSizeMb() {
+        return getNestedInt("logging", "max_log_size_mb", 5);
+    }
+
+    public int getMaxLogFiles() {
+        return getNestedInt("logging", "max_log_files", 3);
     }
 
     // Thumbnail cache settings
