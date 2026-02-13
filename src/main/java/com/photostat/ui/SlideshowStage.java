@@ -1,6 +1,7 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.FileOperationsService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.SidecarService;
@@ -11,6 +12,8 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -26,9 +29,11 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 /**
  * Full-screen slideshow for browsing search results with keyboard navigation and rating.
@@ -42,9 +47,11 @@ public class SlideshowStage extends Stage {
 
     private final List<ImageMetadata> images;
     private final BiConsumer<ImageMetadata, String> ratingCallback;
+    private Consumer<ImageMetadata> deleteCallback;
     private final ThumbnailService thumbnailService;
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
+    private final FileOperationsService fileOperationsService;
     private final LoggingService logger;
 
     private int currentIndex;
@@ -74,6 +81,7 @@ public class SlideshowStage extends Stage {
         this.thumbnailService = ThumbnailService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
+        this.fileOperationsService = FileOperationsService.getInstance();
         this.logger = LoggingService.getInstance();
 
         // Root layout
@@ -193,6 +201,11 @@ public class SlideshowStage extends Stage {
                 break;
             case I:
                 toggleHud();
+                event.consume();
+                break;
+            case DELETE:
+            case BACK_SPACE:
+                deleteCurrentImage();
                 event.consume();
                 break;
             default:
@@ -367,6 +380,73 @@ public class SlideshowStage extends Stage {
         });
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /**
+     * Set a callback invoked after an image is deleted, so the caller can refresh its view.
+     */
+    public void setDeleteCallback(Consumer<ImageMetadata> callback) {
+        this.deleteCallback = callback;
+    }
+
+    private void deleteCurrentImage() {
+        if (images.isEmpty()) return;
+
+        ImageMetadata metadata = images.get(currentIndex);
+        String fileName = metadata.getFileName();
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Delete");
+        confirm.setHeaderText("Delete " + fileName + "?");
+        confirm.setContentText("This will permanently delete the file from disk and remove it from the index. This cannot be undone.");
+        confirm.initOwner(this);
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                // Delete file + sidecar from disk
+                FileOperationsService.BatchOperationResult result =
+                        fileOperationsService.deleteImages(Collections.singletonList(metadata.getFilePath()), true);
+
+                if (result.successCount > 0) {
+                    // Remove from index
+                    try {
+                        openSearchService.deleteDocument(metadata.getFilePath());
+                    } catch (Exception e) {
+                        logger.error("SlideshowStage", "Failed to remove from index: " + metadata.getFilePath(), e);
+                    }
+
+                    // Remove from slideshow list
+                    images.remove(currentIndex);
+
+                    // Notify caller
+                    if (deleteCallback != null) {
+                        deleteCallback.accept(metadata);
+                    }
+
+                    showToast("Deleted");
+
+                    if (images.isEmpty()) {
+                        close();
+                    } else {
+                        // Adjust index if we deleted the last image
+                        if (currentIndex >= images.size()) {
+                            currentIndex = images.size() - 1;
+                        }
+                        // Invalidate preloaded images since indices shifted
+                        preloadedNext = null;
+                        preloadedPrev = null;
+                        preloadedNextIndex = -1;
+                        preloadedPrevIndex = -1;
+                        showImage();
+                    }
+                } else {
+                    showToast("Delete failed");
+                    if (result.hasErrors()) {
+                        logger.error("SlideshowStage", "Delete failed: " + String.join(", ", result.errors), null);
+                    }
+                }
+            }
+        });
     }
 
     private void showToast(String text) {

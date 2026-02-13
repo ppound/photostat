@@ -836,6 +836,10 @@ public class ResultsPanel extends VBox {
         };
 
         SlideshowStage slideshow = new SlideshowStage(items, selectedIndex, callback);
+        slideshow.setDeleteCallback(metadata -> Platform.runLater(() -> {
+            resultsTable.getItems().remove(metadata);
+            resultsTable.refresh();
+        }));
         slideshow.show();
     }
 

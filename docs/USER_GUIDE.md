@@ -302,6 +302,7 @@ The slideshow opens full-screen starting from the currently selected image (or t
 | **1-5** (digit or numpad) | Set rating (1 = ★, 5 = ★★★★★) |
 | **0** (digit or numpad) | Clear rating |
 | **I** | Toggle HUD info overlay |
+| **Delete / Backspace** | Delete current image |
 | **Escape** | Exit slideshow |
 
 ### HUD Overlay
@@ -317,6 +318,10 @@ The HUD auto-hides after 3 seconds and reappears on any key press or mouse movem
 ### Rating in Slideshow
 
 Press **1-5** to rate the current image or **0** to clear the rating. A brief toast notification confirms the rating. Changes are saved immediately to OpenSearch and sidecar files, and the results table updates when you exit the slideshow.
+
+### Deleting Images in Slideshow
+
+Press **Delete** or **Backspace** to delete the current image. A confirmation dialog appears before anything is removed. On confirmation, the image file, its sidecar file, and its index entry are all deleted. The slideshow advances to the next image automatically.
 
 ### RAW File Support
 
