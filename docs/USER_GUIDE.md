@@ -629,13 +629,13 @@ The CLI is the best way to pre-cache a large collection since it runs in the bac
 
 ```bash
 # Pre-cache with default 4 threads
-java -jar photostat-java-1.7.1-executable.jar --cache-thumbnails
+java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails
 
 # Use 8 threads for faster processing
-java -jar photostat-java-1.7.1-executable.jar --cache-thumbnails --parallel 8
+java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails --parallel 8
 
 # Preview what would be cached
-java -jar photostat-java-1.7.1-executable.jar --cache-thumbnails --dry-run
+java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails --dry-run
 ```
 
 Already-cached thumbnails are skipped automatically, so you can re-run this after adding new images.
@@ -648,16 +648,16 @@ Analyzing thousands of images through the GUI is possible but the CLI is better 
 
 ```bash
 # Analyze all indexed images (skips already-analyzed ones)
-java -jar photostat-java-1.7.1-executable.jar --analyze
+java -jar photostat-java-1.7.2-executable.jar --analyze
 
 # Run 4 analyses in parallel for faster throughput
-java -jar photostat-java-1.7.1-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.7.2-executable.jar --analyze --parallel 4
 
 # Use Gemini Flash for cheapest batch processing
-java -jar photostat-java-1.7.1-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.7.2-executable.jar --analyze --provider gemini
 
 # Preview what would be analyzed without making API calls
-java -jar photostat-java-1.7.1-executable.jar --analyze --dry-run
+java -jar photostat-java-1.7.2-executable.jar --analyze --dry-run
 ```
 
 **Cost awareness**: AI analysis incurs API costs per image. For very large collections, consider:
@@ -669,7 +669,7 @@ java -jar photostat-java-1.7.1-executable.jar --analyze --dry-run
 Run it in the background on Linux/macOS:
 
 ```bash
-nohup java -jar photostat-java-1.7.1-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
+nohup java -jar photostat-java-1.7.2-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
 ```
 
 ### RAW Files
