@@ -1,4 +1,4 @@
-# PhotoStat Java
+# PhotoStat
 
 A powerful cross-platform desktop application for indexing, searching, and analyzing your photo collection using EXIF metadata. Built with JavaFX and powered by OpenSearch for fast, full-text search capabilities.
 
