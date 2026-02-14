@@ -153,7 +153,7 @@ public class ThumbnailService {
     /**
      * Get the disk cache file path for a given image.
      */
-    private Path getDiskCachePath(String filePath) {
+    public Path getDiskCachePath(String filePath) {
         String cacheKey = getCacheKey(filePath);
         return diskCacheDir.resolve(cacheKey + ".jpg");
     }

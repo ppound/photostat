@@ -25,6 +25,7 @@ public class MainWindow extends BorderPane {
     private DetailPanel detailPanel;
     private IndexPanel indexPanel;
     private DuplicatesPanel duplicatesPanel;
+    private MapPanel mapPanel;
     private ChartsPanel chartsPanel;
 
     private Label statusLabel;
@@ -57,17 +58,24 @@ public class MainWindow extends BorderPane {
         duplicatesPanel = new DuplicatesPanel();
         duplicatesTab.setContent(duplicatesPanel);
 
+        // Create Map tab
+        Tab mapTab = new Tab("Map");
+        mapPanel = new MapPanel();
+        mapTab.setContent(mapPanel);
+
         // Create Charts tab
         Tab chartsTab = new Tab("Charts");
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, chartsTab);
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, mapTab, chartsTab);
 
-        // Refresh charts when switching to charts tab
+        // Refresh panels when switching tabs
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab == chartsTab) {
                 chartsPanel.refresh();
+            } else if (newTab == mapTab) {
+                mapPanel.refresh();
             }
         });
 
@@ -260,6 +268,10 @@ public class MainWindow extends BorderPane {
         if (selectedTab.getText().equals("Search")) {
             if (searchPanel != null) {
                 searchPanel.executeSearch();
+            }
+        } else if (selectedTab.getText().equals("Map")) {
+            if (mapPanel != null) {
+                mapPanel.refresh();
             }
         } else if (selectedTab.getText().equals("Charts")) {
             if (chartsPanel != null) {

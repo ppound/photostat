@@ -816,6 +816,199 @@ public class OpenSearchService {
     }
 
     /**
+     * Data class for GPS cluster aggregation results.
+     */
+    public static class GpsClusterData {
+        private final double latitude;
+        private final double longitude;
+        private final long count;
+        private final String tileKey;
+
+        public GpsClusterData(double latitude, double longitude, long count, String tileKey) {
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.count = count;
+            this.tileKey = tileKey;
+        }
+
+        public double getLatitude() { return latitude; }
+        public double getLongitude() { return longitude; }
+        public long getCount() { return count; }
+        public String getTileKey() { return tileKey; }
+    }
+
+    /**
+     * Data class for individual GPS image results.
+     */
+    public static class GpsImageData {
+        private final String filePath;
+        private final String fileName;
+        private final double latitude;
+        private final double longitude;
+        private final String dateTaken;
+        private final String cameraModel;
+
+        public GpsImageData(String filePath, String fileName, double latitude, double longitude,
+                            String dateTaken, String cameraModel) {
+            this.filePath = filePath;
+            this.fileName = fileName;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.dateTaken = dateTaken;
+            this.cameraModel = cameraModel;
+        }
+
+        public String getFilePath() { return filePath; }
+        public String getFileName() { return fileName; }
+        public double getLatitude() { return latitude; }
+        public double getLongitude() { return longitude; }
+        public String getDateTaken() { return dateTaken; }
+        public String getCameraModel() { return cameraModel; }
+    }
+
+    /**
+     * Search for GPS clusters using geotile_grid aggregation.
+     * Returns cluster centers with photo counts for map display.
+     */
+    public List<GpsClusterData> searchGpsClusters(int precision, double[] bounds) throws IOException {
+        String indexName = configService.getIndexName();
+        List<GpsClusterData> clusters = new ArrayList<>();
+
+        SearchRequest.Builder searchBuilder = new SearchRequest.Builder()
+                .index(indexName)
+                .size(0);
+
+        // Build query with optional bounding box filter
+        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+        boolQuery.must(Query.of(q -> q.exists(e -> e.field("gps_latitude"))));
+
+        if (bounds != null && bounds.length == 4) {
+            // bounds: [south, west, north, east]
+            boolQuery.filter(Query.of(q -> q.geoBoundingBox(gb -> gb
+                    .field("gps_location")
+                    .boundingBox(bb -> bb.tlbr(tlbr -> tlbr
+                            .topLeft(tl -> tl.latlon(ll -> ll.lat(bounds[2]).lon(bounds[1])))
+                            .bottomRight(br -> br.latlon(ll -> ll.lat(bounds[0]).lon(bounds[3]))))))));
+        }
+
+        searchBuilder.query(Query.of(q -> q.bool(boolQuery.build())));
+
+        // Geotile grid aggregation with geo_centroid sub-aggregation for accurate positioning
+        final int geoPrecision = precision;
+        searchBuilder.aggregations("geo_clusters", Aggregation.of(a -> a
+                .geotileGrid(g -> g.field("gps_location").precision(geoPrecision).size(500))
+                .aggregations("centroid", Aggregation.of(sa -> sa
+                        .geoCentroid(gc -> gc.field("gps_location"))))));
+
+        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+
+        if (response.aggregations() != null && response.aggregations().containsKey("geo_clusters")) {
+            var agg = response.aggregations().get("geo_clusters");
+            agg._get()._toAggregate().geotileGrid().buckets().array().forEach(bucket -> {
+                String key = bucket.key();
+                long count = bucket.docCount();
+
+                // Use actual centroid of images in this tile (not the tile's geometric center)
+                double lat, lon;
+                var centroidAgg = bucket.aggregations().get("centroid");
+                if (centroidAgg != null && centroidAgg.geoCentroid().location() != null) {
+                    var location = centroidAgg.geoCentroid().location();
+                    lat = location.latlon().lat();
+                    lon = location.latlon().lon();
+                } else {
+                    double[] center = geotileToLatLon(key);
+                    lat = center[0];
+                    lon = center[1];
+                }
+                clusters.add(new GpsClusterData(lat, lon, count, key));
+            });
+        }
+
+        return clusters;
+    }
+
+    /**
+     * Search for individual GPS images within a bounding box.
+     */
+    public List<GpsImageData> searchGpsImages(double[] bounds, int limit) throws IOException {
+        String indexName = configService.getIndexName();
+        List<GpsImageData> images = new ArrayList<>();
+
+        SearchRequest.Builder searchBuilder = new SearchRequest.Builder()
+                .index(indexName)
+                .size(limit);
+
+        // Bounding box query
+        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+        boolQuery.must(Query.of(q -> q.exists(e -> e.field("gps_latitude"))));
+
+        if (bounds != null && bounds.length == 4) {
+            boolQuery.filter(Query.of(q -> q.geoBoundingBox(gb -> gb
+                    .field("gps_location")
+                    .boundingBox(bb -> bb.tlbr(tlbr -> tlbr
+                            .topLeft(tl -> tl.latlon(ll -> ll.lat(bounds[2]).lon(bounds[1])))
+                            .bottomRight(br -> br.latlon(ll -> ll.lat(bounds[0]).lon(bounds[3]))))))));
+        }
+
+        searchBuilder.query(Query.of(q -> q.bool(boolQuery.build())));
+
+        // Only fetch needed fields
+        searchBuilder.source(s -> s.filter(f -> f.includes(
+                "file_path", "file_name", "gps_latitude", "gps_longitude", "date_taken", "camera_model")));
+
+        SearchResponse<ImageMetadata> response = client.search(searchBuilder.build(), ImageMetadata.class);
+
+        for (Hit<ImageMetadata> hit : response.hits().hits()) {
+            ImageMetadata src = hit.source();
+            if (src != null && src.getGpsLatitude() != null && src.getGpsLongitude() != null) {
+                images.add(new GpsImageData(
+                        src.getFilePath(),
+                        src.getFileName(),
+                        src.getGpsLatitude(),
+                        src.getGpsLongitude(),
+                        src.getDateTaken() != null ? src.getDateTaken().toString() : null,
+                        src.getCameraModel()
+                ));
+            }
+        }
+
+        return images;
+    }
+
+    /**
+     * Count total images with GPS coordinates.
+     */
+    public long countGpsImages() throws IOException {
+        String indexName = configService.getIndexName();
+
+        CountRequest request = new CountRequest.Builder()
+                .index(indexName)
+                .query(Query.of(q -> q.exists(e -> e.field("gps_latitude"))))
+                .build();
+
+        CountResponse response = client.count(request);
+        return response.count();
+    }
+
+    /**
+     * Convert a geotile key ("zoom/x/y") to lat/lon center coordinates.
+     */
+    private double[] geotileToLatLon(String tileKey) {
+        String[] parts = tileKey.split("/");
+        int zoom = Integer.parseInt(parts[0]);
+        int x = Integer.parseInt(parts[1]);
+        int y = Integer.parseInt(parts[2]);
+
+        int n = 1 << zoom;
+        // Center of tile: add 0.5 to get center
+        double lonDeg = (x + 0.5) / n * 360.0 - 180.0;
+        double latRad = Math.atan(Math.sinh(Math.PI * (1 - 2.0 * (y + 0.5) / n)));
+        double latDeg = Math.toDegrees(latRad);
+
+        return new double[]{latDeg, lonDeg};
+    }
+
+    /**
      * Search result container class.
      */
     public static class SearchResult {

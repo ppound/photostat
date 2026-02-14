@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhotoStat Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        #map { width: 100%; height: 100%; }
+        .loading-overlay {
+            position: absolute; top: 10px; right: 10px; z-index: 1000;
+            background: rgba(255,255,255,0.9); padding: 8px 14px;
+            border-radius: 6px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 13px; color: #333; box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            display: none;
+        }
+        .cluster-icon {
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; color: #fff; font-weight: bold;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            border: 3px solid rgba(255,255,255,0.8);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        .cluster-small { background: rgba(65, 105, 225, 0.85); }
+        .cluster-medium { background: rgba(255, 165, 0, 0.85); }
+        .cluster-large { background: rgba(220, 50, 50, 0.85); }
+        .photo-popup {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            font-size: 12px; min-width: 200px;
+        }
+        .photo-popup img {
+            width: 100%; max-width: 200px; height: auto;
+            border-radius: 4px; margin-bottom: 6px;
+        }
+        .photo-popup .filename { font-weight: bold; margin-bottom: 4px; word-break: break-all; }
+        .photo-popup .meta { color: #666; line-height: 1.4; }
+        .empty-message {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            z-index: 1000; background: rgba(255,255,255,0.95); padding: 20px 30px;
+            border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: none;
+        }
+        .empty-message h3 { margin-bottom: 8px; color: #333; }
+        .empty-message p { color: #666; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading" class="loading-overlay">Loading...</div>
+    <div id="empty-msg" class="empty-message">
+        <h3>No Geotagged Images</h3>
+        <p>No images with GPS coordinates found in the index.</p>
+    </div>
+
+    <!-- Disable CSS 3D transforms before Leaflet loads — JavaFX WebView's WebKit misrenders them -->
+    <script>window.L_DISABLE_3D = true;</script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script>
+        var DETAIL_ZOOM = 13;
+        var map = L.map('map', {
+            zoomControl: true,
+            zoomAnimation: false,
+            fadeAnimation: false,
+            markerZoomAnimation: false
+        }).setView([20, 0], 2);
+        var clusterLayer = L.layerGroup().addTo(map);
+        var markerClusterGroup = L.markerClusterGroup({
+            maxClusterRadius: 50,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            disableClusteringAtZoom: 18
+        });
+        var currentMode = 'cluster';
+        var moveTimeout = null;
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        function setLoadingMessage(msg) {
+            var el = document.getElementById('loading');
+            el.textContent = msg || 'Loading...';
+            el.style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showEmptyMessage() {
+            document.getElementById('empty-msg').style.display = 'block';
+        }
+
+        function hideEmptyMessage() {
+            document.getElementById('empty-msg').style.display = 'none';
+        }
+
+        function getClusterStyle(count) {
+            if (count < 100) return { cls: 'cluster-small', size: 36, fontSize: 12 };
+            if (count < 1000) return { cls: 'cluster-medium', size: 44, fontSize: 13 };
+            return { cls: 'cluster-large', size: 52, fontSize: 14 };
+        }
+
+        function formatCount(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function addClusters(jsonData) {
+            clusterLayer.clearLayers();
+            map.removeLayer(markerClusterGroup);
+            markerClusterGroup.clearLayers();
+            currentMode = 'cluster';
+
+            var data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+
+            data.forEach(function(c) {
+                var style = getClusterStyle(c.count);
+                var icon = L.divIcon({
+                    html: '<div class="cluster-icon ' + style.cls + '" style="width:' + style.size + 'px;height:' + style.size + 'px;font-size:' + style.fontSize + 'px;">' + formatCount(c.count) + '</div>',
+                    className: '',
+                    iconSize: [style.size, style.size],
+                    iconAnchor: [style.size / 2, style.size / 2]
+                });
+                var marker = L.marker([c.lat, c.lon], { icon: icon });
+                marker.on('click', function() {
+                    // Small clusters: zoom straight to marker level so individual photos are easy to find
+                    var targetZoom = c.count <= 5 ? Math.max(map.getZoom() + 2, DETAIL_ZOOM + 1) : map.getZoom() + 2;
+                    map.setView([c.lat, c.lon], targetZoom);
+                });
+                clusterLayer.addLayer(marker);
+            });
+
+            hideLoading();
+        }
+
+        function addMarkers(jsonData) {
+            clusterLayer.clearLayers();
+            map.removeLayer(markerClusterGroup);
+            markerClusterGroup.clearLayers();
+            currentMode = 'marker';
+
+            var data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+
+            data.forEach(function(img) {
+                var marker = L.marker([img.lat, img.lon]);
+                var popupHtml = '<div class="photo-popup">';
+                if (img.thumb) {
+                    popupHtml += '<img src="' + img.thumb + '" alt="thumbnail" />';
+                }
+                popupHtml += '<div class="filename">' + escapeHtml(img.fileName) + '</div>';
+                popupHtml += '<div class="meta">';
+                if (img.date) popupHtml += 'Date: ' + escapeHtml(img.date) + '<br>';
+                if (img.camera) popupHtml += 'Camera: ' + escapeHtml(img.camera) + '<br>';
+                popupHtml += 'GPS: ' + img.lat.toFixed(6) + ', ' + img.lon.toFixed(6);
+                popupHtml += '</div></div>';
+                marker.bindPopup(popupHtml, { maxWidth: 220 });
+                markerClusterGroup.addLayer(marker);
+            });
+
+            map.addLayer(markerClusterGroup);
+            hideLoading();
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(text));
+            return div.innerHTML;
+        }
+
+        function notifyJava() {
+            if (moveTimeout) clearTimeout(moveTimeout);
+            moveTimeout = setTimeout(function() {
+                try {
+                    var bounds = map.getBounds();
+                    var zoom = map.getZoom();
+                    window.javaBridge.onMapMoved(
+                        zoom,
+                        bounds.getSouth(),
+                        bounds.getWest(),
+                        bounds.getNorth(),
+                        bounds.getEast()
+                    );
+                } catch (e) {
+                    // Java bridge not ready yet
+                }
+            }, 300);
+        }
+
+        map.on('moveend', notifyJava);
+        map.on('zoomend', notifyJava);
+
+        function fitToData(points) {
+            if (points && points.length > 0) {
+                var bounds = L.latLngBounds(points);
+                map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
+            }
+        }
+
+        function mapReady() {
+            return true;
+        }
+    </script>
+</body>
+</html>
