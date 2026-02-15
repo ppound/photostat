@@ -13,6 +13,7 @@ import javafx.scene.layout.*;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -308,7 +309,8 @@ public class IndexPanel extends BorderPane {
     }
 
     private void startIndexing() {
-        if (directoryList.getItems().isEmpty()) {
+        List<String> directories = configService.getDirectories();
+        if (directories.isEmpty()) {
             Alert alert = new Alert(Alert.AlertType.WARNING);
             alert.setTitle("No Directories");
             alert.setHeaderText("No directories configured");
@@ -317,13 +319,85 @@ public class IndexPanel extends BorderPane {
             return;
         }
 
-        startButton.setDisable(true);
-        stopButton.setDisable(false);
-        reindexButton.setDisable(true);
-        progressBar.setProgress(0);
-        statusLabel.setText("Indexing with " + configService.getIndexingThreads() + " threads...");
+        // Build directory selection dialog
+        Dialog<List<String>> dialog = new Dialog<>();
+        dialog.setTitle("Select Directories to Index");
+        dialog.setHeaderText("Choose which directories to index:");
 
-        indexerService.startIndexing();
+        ButtonType startButtonType = new ButtonType("Start Indexing", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(startButtonType, ButtonType.CANCEL);
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+
+        // Select All / Deselect All toggle
+        CheckBox selectAllBox = new CheckBox("Select All");
+        selectAllBox.setSelected(true);
+        selectAllBox.setStyle("-fx-font-weight: bold;");
+        content.getChildren().add(selectAllBox);
+        content.getChildren().add(new Separator());
+
+        // One checkbox per directory
+        List<CheckBox> dirCheckBoxes = new ArrayList<>();
+        for (String dir : directories) {
+            CheckBox cb = new CheckBox(dir);
+            cb.setSelected(true);
+            dirCheckBoxes.add(cb);
+            content.getChildren().add(cb);
+        }
+
+        // Disable OK button when nothing is checked
+        javafx.scene.Node okButton = dialog.getDialogPane().lookupButton(startButtonType);
+        Runnable updateOkButton = () -> {
+            boolean anyChecked = dirCheckBoxes.stream().anyMatch(CheckBox::isSelected);
+            okButton.setDisable(!anyChecked);
+        };
+
+        // Select All toggles all checkboxes
+        selectAllBox.setOnAction(e -> {
+            boolean selected = selectAllBox.isSelected();
+            dirCheckBoxes.forEach(cb -> cb.setSelected(selected));
+            updateOkButton.run();
+        });
+
+        // Individual checkboxes update Select All state and OK button
+        for (CheckBox cb : dirCheckBoxes) {
+            cb.selectedProperty().addListener((obs, oldVal, newVal) -> {
+                boolean allSelected = dirCheckBoxes.stream().allMatch(CheckBox::isSelected);
+                selectAllBox.setSelected(allSelected);
+                updateOkButton.run();
+            });
+        }
+
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPrefHeight(Math.min(directories.size() * 30 + 80, 400));
+        dialog.getDialogPane().setContent(scrollPane);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType == startButtonType) {
+                List<String> selected = new ArrayList<>();
+                for (CheckBox cb : dirCheckBoxes) {
+                    if (cb.isSelected()) {
+                        selected.add(cb.getText());
+                    }
+                }
+                return selected;
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(selectedDirs -> {
+            startButton.setDisable(true);
+            stopButton.setDisable(false);
+            reindexButton.setDisable(true);
+            progressBar.setProgress(0);
+            statusLabel.setText("Indexing " + selectedDirs.size() + " director" +
+                    (selectedDirs.size() == 1 ? "y" : "ies") + " with " +
+                    configService.getIndexingThreads() + " threads...");
+
+            indexerService.startIndexing(selectedDirs);
+        });
     }
 
     private void stopIndexing() {
