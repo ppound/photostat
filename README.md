@@ -26,8 +26,9 @@ After years of photography and using various software like Lightroom, Capture On
 - **Fast Full-Text Search** - Search across all EXIF metadata fields instantly
 - **Faceted Navigation** - Filter by camera, lens, file type, ISO, date, and more
 - **Thumbnail Preview** - Quick visual preview of search results
-- **Multi-Directory Indexing** - Index photos from multiple locations
+- **Multi-Directory Indexing** - Index photos from multiple locations with selective directory choice
 - **Background Indexing** - Continue working while photos are being indexed
+- **Interactive GPS Map** - Browse geotagged photos on an interactive OpenStreetMap with clustering
 
 ### Metadata & Organization
 - **Complete EXIF Support** - Camera, lens, exposure, GPS, and more
@@ -55,7 +56,8 @@ After years of photography and using various software like Lightroom, Capture On
 - **Camera Usage Charts** - See which cameras and lenses you use most
 - **Timeline View** - Visualize your collection over time
 - **Exposure Analysis** - ISO, aperture, and focal length distributions
-- **Processing Software** 
+- **Processing Software**
+- **GPS Map** - Interactive map view of geotagged photos with cluster and marker modes
 
 ---
 

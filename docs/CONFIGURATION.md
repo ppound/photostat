@@ -42,7 +42,9 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
   },
   "logging": {
     "enabled": false,
-    "level": "INFO"
+    "level": "INFO",
+    "max_log_size_mb": 5,
+    "max_log_files": 3
   },
   "cache": {
     "enabled": true,
@@ -117,8 +119,12 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 |---------|------|---------|-------------|
 | `logging.enabled` | boolean | `false` | Enable file logging |
 | `logging.level` | string | `INFO` | Log level: DEBUG, INFO, WARN, ERROR |
+| `logging.max_log_size_mb` | integer | `5` | Maximum log file size in MB before rotation |
+| `logging.max_log_files` | integer | `3` | Number of rotated log files to keep |
 
 **Log file location:** `~/.photostat/photostat.log`
+
+**Log rotation:** When the log file exceeds `max_log_size_mb`, it is rotated to `photostat.log.1` and older files shift up numerically. Files beyond `max_log_files` are deleted.
 
 ### Cache Settings
 
@@ -205,6 +211,9 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 ~/.photostat/
 ├── config.json          # Configuration file
 ├── photostat.log        # Log file (if logging enabled)
+├── photostat.log.1      # Rotated log files
+├── photostat.log.2
+├── map.html             # GPS map view (generated at runtime)
 └── cache/               # Thumbnail cache directory
     └── *.jpg            # Cached thumbnails
 ```

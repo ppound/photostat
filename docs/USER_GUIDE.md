@@ -16,6 +16,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Managing Files](#managing-files)
 - [Finding Duplicates](#finding-duplicates)
 - [Exploring Charts](#exploring-charts)
+- [GPS Map](#gps-map)
 - [Thumbnail Cache](#thumbnail-cache)
 - [Sidecar Files](#sidecar-files)
 - [Large Collections](#large-collections)
@@ -26,12 +27,13 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 
 ## First Launch
 
-When you first launch PhotoStat, you'll see the main window with four tabs:
+When you first launch PhotoStat, you'll see the main window with five tabs:
 
 - **Search** - Find and browse your indexed photos
 - **Index** - Manage directories and run indexing
 - **Duplicates** - Find and manage duplicate images
 - **Charts** - View visualizations of your collection
+- **Map** - Interactive map of geotagged photos
 
 ![Application Tabs](screenshots/app-tabs.png)
 
@@ -92,9 +94,15 @@ When you first launch PhotoStat, you'll see the main window with four tabs:
 
 2. Click **Start Indexing**
 
-   ![Start Indexing](screenshots/start-indexing.png)
+3. A **directory selection dialog** appears showing all configured directories with checkboxes (all checked by default). Choose which directories to index:
+   - Use **Select All** / **Deselect All** to toggle all directories at once
+   - Check or uncheck individual directories as needed
+   - The **Start Indexing** button is disabled until at least one directory is checked
+   - Click **Cancel** to abort without indexing
 
-3. Watch the progress bar and status messages:
+   This is useful when you have many directories configured but only need to re-scan one or two.
+
+4. Watch the progress bar and status messages:
    - "Scanning directories..." - Finding image files
    - "Indexing: filename.jpg" - Processing individual files
    - "Indexed X of Y files" - Progress update
@@ -483,6 +491,42 @@ Navigate to the **Charts** tab to visualize your collection:
 
 ---
 
+## GPS Map
+
+The **Map** tab provides an interactive map view of all your geotagged photos, powered by OpenStreetMap and Leaflet.js.
+
+### Accessing the Map
+
+Click the **Map** tab in the main window. The map loads automatically and shows all photos that have GPS coordinates in their EXIF data. A status bar at the bottom displays the total number of geotagged images.
+
+### Cluster View (Zoomed Out)
+
+When zoomed out (zoom level 12 and below), photos are grouped into **clusters** based on geographic proximity:
+
+- **Small blue circles** — fewer than 100 photos in that area
+- **Medium orange circles** — 100 to 999 photos
+- **Large red circles** — 1,000+ photos
+
+Click any cluster to zoom in and see more detail.
+
+### Photo Markers (Zoomed In)
+
+When zoomed in (zoom level 13+), individual photo markers appear at their exact GPS coordinates. Click a marker to see a popup with:
+
+- Thumbnail preview (if cached)
+- Filename
+- Date taken
+- Camera model
+- GPS coordinates
+
+### Navigation
+
+- **Scroll** to zoom in/out
+- **Click and drag** to pan the map
+- The map automatically fits to your photo locations on first load
+
+---
+
 ## Thumbnail Cache
 
 PhotoStat caches generated thumbnails to disk for faster loading on subsequent views.
@@ -629,13 +673,13 @@ The CLI is the best way to pre-cache a large collection since it runs in the bac
 
 ```bash
 # Pre-cache with default 4 threads
-java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails
+java -jar photostat-java-1.8.0-executable.jar --cache-thumbnails
 
 # Use 8 threads for faster processing
-java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails --parallel 8
+java -jar photostat-java-1.8.0-executable.jar --cache-thumbnails --parallel 8
 
 # Preview what would be cached
-java -jar photostat-java-1.7.2-executable.jar --cache-thumbnails --dry-run
+java -jar photostat-java-1.8.0-executable.jar --cache-thumbnails --dry-run
 ```
 
 Already-cached thumbnails are skipped automatically, so you can re-run this after adding new images.
@@ -648,16 +692,16 @@ Analyzing thousands of images through the GUI is possible but the CLI is better 
 
 ```bash
 # Analyze all indexed images (skips already-analyzed ones)
-java -jar photostat-java-1.7.2-executable.jar --analyze
+java -jar photostat-java-1.8.0-executable.jar --analyze
 
 # Run 4 analyses in parallel for faster throughput
-java -jar photostat-java-1.7.2-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.8.0-executable.jar --analyze --parallel 4
 
 # Use Gemini Flash for cheapest batch processing
-java -jar photostat-java-1.7.2-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.8.0-executable.jar --analyze --provider gemini
 
 # Preview what would be analyzed without making API calls
-java -jar photostat-java-1.7.2-executable.jar --analyze --dry-run
+java -jar photostat-java-1.8.0-executable.jar --analyze --dry-run
 ```
 
 **Cost awareness**: AI analysis incurs API costs per image. For very large collections, consider:
@@ -669,7 +713,7 @@ java -jar photostat-java-1.7.2-executable.jar --analyze --dry-run
 Run it in the background on Linux/macOS:
 
 ```bash
-nohup java -jar photostat-java-1.7.2-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
+nohup java -jar photostat-java-1.8.0-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
 ```
 
 ### RAW Files
@@ -727,7 +771,7 @@ The dark theme covers all tabs (Search, Index, Duplicates, Charts), the Settings
 
 ## Enabling Logging
 
-PhotoStat includes file-based logging for debugging:
+PhotoStat includes file-based logging with automatic log rotation for debugging:
 
 1. **Edit the config file** at `~/.photostat/config.json`
 
@@ -737,7 +781,9 @@ PhotoStat includes file-based logging for debugging:
    {
      "logging": {
        "enabled": true,
-       "level": "INFO"
+       "level": "INFO",
+       "max_log_size_mb": 5,
+       "max_log_files": 3
      }
    }
    ```
@@ -754,5 +800,16 @@ PhotoStat includes file-based logging for debugging:
 4. **Log file location:** `~/.photostat/photostat.log`
 
 5. **Restart the application** for changes to take effect
+
+### Log Rotation
+
+Logs are automatically rotated to prevent unbounded disk usage:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `max_log_size_mb` | `5` | Maximum size of the log file (in MB) before rotation |
+| `max_log_files` | `3` | Number of rotated log files to keep |
+
+When `photostat.log` exceeds the size limit, it is rotated to `photostat.log.1`, and any existing rotated files shift up (`photostat.log.1` becomes `photostat.log.2`, etc.). The oldest file beyond the retention limit is deleted. A new empty `photostat.log` is then created.
 
 **Note:** Logging is disabled by default to avoid unnecessary disk writes.
