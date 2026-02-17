@@ -53,6 +53,12 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
   "sidecar": {
     "enabled": true
   },
+  "faces": {
+    "python_path": "python3",
+    "enabled": true,
+    "confidence_threshold": 0.6,
+    "cluster_threshold": 0.6
+  },
   "ai": {
     "provider": "claude"
   },
@@ -161,6 +167,19 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 - `claude-3-5-sonnet-20241022`
 - `claude-3-5-haiku-20241022`
 
+### Face Recognition Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `faces.python_path` | string | `python3` | Path to Python executable with InsightFace |
+| `faces.enabled` | boolean | `true` | Enable face recognition feature |
+| `faces.confidence_threshold` | double | `0.6` | Minimum confidence for face detection (0.3-0.9) |
+| `faces.cluster_threshold` | double | `0.6` | Similarity threshold for face clustering (0.3-0.9) |
+
+**Prerequisites:** `pip install insightface onnxruntime` (or `onnxruntime-gpu` for CUDA). Optionally `pip install scikit-learn` for DBSCAN clustering.
+
+**Face data location:** `~/.photostat/faces/`
+
 ### Gemini Settings
 
 | Setting | Type | Default | Description |
@@ -209,11 +228,18 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 
 ```
 ~/.photostat/
-├── config.json          # Configuration file
-├── photostat.log        # Log file (if logging enabled)
-├── photostat.log.1      # Rotated log files
+├── config.json              # Configuration file
+├── photostat.log            # Log file (if logging enabled)
+├── photostat.log.1          # Rotated log files
 ├── photostat.log.2
-├── map.html             # GPS map view (generated at runtime)
-└── cache/               # Thumbnail cache directory
-    └── *.jpg            # Cached thumbnails
+├── photostat_faces.py       # Face detection Python script (extracted from JAR)
+├── map.html                 # GPS map view (generated at runtime)
+├── cache/                   # Thumbnail cache directory
+│   └── *.jpg                # Cached thumbnails
+└── faces/                   # Face recognition data
+    ├── face_data.json       # Detected faces with embeddings
+    ├── clusters.json        # Face clusters and person names
+    ├── models/              # InsightFace model files (auto-downloaded)
+    └── crops/               # Cached face crop thumbnails
+        └── *.jpg
 ```
