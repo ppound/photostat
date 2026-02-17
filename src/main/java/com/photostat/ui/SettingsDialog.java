@@ -74,6 +74,13 @@ public class SettingsDialog extends Dialog<Boolean> {
     // Analysis prompt
     private TextArea analysisPromptArea;
 
+    // Face recognition settings
+    private CheckBox facesEnabledCheckbox;
+    private TextField facesPythonPathField;
+    private Slider facesConfidenceSlider;
+    private Slider facesClusterSlider;
+    private Label facesPythonStatusLabel;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -109,7 +116,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab aiTab = new Tab("AI Analysis");
         aiTab.setContent(createAIPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab);
+        Tab facesTab = new Tab("Face Recognition");
+        facesTab.setContent(createFacesPane());
+
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab, facesTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -571,6 +581,122 @@ public class SettingsDialog extends Dialog<Boolean> {
         return scrollPane;
     }
 
+    private VBox createFacesPane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        int row = 0;
+
+        // Enable face recognition
+        grid.add(new Label("Enable:"), 0, row);
+        facesEnabledCheckbox = new CheckBox("Enable face detection and recognition");
+        grid.add(facesEnabledCheckbox, 1, row++, 2, 1);
+
+        // Python path
+        grid.add(new Label("Python Path:"), 0, row);
+        facesPythonPathField = new TextField();
+        facesPythonPathField.setPromptText("python3");
+        facesPythonPathField.setPrefWidth(200);
+        grid.add(facesPythonPathField, 1, row);
+
+        Button checkPythonButton = new Button("Check Python");
+        grid.add(checkPythonButton, 2, row++);
+
+        // Python status
+        grid.add(new Label("Status:"), 0, row);
+        facesPythonStatusLabel = new Label("");
+        grid.add(facesPythonStatusLabel, 1, row++, 2, 1);
+
+        checkPythonButton.setOnAction(e -> checkFacesPython());
+
+        // Detection confidence threshold
+        grid.add(new Label("Detection Confidence:"), 0, row);
+        facesConfidenceSlider = new Slider(0.3, 0.9, 0.6);
+        facesConfidenceSlider.setShowTickLabels(true);
+        facesConfidenceSlider.setShowTickMarks(true);
+        facesConfidenceSlider.setMajorTickUnit(0.1);
+        facesConfidenceSlider.setBlockIncrement(0.05);
+        facesConfidenceSlider.setPrefWidth(200);
+        Label confValueLabel = new Label(String.format("%.2f", facesConfidenceSlider.getValue()));
+        facesConfidenceSlider.valueProperty().addListener((obs, oldVal, newVal) ->
+                confValueLabel.setText(String.format("%.2f", newVal.doubleValue())));
+        HBox confBox = new HBox(10, facesConfidenceSlider, confValueLabel);
+        grid.add(confBox, 1, row++, 2, 1);
+
+        // Cluster threshold
+        grid.add(new Label("Cluster Threshold:"), 0, row);
+        facesClusterSlider = new Slider(0.3, 0.9, 0.6);
+        facesClusterSlider.setShowTickLabels(true);
+        facesClusterSlider.setShowTickMarks(true);
+        facesClusterSlider.setMajorTickUnit(0.1);
+        facesClusterSlider.setBlockIncrement(0.05);
+        facesClusterSlider.setPrefWidth(200);
+        Label clusterValueLabel = new Label(String.format("%.2f", facesClusterSlider.getValue()));
+        facesClusterSlider.valueProperty().addListener((obs, oldVal, newVal) ->
+                clusterValueLabel.setText(String.format("%.2f", newVal.doubleValue())));
+        HBox clusterBox = new HBox(10, facesClusterSlider, clusterValueLabel);
+        grid.add(clusterBox, 1, row++, 2, 1);
+
+        // Info label
+        Label infoLabel = new Label(
+                "Face recognition requires Python 3 with InsightFace and ONNX Runtime.\n" +
+                "Install with: pip install insightface onnxruntime\n" +
+                "The InsightFace buffalo_l model (~350MB) auto-downloads on first scan.\n" +
+                "For GPU acceleration: pip install onnxruntime-gpu"
+        );
+        infoLabel.setWrapText(true);
+        infoLabel.getStyleClass().add("info-label");
+
+        pane.getChildren().addAll(grid, new Separator(), infoLabel);
+
+        return pane;
+    }
+
+    private void checkFacesPython() {
+        facesPythonStatusLabel.setText("Checking...");
+        setStatusStyle(facesPythonStatusLabel, "text-muted");
+
+        // Temporarily update config to use the current field value
+        String pythonPath = facesPythonPathField.getText().trim();
+        if (pythonPath.isEmpty()) pythonPath = "python3";
+
+        final String finalPythonPath = pythonPath;
+
+        new Thread(() -> {
+            try {
+                // Save current, set temp, check, restore
+                String original = configService.getFacesPythonPath();
+                configService.setFacesPythonPath(finalPythonPath);
+
+                com.photostat.services.FaceRecognitionService faceService =
+                        com.photostat.services.FaceRecognitionService.getInstance();
+                boolean available = faceService.isPythonAvailable();
+                String versionInfo = faceService.getPythonVersionInfo();
+
+                configService.setFacesPythonPath(original);
+
+                Platform.runLater(() -> {
+                    if (available) {
+                        facesPythonStatusLabel.setText("Available - " + versionInfo);
+                        setStatusStyle(facesPythonStatusLabel, "text-success");
+                    } else {
+                        facesPythonStatusLabel.setText("Not found or missing dependencies");
+                        setStatusStyle(facesPythonStatusLabel, "text-error");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    facesPythonStatusLabel.setText("Error: " + e.getMessage());
+                    setStatusStyle(facesPythonStatusLabel, "text-error");
+                });
+            }
+        }).start();
+    }
+
     private void setStatusStyle(Label label, String styleClass) {
         label.getStyleClass().removeAll("text-muted", "text-error", "text-success");
         label.getStyleClass().add(styleClass);
@@ -734,6 +860,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Gemini API settings
         geminiApiKeyField.setText(configService.getGeminiApiKey());
         geminiModelCombo.setValue(configService.getGeminiModel());
+
+        // Face recognition settings
+        facesEnabledCheckbox.setSelected(configService.isFacesEnabled());
+        facesPythonPathField.setText(configService.getFacesPythonPath());
+        facesConfidenceSlider.setValue(configService.getFacesConfidenceThreshold());
+        facesClusterSlider.setValue(configService.getFacesClusterThreshold());
     }
 
     private void saveSettings() {
@@ -803,6 +935,15 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Analysis prompt
         configService.setClaudeAnalysisPrompt(analysisPromptArea.getText());
+
+        // Face recognition settings
+        configService.setFacesEnabled(facesEnabledCheckbox.isSelected());
+        String pythonPath = facesPythonPathField.getText().trim();
+        if (!pythonPath.isEmpty()) {
+            configService.setFacesPythonPath(pythonPath);
+        }
+        configService.setFacesConfidenceThreshold(facesConfidenceSlider.getValue());
+        configService.setFacesClusterThreshold(facesClusterSlider.getValue());
 
         configService.saveConfig();
     }

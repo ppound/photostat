@@ -32,19 +32,21 @@ This guide covers building PhotoStat from source and understanding the project s
 git clone https://github.com/ppound/photostat.git
 cd photostat-java
 
-# Build the project
+# Build the project (default: Apple Silicon + Windows + Linux)
 mvn clean package
 
-# The executable JAR will be at:
-# target/photostat-java-1.6.0-executable.jar
+# Build with Intel Mac support instead of Apple Silicon
+mvn clean package -Pmac-intel
 ```
 
 ### Build Output
 
-| File | Description |
-|------|-------------|
-| `target/photostat-java-1.6.0.jar` | Main JAR (requires external JavaFX) |
-| `target/photostat-java-1.6.0-executable.jar` | Fat JAR with all dependencies |
+| Build command | Output JAR | Platforms |
+|---------------|------------|-----------|
+| `mvn package` | `target/photostat-java-1.8.0-executable.jar` | Windows, Linux, macOS Apple Silicon |
+| `mvn package -Pmac-intel` | `target/photostat-java-1.8.0-executable-mac-intel.jar` | Windows, Linux, macOS Intel |
+
+The default build includes Apple Silicon (M1/M2/M3/M4) macOS natives. The `mac-intel` profile swaps these for Intel (x86_64) macOS natives and produces a JAR with a distinct filename.
 
 ---
 
@@ -96,9 +98,12 @@ photostat-java/
 │   ├── cli/
 │   │   ├── AnalyzeCli.java              # Command-line batch analysis
 │   │   ├── DuplicatesCli.java           # Command-line duplicate finder
+│   │   ├── FaceDetectCli.java           # Command-line face detection
 │   │   └── ThumbnailCacheCli.java       # Command-line thumbnail caching
 │   ├── models/
-│   │   └── ImageMetadata.java           # Image metadata model
+│   │   ├── ImageMetadata.java           # Image metadata model
+│   │   ├── FaceDetection.java           # Face detection data model
+│   │   └── FaceCluster.java             # Face cluster data model
 │   ├── services/
 │   │   ├── ConfigService.java           # Configuration management
 │   │   ├── ExifService.java             # EXIF metadata extraction
@@ -108,6 +113,7 @@ photostat-java/
 │   │   ├── IndexerService.java          # Background indexing
 │   │   ├── ThumbnailService.java        # Thumbnail generation & caching
 │   │   ├── HashService.java             # Content & perceptual image hashing
+│   │   ├── FaceRecognitionService.java   # Face detection & clustering
 │   │   ├── SidecarService.java          # Sidecar file management
 │   │   └── LoggingService.java          # File-based logging
 │   └── ui/
@@ -117,6 +123,7 @@ photostat-java/
 │       ├── FacetsPanel.java             # Faceted navigation
 │       ├── IndexPanel.java              # Directory management
 │       ├── DuplicatesPanel.java         # Duplicate image detection
+│       ├── FacesPanel.java              # Face recognition UI
 │       ├── ChartsPanel.java             # Charts and visualizations
 │       ├── DetailPanel.java             # Image detail view
 │       ├── DirectoryBrowserDialog.java  # Directory browser
@@ -124,6 +131,7 @@ photostat-java/
 │       └── MultiSelectAutoComplete.java # Chip-style multi-select component
 └── src/main/resources/
     ├── styles.css                       # JavaFX stylesheet
+    ├── photostat_faces.py               # Python face detection script
     └── application.properties           # Default configuration
 ```
 
@@ -151,8 +159,8 @@ photostat-java/
 ### Entry Points
 
 - **`Launcher.java`** - Main entry point for the executable JAR
-  - Detects CLI mode (`--analyze`, `--cache-thumbnails`, `--find-duplicates`, `--help`) vs GUI mode
-  - Routes to `AnalyzeCli`, `ThumbnailCacheCli`, `DuplicatesCli`, or `App` accordingly
+  - Detects CLI mode (`--analyze`, `--cache-thumbnails`, `--find-duplicates`, `--detect-faces`, `--help`) vs GUI mode
+  - Routes to `AnalyzeCli`, `ThumbnailCacheCli`, `DuplicatesCli`, `FaceDetectCli`, or `App` accordingly
 
 - **`App.java`** - JavaFX application entry
   - Initializes the GUI
@@ -161,6 +169,7 @@ photostat-java/
 - **`AnalyzeCli.java`** - CLI for batch AI analysis
 - **`ThumbnailCacheCli.java`** - CLI for thumbnail pre-caching
 - **`DuplicatesCli.java`** - CLI for finding duplicate images
+- **`FaceDetectCli.java`** - CLI for batch face detection and clustering
 
 ### Services (Singleton Pattern)
 
@@ -174,18 +183,20 @@ All services use the singleton pattern with `getInstance()`:
 - **`HashService`** - Computes SHA-256 content hashes and perceptual hashes (dHash) for duplicate detection
 - **`SidecarService`** - Manages `.photostat.json` sidecar files
 - **`ImageAnalysisService`** - AI image analysis (Claude/Gemini)
+- **`FaceRecognitionService`** - Face detection, clustering, and naming via Python sidecar
 - **`FileOperationsService`** - Copy/move/delete operations
 - **`LoggingService`** - File-based logging
 
 ### UI Components
 
-- **`MainWindow`** - Main window with TabPane (Search, Index, Duplicates, Charts)
+- **`MainWindow`** - Main window with TabPane (Search, Index, Duplicates, Faces, Map, Charts)
 - **`SearchPanel`** - Search input and filters
 - **`ResultsPanel`** - TableView with thumbnails
 - **`FacetsPanel`** - Faceted navigation sidebar
 - **`DetailPanel`** - Image preview and metadata
 - **`IndexPanel`** - Directory management and indexing controls
 - **`DuplicatesPanel`** - Duplicate image detection and management
+- **`FacesPanel`** - Face detection, clustering, and person naming
 - **`ChartsPanel`** - Visualization charts
 
 ### Data Flow

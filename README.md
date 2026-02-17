@@ -15,6 +15,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Unified Search Across All Your Photos** - Index images from multiple directories and drives into a single searchable database
 - **Find Duplicates** - Find and manage duplicate images
 - **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files
+- **Face Recognition** - Automatic face detection and clustering via InsightFace, with person naming and search integration
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
 
@@ -46,6 +47,15 @@ After years of photography and using various software like Lightroom, Capture On
 - **Batch Processing** - Analyze via GUI or command-line
 - **Cost Tracking** - Monitor token usage and estimated costs
 
+### Face Recognition
+- **Automatic Detection** - Detect faces in your photo collection using InsightFace (Python)
+- **Face Clustering** - Automatically group similar faces using DBSCAN or centroid-based clustering
+- **Person Naming** - Assign names to face clusters; names are saved to OpenSearch and sidecar files
+- **Cluster Merging** - Merge clusters that belong to the same person
+- **Incremental Scanning** - Only new images are processed on re-runs; safe to interrupt and resume
+- **GPU Acceleration** - Automatically uses CUDA GPU when available for faster detection
+- **CLI Support** - Batch face detection with parallel workers via `--detect-faces`
+
 ### Duplicate Detection
 - **Exact Duplicates** - SHA-256 content hashing finds byte-for-byte copies
 - **Visual Duplicates** - Perceptual hashing (dHash) finds resized, recompressed, or re-exported copies
@@ -70,7 +80,38 @@ After years of photography and using various software like Lightroom, Capture On
 | OpenSearch | 2.x | Required for all installation methods |
 | Java | 21 or later | Only needed for the cross-platform JAR — installers bundle their own runtime |
 
-### 2. Install OpenSearch
+### 2. Install Docker
+
+If you don't already have Docker installed:
+
+| Platform | Installation |
+|----------|-------------|
+| **Windows** | Download [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) — requires WSL 2 (the installer will guide you) |
+| **macOS** | Download [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) — choose Apple Silicon or Intel chip |
+| **Linux** | Install via your package manager (see below) |
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER   # Log out and back in after this
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+sudo dnf install docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+Verify Docker is working:
+```bash
+docker --version
+docker run hello-world
+```
+
+### 3. Install OpenSearch
 
 **Docker (Recommended):**
 
@@ -100,7 +141,7 @@ docker rm opensearch       # Remove the container (volume keeps data)
 
 Or download from [opensearch.org](https://opensearch.org/downloads.html).
 
-### 3. Download & Install PhotoStat
+### 4. Download & Install PhotoStat
 
 Download the latest release from **[GitHub Releases](https://github.com/ppound/photostat/releases)**. Choose the option that fits your platform:
 
@@ -116,15 +157,15 @@ Download `PhotoStat-1.8.0.dmg`, open it, and drag PhotoStat to your Applications
 
 #### Option C: Cross-platform JAR
 
-Download `photostat-java-1.8.0-executable.jar`. Requires Java 21+.
+Download `photostat-java-1.8.0-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
 
 ```bash
 java -jar photostat-java-1.8.0-executable.jar
 ```
 
-**Apple Silicon Mac (M1/M2/M3):** See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-apple-silicon-mac-no-suitable-pipeline-found-or-graphics-errors).
+**Intel Mac users:** Download the separate `photostat-java-1.8.0-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
 
-### 4. Get Started
+### 5. Get Started
 
 1. Configure OpenSearch connection via **File > Settings**
 2. Add photo directories in the **Index** tab
@@ -167,6 +208,15 @@ java -jar photostat-java-1.8.0-executable.jar --find-duplicates
 
 # Find visually similar images
 java -jar photostat-java-1.8.0-executable.jar --find-duplicates --mode visual
+
+# Detect and cluster faces
+java -jar photostat-java-1.8.0-executable.jar --detect-faces
+
+# Face detection with 4 parallel workers
+java -jar photostat-java-1.8.0-executable.jar --detect-faces --parallel 4
+
+# Face detection on a specific directory
+java -jar photostat-java-1.8.0-executable.jar --detect-faces --dir /path/to/photos
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
@@ -195,6 +245,7 @@ Install ExifTool:
 | GUI | JavaFX 21 |
 | Search | OpenSearch 2.x |
 | AI | Claude API, Gemini API |
+| Face Recognition | InsightFace (Python sidecar) |
 | EXIF | metadata-extractor, ExifTool |
 | Build | Maven |
 

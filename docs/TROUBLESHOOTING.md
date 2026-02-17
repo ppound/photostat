@@ -10,6 +10,7 @@ This guide covers common issues and their solutions.
 - [Thumbnails Not Showing](#thumbnails-not-showing)
 - [Application Freezes](#application-freezes)
 - [AI Analysis Issues](#ai-analysis-issues)
+- [Face Recognition Issues](#face-recognition-issues)
 
 ---
 
@@ -35,19 +36,27 @@ java -version
 java -jar photostat-java-1.7.0-executable.jar
 ```
 
-### Error on Apple Silicon Mac: "no suitable pipeline found" or graphics errors
+### Error on Intel Mac: "no suitable pipeline found" or graphics errors
 
-**Cause:** The executable JAR includes Intel Mac natives, not ARM64.
+**Cause:** The default executable JAR (`*-executable.jar`) includes Apple Silicon (ARM64) Mac natives, not Intel (x86_64) natives.
 
-**Solution:** Use the cross platform executable jar (you will need java 21+ installed to run the jar) and Download JavaFX SDK for Mac ARM64 and run with module path:
+**Solution:** Download the Intel Mac JAR instead:
 
-1. Download JavaFX SDK from https://gluonhq.com/products/javafx/
+```bash
+java -jar photostat-java-1.8.0-executable-mac-intel.jar
+```
+
+This JAR is built with `mvn package -Pmac-intel` and includes Intel Mac JavaFX natives alongside Windows and Linux natives.
+
+If the Intel Mac JAR is not available for your version, you can download the JavaFX SDK for Mac x86_64 and run with the module path:
+
+1. Download JavaFX SDK (x86_64) from https://gluonhq.com/products/javafx/
 2. Extract to a folder
 3. Run with:
 ```bash
 java --module-path /path/to/javafx-sdk-21/lib \
      --add-modules javafx.controls,javafx.fxml,javafx.swing \
-     -jar photostat-java-1.7.0-executable.jar
+     -jar photostat-java-1.8.0-executable.jar
 ```
 
 ---
@@ -259,6 +268,64 @@ java --module-path /path/to/javafx-sdk-21/lib \
 - Check the analysis prompt in config.json
 - Some images may not have identifiable content
 - Person detection describes, doesn't identify specific individuals
+
+---
+
+## Face Recognition Issues
+
+### Error: "Python with InsightFace not available"
+
+**Cause:** Python or InsightFace is not installed.
+
+**Solution:** Install the required Python packages:
+```bash
+# CPU only
+pip install insightface onnxruntime
+
+# With GPU acceleration (NVIDIA CUDA)
+pip install insightface onnxruntime-gpu
+
+# Recommended for better clustering
+pip install scikit-learn
+```
+
+If Python is installed but not found, set the path in **Settings > Face Recognition** or edit `config.json`:
+```json
+{
+  "faces": {
+    "python_path": "/path/to/python3"
+  }
+}
+```
+
+### Face detection is slow
+
+**Possible causes:**
+- Running on CPU instead of GPU
+- Processing a large number of images
+
+**Solutions:**
+- Check if GPU is available: the Faces tab shows "Available (GPU)" or "Available (CPU)" next to the Python status
+- Install `onnxruntime-gpu` for NVIDIA GPU acceleration
+- Use the CLI with parallel workers for large collections:
+  ```bash
+  java -jar photostat.jar --detect-faces --parallel 4
+  ```
+- The InsightFace model (~350MB) downloads on first run — subsequent runs are faster
+
+### Face clustering produces too many or too few clusters
+
+**Solution:** Adjust the cluster threshold in **Settings > Face Recognition**:
+- **Higher threshold** (e.g., 0.7-0.8): Stricter matching, more clusters, fewer false merges
+- **Lower threshold** (e.g., 0.4-0.5): Looser matching, fewer clusters, may merge different people
+
+You can also manually merge clusters in the Faces tab using the "Merge with..." button.
+
+### InsightFace model download fails
+
+**Cause:** Network issue during first-run model download (~350MB).
+
+**Solution:** The model is stored at `~/.photostat/faces/models/`. Delete any partial downloads and try again with a stable connection. The model is `buffalo_l` from InsightFace.
 
 ---
 

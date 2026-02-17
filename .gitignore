@@ -30,6 +30,7 @@ Thumbs.db
 # Claude Code
 CLAUDE.md
 docs/CODE_REVIEW_2026-02-07.md
+.claude/
 
 # Runtime config (user-specific)
 # Note: config.json in project root is a template

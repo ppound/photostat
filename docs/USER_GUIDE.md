@@ -15,6 +15,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Slideshow Mode](#slideshow-mode)
 - [Managing Files](#managing-files)
 - [Finding Duplicates](#finding-duplicates)
+- [Face Recognition](#face-recognition)
 - [Exploring Charts](#exploring-charts)
 - [GPS Map](#gps-map)
 - [Thumbnail Cache](#thumbnail-cache)
@@ -27,13 +28,14 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 
 ## First Launch
 
-When you first launch PhotoStat, you'll see the main window with five tabs:
+When you first launch PhotoStat, you'll see the main window with six tabs:
 
 - **Search** - Find and browse your indexed photos
 - **Index** - Manage directories and run indexing
 - **Duplicates** - Find and manage duplicate images
-- **Charts** - View visualizations of your collection
+- **Faces** - Face detection, clustering, and person naming
 - **Map** - Interactive map of geotagged photos
+- **Charts** - View visualizations of your collection
 
 ![Application Tabs](screenshots/app-tabs.png)
 
@@ -455,6 +457,106 @@ java -jar photostat.jar --find-duplicates --quiet
 ```
 
 The CLI outputs duplicate groups with file paths, sizes, dates, and reclaimable space.
+
+---
+
+## Face Recognition
+
+PhotoStat can automatically detect faces in your photos, cluster them by identity, and let you assign names. Named faces become searchable via the Persons facet and text search.
+
+### Prerequisites
+
+Face recognition requires Python with InsightFace:
+
+```bash
+# CPU only
+pip install insightface onnxruntime
+
+# With GPU acceleration (much faster)
+pip install insightface onnxruntime-gpu
+
+# Recommended for better clustering
+pip install scikit-learn
+```
+
+The InsightFace `buffalo_l` model (~350MB) downloads automatically on first use.
+
+### Using the Faces Tab
+
+1. Navigate to the **Faces** tab
+
+2. The toolbar shows Python status: **Available (GPU)** or **Available (CPU)**
+
+3. Click **Scan for Faces** to start detection:
+   - PhotoStat fetches all indexed image paths from OpenSearch
+   - Faces are detected using InsightFace with 512-dimensional embeddings
+   - Similar faces are clustered together automatically
+   - Progress is shown in the summary bar
+
+4. **Browse face clusters** in the left panel:
+   - Each cluster shows a representative face thumbnail
+   - Person name (or "Unknown #N") and face/photo counts
+   - Clusters are sorted by size (most faces first)
+
+5. **Name a person:**
+   - Select a cluster in the list
+   - Type the person's name in the text field on the right
+   - Click **Save Name**
+   - The name is saved to OpenSearch and sidecar files for all images in that cluster
+
+6. **Merge clusters:**
+   - If two clusters belong to the same person, select one and click **Merge with...**
+   - Choose the other cluster from the dialog
+   - The clusters are combined and the merged cluster inherits the target's name
+
+7. **Click any face thumbnail** to open the source image in your default viewer
+
+### Incremental Scanning
+
+Face scanning is incremental — only new images are processed on subsequent runs. Previously scanned images are skipped automatically. To rescan everything, use the CLI with `--force`.
+
+### Face Recognition Settings
+
+Configure face recognition in **Settings > Face Recognition**:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Enable Face Recognition | On | Enable or disable the feature |
+| Python Path | `python3` | Path to Python executable |
+| Detection Confidence | 0.6 | Minimum confidence for face detection (0.3-0.9) |
+| Cluster Threshold | 0.6 | Similarity threshold for clustering (0.3-0.9) |
+
+### CLI Face Detection
+
+For large collections, use the CLI for batch processing with parallel workers:
+
+```bash
+# Detect and cluster faces
+java -jar photostat.jar --detect-faces
+
+# Use 4 parallel Python workers
+java -jar photostat.jar --detect-faces --parallel 4
+
+# Scan a specific directory (bypasses OpenSearch)
+java -jar photostat.jar --detect-faces --dir /path/to/photos
+
+# Preview what would be processed
+java -jar photostat.jar --detect-faces --dry-run
+
+# Rescan all images (ignore previous results)
+java -jar photostat.jar --detect-faces --force
+
+# Detection only (skip clustering)
+java -jar photostat.jar --detect-faces --detect-only
+
+# Clustering only (on existing face data)
+java -jar photostat.jar --detect-faces --cluster-only
+```
+
+**Notes:**
+- Progress is saved every 500 images; safe to interrupt and resume
+- Each parallel worker loads its own model (more RAM needed)
+- Face data is stored at `~/.photostat/faces/`
 
 ---
 

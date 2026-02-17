@@ -25,6 +25,7 @@ public class MainWindow extends BorderPane {
     private DetailPanel detailPanel;
     private IndexPanel indexPanel;
     private DuplicatesPanel duplicatesPanel;
+    private FacesPanel facesPanel;
     private MapPanel mapPanel;
     private ChartsPanel chartsPanel;
 
@@ -58,6 +59,11 @@ public class MainWindow extends BorderPane {
         duplicatesPanel = new DuplicatesPanel();
         duplicatesTab.setContent(duplicatesPanel);
 
+        // Create Faces tab
+        Tab facesTab = new Tab("Faces");
+        facesPanel = new FacesPanel();
+        facesTab.setContent(facesPanel);
+
         // Create Map tab
         Tab mapTab = new Tab("Map");
         mapPanel = new MapPanel();
@@ -68,7 +74,7 @@ public class MainWindow extends BorderPane {
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, mapTab, chartsTab);
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, chartsTab);
 
         // Refresh panels when switching tabs
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
@@ -76,6 +82,8 @@ public class MainWindow extends BorderPane {
                 chartsPanel.refresh();
             } else if (newTab == mapTab) {
                 mapPanel.refresh();
+            } else if (newTab == facesTab) {
+                facesPanel.refresh();
             }
         });
 

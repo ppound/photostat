@@ -568,6 +568,99 @@ public class ThumbnailService {
         return memoryCache.size();
     }
 
+    /**
+     * Get a face crop from an image, with disk caching in ~/.photostat/faces/crops/.
+     */
+    public Image getFaceCrop(String imagePath, int x, int y, int w, int h) {
+        String cropKey = imagePath + "|" + x + "|" + y + "|" + w + "|" + h;
+        String cacheFileName = Integer.toHexString(cropKey.hashCode()) + ".jpg";
+        Path cropsDir = Path.of(System.getProperty("user.home"), ".photostat", "faces", "crops");
+        Path cropCachePath = cropsDir.resolve(cacheFileName);
+
+        // Check disk cache
+        if (Files.exists(cropCachePath)) {
+            try {
+                Image cached = new Image(cropCachePath.toUri().toString());
+                if (!cached.isError()) {
+                    return cached;
+                }
+            } catch (Exception e) {
+                // Fall through to generate
+            }
+        }
+
+        try {
+            Path path = Path.of(imagePath);
+            if (!Files.exists(path)) {
+                return null;
+            }
+
+            String extension = getFileExtension(imagePath).toLowerCase();
+            BufferedImage sourceImage = null;
+
+            // For RAW files, extract preview first
+            if (RAW_EXTENSIONS.contains(extension)) {
+                Image preview = generateThumbnailWithExifTool(path, 2000);
+                if (preview != null) {
+                    // Convert FX Image to BufferedImage
+                    int pw = (int) preview.getWidth();
+                    int ph = (int) preview.getHeight();
+                    sourceImage = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_RGB);
+                    javafx.scene.image.PixelReader reader = preview.getPixelReader();
+                    for (int py = 0; py < ph; py++) {
+                        for (int px = 0; px < pw; px++) {
+                            javafx.scene.paint.Color c = reader.getColor(px, py);
+                            int rgb = ((int)(c.getRed()*255) << 16) | ((int)(c.getGreen()*255) << 8) | (int)(c.getBlue()*255);
+                            sourceImage.setRGB(px, py, rgb);
+                        }
+                    }
+                }
+            } else {
+                sourceImage = ImageIO.read(path.toFile());
+            }
+
+            if (sourceImage == null) {
+                return null;
+            }
+
+            // Add 20% padding around face
+            int padX = (int) (w * 0.2);
+            int padY = (int) (h * 0.2);
+            int cropX = Math.max(0, x - padX);
+            int cropY = Math.max(0, y - padY);
+            int cropW = Math.min(w + 2 * padX, sourceImage.getWidth() - cropX);
+            int cropH = Math.min(h + 2 * padY, sourceImage.getHeight() - cropY);
+
+            BufferedImage cropped = sourceImage.getSubimage(cropX, cropY, cropW, cropH);
+            BufferedImage scaled = scaleImage(cropped, 120);
+
+            // Save to disk cache
+            try {
+                Files.createDirectories(cropsDir);
+                ImageIO.write(scaled, "jpg", cropCachePath.toFile());
+            } catch (IOException e) {
+                logger.debug("ThumbnailService", "Failed to cache face crop: " + e.getMessage());
+            }
+
+            return convertToFxImage(scaled);
+        } catch (Exception e) {
+            logger.debug("ThumbnailService", "Failed to generate face crop: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Get a face crop asynchronously.
+     */
+    public void getFaceCropAsync(String imagePath, int x, int y, int w, int h, ThumbnailCallback callback) {
+        Thread thread = new Thread(() -> {
+            Image crop = getFaceCrop(imagePath, x, y, w, h);
+            callback.onThumbnailReady(imagePath, crop);
+        });
+        thread.setDaemon(true);
+        thread.start();
+    }
+
     private String getFileExtension(String filename) {
         int lastDot = filename.lastIndexOf('.');
         if (lastDot > 0) {
