@@ -2,6 +2,7 @@ package com.photostat;
 
 import com.photostat.cli.AnalyzeCli;
 import com.photostat.cli.DuplicatesCli;
+import com.photostat.cli.FaceDetectCli;
 import com.photostat.cli.ThumbnailCacheCli;
 
 /**
@@ -31,14 +32,14 @@ public class Launcher {
     private static boolean isCliMode(String[] args) {
         for (String arg : args) {
             if ("--analyze".equals(arg) || "--cache-thumbnails".equals(arg) ||
-                    "--find-duplicates".equals(arg) ||
+                    "--find-duplicates".equals(arg) || "--detect-faces".equals(arg) ||
                     "--help".equals(arg) || "-h".equals(arg)) {
                 // --help should show CLI help if it's the only arg or paired with a CLI command
                 if ("--help".equals(arg) || "-h".equals(arg)) {
                     // Check if a CLI command is also present
                     for (String a : args) {
                         if ("--analyze".equals(a) || "--cache-thumbnails".equals(a) ||
-                                "--find-duplicates".equals(a)) {
+                                "--find-duplicates".equals(a) || "--detect-faces".equals(a)) {
                             return true;
                         }
                     }
@@ -49,7 +50,7 @@ public class Launcher {
                     }
                 }
                 return "--analyze".equals(arg) || "--cache-thumbnails".equals(arg) ||
-                        "--find-duplicates".equals(arg);
+                        "--find-duplicates".equals(arg) || "--detect-faces".equals(arg);
             }
         }
         return false;
@@ -64,7 +65,8 @@ public class Launcher {
         // Determine which CLI to run
         String command = null;
         for (String arg : args) {
-            if ("--cache-thumbnails".equals(arg) || "--find-duplicates".equals(arg) || "--analyze".equals(arg)) {
+            if ("--cache-thumbnails".equals(arg) || "--find-duplicates".equals(arg) ||
+                    "--analyze".equals(arg) || "--detect-faces".equals(arg)) {
                 command = arg;
                 break;
             }
@@ -75,6 +77,9 @@ public class Launcher {
             exitCode = cli.run(args);
         } else if ("--find-duplicates".equals(command)) {
             DuplicatesCli cli = new DuplicatesCli();
+            exitCode = cli.run(args);
+        } else if ("--detect-faces".equals(command)) {
+            FaceDetectCli cli = new FaceDetectCli();
             exitCode = cli.run(args);
         } else {
             AnalyzeCli cli = new AnalyzeCli();
@@ -95,11 +100,13 @@ public class Launcher {
         System.out.println("  java -jar photostat.jar --analyze          Run CLI batch analysis");
         System.out.println("  java -jar photostat.jar --cache-thumbnails Pre-generate thumbnail cache");
         System.out.println("  java -jar photostat.jar --find-duplicates  Find duplicate images");
+        System.out.println("  java -jar photostat.jar --detect-faces     Detect and cluster faces");
         System.out.println("  java -jar photostat.jar --help             Show this help");
         System.out.println();
         System.out.println("For command-specific options:");
         System.out.println("  java -jar photostat.jar --analyze --help");
         System.out.println("  java -jar photostat.jar --cache-thumbnails --help");
         System.out.println("  java -jar photostat.jar --find-duplicates --help");
+        System.out.println("  java -jar photostat.jar --detect-faces --help");
     }
 }

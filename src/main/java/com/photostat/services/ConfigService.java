@@ -148,6 +148,17 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure faces section exists
+        if (!config.containsKey("faces")) {
+            Map<String, Object> faces = new HashMap<>();
+            faces.put("python_path", "python3");
+            faces.put("enabled", true);
+            faces.put("confidence_threshold", 0.6);
+            faces.put("cluster_threshold", 0.6);
+            config.put("faces", faces);
+            changed = true;
+        }
+
         if (changed) {
             saveConfig();
             System.out.println("Config migrated with new default values");
@@ -229,6 +240,14 @@ public class ConfigService {
         gemini.put("api_key", "");
         gemini.put("model", "gemini-2.0-flash");
         defaultConfig.put("gemini", gemini);
+
+        // Face recognition settings
+        Map<String, Object> faces = new HashMap<>();
+        faces.put("python_path", "python3");
+        faces.put("enabled", true);
+        faces.put("confidence_threshold", 0.6);
+        faces.put("cluster_threshold", 0.6);
+        defaultConfig.put("faces", faces);
 
         return defaultConfig;
     }
@@ -504,6 +523,39 @@ public class ConfigService {
         setNestedValue("gemini", "model", model);
     }
 
+    // Face recognition settings
+    public String getFacesPythonPath() {
+        return getNestedString("faces", "python_path", "python3");
+    }
+
+    public void setFacesPythonPath(String path) {
+        setNestedValue("faces", "python_path", path);
+    }
+
+    public boolean isFacesEnabled() {
+        return getNestedBoolean("faces", "enabled", true);
+    }
+
+    public void setFacesEnabled(boolean enabled) {
+        setNestedValue("faces", "enabled", enabled);
+    }
+
+    public double getFacesConfidenceThreshold() {
+        return getNestedDouble("faces", "confidence_threshold", 0.6);
+    }
+
+    public void setFacesConfidenceThreshold(double threshold) {
+        setNestedValue("faces", "confidence_threshold", threshold);
+    }
+
+    public double getFacesClusterThreshold() {
+        return getNestedDouble("faces", "cluster_threshold", 0.6);
+    }
+
+    public void setFacesClusterThreshold(double threshold) {
+        setNestedValue("faces", "cluster_threshold", threshold);
+    }
+
     public static String getDefaultAnalysisPrompt() {
         return """
             Analyze this photograph and provide metadata in JSON format. Include:
@@ -562,6 +614,18 @@ public class ConfigService {
             Object value = sectionMap.get(key);
             if (value instanceof Number) {
                 return ((Number) value).intValue();
+            }
+        }
+        return defaultValue;
+    }
+
+    @SuppressWarnings("unchecked")
+    private double getNestedDouble(String section, String key, double defaultValue) {
+        Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
+        if (sectionMap != null && sectionMap.containsKey(key)) {
+            Object value = sectionMap.get(key);
+            if (value instanceof Number) {
+                return ((Number) value).doubleValue();
             }
         }
         return defaultValue;

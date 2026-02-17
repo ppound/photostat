@@ -46,6 +46,19 @@ public class IndexerService {
         this.hashService = HashService.getInstance();
     }
 
+    /**
+     * Package-visible constructor for testing with injected dependencies.
+     */
+    IndexerService(ConfigService configService, ExifService exifService,
+                   OpenSearchService openSearchService, SidecarService sidecarService,
+                   HashService hashService) {
+        this.configService = configService;
+        this.exifService = exifService;
+        this.openSearchService = openSearchService;
+        this.sidecarService = sidecarService;
+        this.hashService = hashService;
+    }
+
     public static synchronized IndexerService getInstance() {
         if (instance == null) {
             instance = new IndexerService();
@@ -162,34 +175,7 @@ public class IndexerService {
 
                     // Phase 1: Collect all file paths (fast, sequential)
                     updateStatus("Scanning directories...");
-                    List<Path> allFiles = new ArrayList<>();
-
-                    for (String dirPath : directories) {
-                        if (isCancelled()) break;
-
-                        Path dir = Paths.get(dirPath);
-                        if (!Files.exists(dir) || !Files.isDirectory(dir)) {
-                            continue;
-                        }
-
-                        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
-                            @Override
-                            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-                                if (isCancelled()) return FileVisitResult.TERMINATE;
-
-                                String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
-                                if (extensions.contains(ext)) {
-                                    allFiles.add(file);
-                                }
-                                return FileVisitResult.CONTINUE;
-                            }
-
-                            @Override
-                            public FileVisitResult visitFileFailed(Path file, IOException exc) {
-                                return FileVisitResult.CONTINUE;
-                            }
-                        });
-                    }
+                    List<Path> allFiles = collectFiles(directories, extensions);
 
                     stats.totalFiles.set(allFiles.size());
                     updateStatus("Found " + stats.totalFiles.get() + " image files");
@@ -227,20 +213,8 @@ public class IndexerService {
                                     return;
                                 }
 
-                                // Extract metadata
-                                ImageMetadata metadata = exifService.extractMetadata(file);
-
-                                // Apply sidecar data if exists (preserves custom metadata on reindex)
-                                sidecarService.applySidecarToMetadata(metadata);
-
-                                // Compute content and perceptual hashes
-                                try {
-                                    metadata.setContentHash(hashService.computeContentHash(file));
-                                    metadata.setPerceptualHash(hashService.computePerceptualHash(file));
-                                } catch (Exception e) {
-                                    // Non-fatal: continue indexing even if hashing fails
-                                    System.err.println("Hash computation failed for " + file + ": " + e.getMessage());
-                                }
+                                // Process the file (extract metadata, apply sidecar, compute hashes)
+                                ImageMetadata metadata = processFile(file);
 
                                 stats.processedFiles.incrementAndGet();
 
@@ -321,7 +295,7 @@ public class IndexerService {
         long now = System.currentTimeMillis();
         if (now - lastUpdate.get() >= 100) { // Update at most every 100ms
             lastUpdate.set(now);
-            updateStatusSafe("Processing: " + fileName + " (" + current + "/" + total + ")");
+            updateStatus("Processing: " + fileName + " (" + current + "/" + total + ")");
             updateProgressSafe(current, total);
         }
     }
@@ -398,12 +372,6 @@ public class IndexerService {
         }
     }
 
-    private void updateStatusSafe(String message) {
-        if (statusCallback != null) {
-            Platform.runLater(() -> statusCallback.accept(message));
-        }
-    }
-
     private void notifyProgress(double progress) {
         if (progressCallback != null) {
             Platform.runLater(() -> progressCallback.accept(progress));
@@ -423,12 +391,77 @@ public class IndexerService {
         }
     }
 
-    private String getFileExtension(String filename) {
+    /**
+     * Get the file extension including the dot (e.g. ".jpg").
+     */
+    String getFileExtension(String filename) {
         int lastDot = filename.lastIndexOf('.');
         if (lastDot > 0) {
             return filename.substring(lastDot);
         }
         return "";
+    }
+
+    /**
+     * Collect all image files from the given directories that match the specified extensions.
+     * Walks the directory tree recursively.
+     *
+     * @param directories list of directory paths to scan
+     * @param extensions set of lowercase file extensions to match (e.g. ".jpg", ".png")
+     * @return list of matching file paths
+     */
+    List<Path> collectFiles(List<String> directories, Set<String> extensions) throws IOException {
+        List<Path> allFiles = new ArrayList<>();
+
+        for (String dirPath : directories) {
+            Path dir = Paths.get(dirPath);
+            if (!Files.exists(dir) || !Files.isDirectory(dir)) {
+                continue;
+            }
+
+            Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                    String ext = getFileExtension(file.getFileName().toString()).toLowerCase();
+                    if (extensions.contains(ext)) {
+                        allFiles.add(file);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc) {
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        }
+
+        return allFiles;
+    }
+
+    /**
+     * Process a single image file: extract metadata, apply sidecar data, and compute hashes.
+     *
+     * @param file the image file to process
+     * @return the extracted and enriched metadata
+     */
+    ImageMetadata processFile(Path file) throws Exception {
+        // Extract metadata
+        ImageMetadata metadata = exifService.extractMetadata(file);
+
+        // Apply sidecar data if exists (preserves custom metadata on reindex)
+        sidecarService.applySidecarToMetadata(metadata);
+
+        // Compute content and perceptual hashes
+        try {
+            metadata.setContentHash(hashService.computeContentHash(file));
+            metadata.setPerceptualHash(hashService.computePerceptualHash(file));
+        } catch (Exception e) {
+            // Non-fatal: continue indexing even if hashing fails
+            System.err.println("Hash computation failed for " + file + ": " + e.getMessage());
+        }
+
+        return metadata;
     }
 
     /**
