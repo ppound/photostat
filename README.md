@@ -147,23 +147,23 @@ Download the latest release from **[GitHub Releases](https://github.com/ppound/p
 
 #### Option A: Windows Installer (.msi)
 
-Download `PhotoStat-1.8.0.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
+Download `PhotoStat-1.9.0.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
 
 #### Option B: macOS Installer (.dmg)
 
-Download `PhotoStat-1.8.0.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+Download `PhotoStat-1.9.0.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
 > **Note:** The macOS installer is unsigned. On first launch, right-click the app and select **Open**, then confirm.
 
 #### Option C: Cross-platform JAR
 
-Download `photostat-java-1.8.0-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
+Download `photostat-java-1.9.0-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
 
 ```bash
-java -jar photostat-java-1.8.0-executable.jar
+java -jar photostat-java-1.9.0-executable.jar
 ```
 
-**Intel Mac users:** Download the separate `photostat-java-1.8.0-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
+**Intel Mac users:** Download the separate `photostat-java-1.9.0-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
 
 ### 5. Get Started
 
@@ -192,31 +192,31 @@ PhotoStat includes a CLI for batch image analysis. The CLI requires the cross-pl
 
 ```bash
 # Analyze all configured directories
-java -jar photostat-java-1.8.0-executable.jar --analyze
+java -jar photostat-java-1.9.0-executable.jar --analyze
 
 # Preview what would be analyzed
-java -jar photostat-java-1.8.0-executable.jar --analyze --dry-run
+java -jar photostat-java-1.9.0-executable.jar --analyze --dry-run
 
 # Run with 4 parallel threads
-java -jar photostat-java-1.8.0-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.9.0-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
-java -jar photostat-java-1.8.0-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.9.0-executable.jar --analyze --provider gemini
 
 # Find duplicate images
-java -jar photostat-java-1.8.0-executable.jar --find-duplicates
+java -jar photostat-java-1.9.0-executable.jar --find-duplicates
 
 # Find visually similar images
-java -jar photostat-java-1.8.0-executable.jar --find-duplicates --mode visual
+java -jar photostat-java-1.9.0-executable.jar --find-duplicates --mode visual
 
 # Detect and cluster faces
-java -jar photostat-java-1.8.0-executable.jar --detect-faces
+java -jar photostat-java-1.9.0-executable.jar --detect-faces
 
 # Face detection with 4 parallel workers
-java -jar photostat-java-1.8.0-executable.jar --detect-faces --parallel 4
+java -jar photostat-java-1.9.0-executable.jar --detect-faces --parallel 4
 
 # Face detection on a specific directory
-java -jar photostat-java-1.8.0-executable.jar --detect-faces --dir /path/to/photos
+java -jar photostat-java-1.9.0-executable.jar --detect-faces --dir /path/to/photos
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.

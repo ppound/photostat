@@ -43,7 +43,7 @@ java -jar photostat-java-1.7.0-executable.jar
 **Solution:** Download the Intel Mac JAR instead:
 
 ```bash
-java -jar photostat-java-1.8.0-executable-mac-intel.jar
+java -jar photostat-java-1.9.0-executable-mac-intel.jar
 ```
 
 This JAR is built with `mvn package -Pmac-intel` and includes Intel Mac JavaFX natives alongside Windows and Linux natives.
@@ -56,7 +56,7 @@ If the Intel Mac JAR is not available for your version, you can download the Jav
 ```bash
 java --module-path /path/to/javafx-sdk-21/lib \
      --add-modules javafx.controls,javafx.fxml,javafx.swing \
-     -jar photostat-java-1.8.0-executable.jar
+     -jar photostat-java-1.9.0-executable.jar
 ```
 
 ---
