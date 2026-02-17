@@ -221,6 +221,8 @@ public class FacesPanel extends BorderPane {
         thread.start();
     }
 
+    private static final int FACES_PAGE_SIZE = 50;
+
     private void showClusterDetail(FaceCluster cluster) {
         detailBox.getChildren().clear();
 
@@ -257,16 +259,45 @@ public class FacesPanel extends BorderPane {
 
         detailBox.getChildren().addAll(nameBox, mergeButton, infoLabel, new Separator());
 
-        // Face thumbnails grid
+        // Face thumbnails grid with pagination
         FlowPane facesGrid = new FlowPane(10, 10);
         facesGrid.setPadding(new Insets(10, 0, 0, 0));
 
-        for (FaceDetection face : cluster.getFaces()) {
-            VBox faceBox = createFaceThumbnail(face);
-            facesGrid.getChildren().add(faceBox);
+        List<FaceDetection> allFaces = cluster.getFaces();
+        int totalFaces = allFaces.size();
+        int initialLoad = Math.min(FACES_PAGE_SIZE, totalFaces);
+
+        for (int i = 0; i < initialLoad; i++) {
+            facesGrid.getChildren().add(createFaceThumbnail(allFaces.get(i)));
         }
 
         detailBox.getChildren().add(facesGrid);
+
+        // "Load More" button if there are more faces
+        if (totalFaces > FACES_PAGE_SIZE) {
+            int[] loaded = {initialLoad};
+            Label countLabel = new Label("Showing " + initialLoad + " of " + totalFaces + " faces");
+            countLabel.getStyleClass().add("text-muted");
+
+            Button loadMoreButton = new Button("Load More");
+            loadMoreButton.setOnAction(e -> {
+                int nextBatch = Math.min(loaded[0] + FACES_PAGE_SIZE, totalFaces);
+                for (int i = loaded[0]; i < nextBatch; i++) {
+                    facesGrid.getChildren().add(createFaceThumbnail(allFaces.get(i)));
+                }
+                loaded[0] = nextBatch;
+                countLabel.setText("Showing " + loaded[0] + " of " + totalFaces + " faces");
+                if (loaded[0] >= totalFaces) {
+                    loadMoreButton.setDisable(true);
+                    loadMoreButton.setText("All faces loaded");
+                }
+            });
+
+            HBox loadMoreBox = new HBox(10, loadMoreButton, countLabel);
+            loadMoreBox.setAlignment(Pos.CENTER_LEFT);
+            loadMoreBox.setPadding(new Insets(10, 0, 0, 0));
+            detailBox.getChildren().add(loadMoreBox);
+        }
     }
 
     private VBox createFaceThumbnail(FaceDetection face) {
@@ -319,23 +350,51 @@ public class FacesPanel extends BorderPane {
     }
 
     private void saveName(FaceCluster cluster, String name) {
+        // Disable UI to prevent concurrent saves
+        clusterListView.setDisable(true);
+        scanButton.setDisable(true);
+
+        // Add progress bar to detail box
+        ProgressBar saveProgressBar = new ProgressBar(0);
+        saveProgressBar.setPrefWidth(300);
+        Label saveProgressLabel = new Label("Saving name '" + name + "' — 0 / ? images...");
+        saveProgressLabel.getStyleClass().add("text-muted");
+        HBox progressBox = new HBox(10, saveProgressBar, saveProgressLabel);
+        progressBox.setAlignment(Pos.CENTER_LEFT);
+        progressBox.setPadding(new Insets(5, 0, 5, 0));
+        // Insert after the separator (index 3)
+        int insertIndex = Math.min(3, detailBox.getChildren().size());
+        detailBox.getChildren().add(insertIndex, progressBox);
+
         summaryLabel.setText("Saving name '" + name + "'...");
 
         Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
-                faceService.assignName(cluster.getClusterId(), name);
+                faceService.assignName(cluster.getClusterId(), name, progress -> {
+                    int current = (int) progress[0];
+                    int total = (int) progress[1];
+                    Platform.runLater(() -> {
+                        saveProgressBar.setProgress((double) current / total);
+                        saveProgressLabel.setText("Saving name '" + name + "' — " + current + " / " + total + " images...");
+                    });
+                });
                 return null;
             }
         };
 
         task.setOnSucceeded(e -> {
+            detailBox.getChildren().remove(progressBox);
+            clusterListView.setDisable(false);
+            scanButton.setDisable(false);
             updateSummary();
-            // Refresh the list view to show updated name
             clusterListView.refresh();
         });
 
         task.setOnFailed(e -> {
+            detailBox.getChildren().remove(progressBox);
+            clusterListView.setDisable(false);
+            scanButton.setDisable(false);
             Throwable ex = task.getException();
             summaryLabel.setText("Failed to save name: " + (ex != null ? ex.getMessage() : "Unknown error"));
         });

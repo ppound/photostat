@@ -12,6 +12,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Service for generating and caching image thumbnails.
@@ -32,6 +34,14 @@ public class ThumbnailService {
 
     // Track access times for LRU eviction
     private final Map<String, Long> cacheAccessTimes = new ConcurrentHashMap<>();
+
+    // Shared thread pool for async thumbnail/face crop loading
+    private final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(4, r -> {
+        Thread t = new Thread(r);
+        t.setDaemon(true);
+        t.setName("thumbnail-loader-" + t.getId());
+        return t;
+    });
 
     // RAW file extensions that need ExifTool for thumbnail extraction
     private static final Set<String> RAW_EXTENSIONS = Set.of(
@@ -521,12 +531,10 @@ public class ThumbnailService {
      * Get a thumbnail asynchronously.
      */
     public void getThumbnailAsync(String filePath, ThumbnailCallback callback) {
-        Thread thread = new Thread(() -> {
+        thumbnailExecutor.submit(() -> {
             Image thumbnail = getThumbnail(filePath);
             callback.onThumbnailReady(filePath, thumbnail);
         });
-        thread.setDaemon(true);
-        thread.start();
     }
 
     /**
@@ -653,12 +661,10 @@ public class ThumbnailService {
      * Get a face crop asynchronously.
      */
     public void getFaceCropAsync(String imagePath, int x, int y, int w, int h, ThumbnailCallback callback) {
-        Thread thread = new Thread(() -> {
+        thumbnailExecutor.submit(() -> {
             Image crop = getFaceCrop(imagePath, x, y, w, h);
             callback.onThumbnailReady(imagePath, crop);
         });
-        thread.setDaemon(true);
-        thread.start();
     }
 
     private String getFileExtension(String filename) {

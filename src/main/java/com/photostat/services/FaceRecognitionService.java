@@ -487,6 +487,10 @@ public class FaceRecognitionService {
      * Assign a person name to a cluster and update OpenSearch + sidecars.
      */
     public void assignName(String clusterId, String name) throws IOException {
+        assignName(clusterId, name, null);
+    }
+
+    public void assignName(String clusterId, String name, java.util.function.Consumer<double[]> progressCallback) throws IOException {
         FaceCluster cluster = getClusterById(clusterId);
         if (cluster == null) return;
 
@@ -502,6 +506,8 @@ public class FaceRecognitionService {
         }
 
         // Update each image's persons field in OpenSearch and sidecar
+        int total = imagePaths.size();
+        int current = 0;
         for (String imagePath : imagePaths) {
             try {
                 var metadata = openSearchService.getDocumentByPath(imagePath);
@@ -513,6 +519,10 @@ public class FaceRecognitionService {
             } catch (Exception e) {
                 logger.error("FaceRecognitionService",
                         "Failed to update person for " + imagePath + ": " + e.getMessage());
+            }
+            current++;
+            if (progressCallback != null) {
+                progressCallback.accept(new double[]{current, total});
             }
         }
 
@@ -568,7 +578,10 @@ public class FaceRecognitionService {
             }
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to load face data", e);
-            faceDetections = new ArrayList<>();
+            // Only clear if we had no data in memory — don't destroy existing in-memory state
+            if (faceDetections.isEmpty()) {
+                faceDetections = new ArrayList<>();
+            }
         }
 
         try {
@@ -580,15 +593,36 @@ public class FaceRecognitionService {
             }
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to load clusters", e);
-            clusters = new ArrayList<>();
+            if (clusters.isEmpty()) {
+                clusters = new ArrayList<>();
+            }
         }
     }
 
     /**
      * Save state to JSON files on disk.
+     * Refuses to overwrite existing data with an empty list to prevent accidental data loss.
+     * Creates a backup before writing.
      */
     public void saveState() {
         try {
+            // Don't overwrite existing face data with an empty list
+            if (faceDetections.isEmpty() && Files.exists(faceDataPath) && Files.size(faceDataPath) > 2) {
+                logger.warn("FaceRecognitionService",
+                        "Refusing to overwrite face_data.json with empty list — existing file has data");
+                return;
+            }
+
+            // Back up before writing
+            if (Files.exists(faceDataPath) && Files.size(faceDataPath) > 0) {
+                Files.copy(faceDataPath, faceDataPath.resolveSibling("face_data.json.bak"),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            if (Files.exists(clustersPath) && Files.size(clustersPath) > 0) {
+                Files.copy(clustersPath, clustersPath.resolveSibling("clusters.json.bak"),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+
             objectMapper.writeValue(faceDataPath.toFile(), faceDetections);
             objectMapper.writeValue(clustersPath.toFile(), clusters);
         } catch (IOException e) {
