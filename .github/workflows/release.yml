@@ -20,23 +20,36 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Build fat JAR
+      - name: Build Apple Silicon JAR
         run: mvn package -DskipTests
+
+      - name: Build Intel Mac JAR
+        run: mvn package -DskipTests -Pmac-intel
 
       - name: Get version
         id: version
         run: echo "version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> "$GITHUB_OUTPUT"
 
-      - name: Upload JAR artifact
+      - name: Upload Apple Silicon JAR artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fat-jar
+          name: fat-jar-apple-silicon
           path: target/photostat-java-${{ steps.version.outputs.version }}-executable.jar
 
-      - name: Upload JAR to release
+      - name: Upload Intel Mac JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fat-jar-intel-mac
+          path: target/photostat-java-${{ steps.version.outputs.version }}-executable-mac-intel.jar
+
+      - name: Upload JARs to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" "target/photostat-java-${{ steps.version.outputs.version }}-executable.jar" --clobber
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "target/photostat-java-${{ steps.version.outputs.version }}-executable.jar" \
+            "target/photostat-java-${{ steps.version.outputs.version }}-executable-mac-intel.jar" \
+            --clobber
 
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -56,7 +69,7 @@ jobs:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
-          name: fat-jar
+          name: fat-jar-apple-silicon
           path: input
 
       - name: Create MSI installer
@@ -84,7 +97,7 @@ jobs:
           $msi = Get-ChildItem output/*.msi | Select-Object -First 1
           gh release upload "${{ github.ref_name }}" $msi.FullName --clobber
 
-  package-macos:
+  package-macos-apple-silicon:
     needs: build
     runs-on: macos-latest
     steps:
@@ -99,7 +112,7 @@ jobs:
       - name: Download JAR artifact
         uses: actions/download-artifact@v4
         with:
-          name: fat-jar
+          name: fat-jar-apple-silicon
           path: input
 
       - name: Create DMG installer
@@ -116,7 +129,50 @@ jobs:
             --java-options "--add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED" \
             --dest output
 
+      - name: Rename DMG with architecture
+        run: mv output/PhotoStat-${{ needs.build.outputs.version }}.dmg output/PhotoStat-${{ needs.build.outputs.version }}-apple-silicon.dmg
+
       - name: Upload DMG to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" output/*.dmg --clobber
+        run: gh release upload "${{ github.ref_name }}" output/PhotoStat-${{ needs.build.outputs.version }}-apple-silicon.dmg --clobber
+
+  package-macos-intel:
+    needs: build
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fat-jar-intel-mac
+          path: input
+
+      - name: Create DMG installer
+        run: |
+          jpackage \
+            --input input \
+            --main-jar photostat-java-${{ needs.build.outputs.version }}-executable-mac-intel.jar \
+            --main-class com.photostat.Launcher \
+            --name PhotoStat \
+            --app-version ${{ needs.build.outputs.version }} \
+            --vendor "PhotoStat" \
+            --description "Photo metadata indexing and search" \
+            --type dmg \
+            --java-options "--add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED" \
+            --dest output
+
+      - name: Rename DMG with architecture
+        run: mv output/PhotoStat-${{ needs.build.outputs.version }}.dmg output/PhotoStat-${{ needs.build.outputs.version }}-intel.dmg
+
+      - name: Upload DMG to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" output/PhotoStat-${{ needs.build.outputs.version }}-intel.dmg --clobber
