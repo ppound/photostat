@@ -13,6 +13,8 @@ import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import netscape.javascript.JSObject;
 
+import java.awt.Desktop;
+import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -209,7 +211,8 @@ public class MapPanel extends BorderPane {
                     if (i > 0) json.append(",");
                     json.append("{\"lat\":").append(img.getLatitude())
                         .append(",\"lon\":").append(img.getLongitude())
-                        .append(",\"fileName\":\"").append(escapeJson(img.getFileName())).append("\"");
+                        .append(",\"fileName\":\"").append(escapeJson(img.getFileName())).append("\"")
+                        .append(",\"filePath\":\"").append(escapeJson(img.getFilePath())).append("\"");
 
                     if (img.getDateTaken() != null) {
                         json.append(",\"date\":\"").append(escapeJson(img.getDateTaken())).append("\"");
@@ -218,7 +221,7 @@ public class MapPanel extends BorderPane {
                         json.append(",\"camera\":\"").append(escapeJson(img.getCameraModel())).append("\"");
                     }
 
-                    // Check for cached thumbnail
+                    // Check for already-cached thumbnail (fast disk check only)
                     String thumbUrl = getThumbnailUrl(img.getFilePath());
                     if (thumbUrl != null) {
                         json.append(",\"thumb\":\"").append(escapeJson(thumbUrl)).append("\"");
@@ -246,7 +249,8 @@ public class MapPanel extends BorderPane {
     }
 
     /**
-     * Get a file:// URL for a cached thumbnail, or null if not cached.
+     * Get a file:// URL for an already-cached thumbnail, or null if not cached.
+     * Fast check only — does not generate thumbnails.
      */
     private String getThumbnailUrl(String filePath) {
         try {
@@ -256,6 +260,25 @@ public class MapPanel extends BorderPane {
             }
         } catch (Exception e) {
             // Ignore — no thumbnail available
+        }
+        return null;
+    }
+
+    /**
+     * Generate a thumbnail on demand and return its file:// URL.
+     * Called from a background thread when a popup is opened.
+     */
+    private String generateThumbnailUrl(String filePath) {
+        try {
+            javafx.scene.image.Image thumb = thumbnailService.getThumbnail(filePath);
+            if (thumb != null) {
+                Path cachePath = thumbnailService.getDiskCachePath(filePath);
+                if (Files.exists(cachePath)) {
+                    return cachePath.toUri().toString();
+                }
+            }
+        } catch (Exception e) {
+            // Ignore
         }
         return null;
     }
@@ -285,6 +308,37 @@ public class MapPanel extends BorderPane {
             } else {
                 loadClusters(zoom, south, west, north, east);
             }
+        }
+
+        /**
+         * Called from JavaScript when a user clicks on a popup thumbnail.
+         * Opens the image file in the system's default viewer.
+         */
+        public void openFile(String filePath) {
+            try {
+                Desktop.getDesktop().open(new File(filePath));
+            } catch (Exception e) {
+                logger.error("MapPanel", "Failed to open file: " + filePath, e);
+            }
+        }
+
+        /**
+         * Called from JavaScript when a popup opens and needs a thumbnail generated.
+         * Generates the thumbnail on a background thread, then calls back to JS.
+         */
+        public void requestThumbnail(String filePath) {
+            Thread thread = new Thread(() -> {
+                String url = generateThumbnailUrl(filePath);
+                if (url != null) {
+                    String escapedPath = escapeJson(filePath);
+                    String escapedUrl = escapeJson(url);
+                    Platform.runLater(() ->
+                        webEngine.executeScript("updateThumbnail(\"" + escapedPath + "\",\"" + escapedUrl + "\")")
+                    );
+                }
+            });
+            thread.setDaemon(true);
+            thread.start();
         }
     }
 }

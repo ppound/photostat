@@ -34,8 +34,9 @@
         }
         .photo-popup img {
             width: 100%; max-width: 200px; height: auto;
-            border-radius: 4px; margin-bottom: 6px;
+            border-radius: 4px; margin-bottom: 6px; cursor: pointer;
         }
+        .photo-popup img:hover { opacity: 0.8; }
         .photo-popup .filename { font-weight: bold; margin-bottom: 4px; word-break: break-all; }
         .photo-popup .meta { color: #666; line-height: 1.4; }
         .empty-message {
@@ -153,8 +154,12 @@
             data.forEach(function(img) {
                 var marker = L.marker([img.lat, img.lon]);
                 var popupHtml = '<div class="photo-popup">';
+                var clickHandler = img.filePath ? ' onclick="openInViewer(\'' + escapeAttr(img.filePath) + '\')"' : '';
                 if (img.thumb) {
-                    popupHtml += '<img src="' + img.thumb + '" alt="thumbnail" />';
+                    popupHtml += '<img src="' + img.thumb + '" alt="thumbnail" title="Click to open"' + clickHandler + ' />';
+                } else if (img.filePath) {
+                    // Placeholder image — will be loaded on demand when popup opens
+                    popupHtml += '<img data-filepath="' + escapeHtml(img.filePath) + '" alt="thumbnail" title="Click to open" style="display:none;"' + clickHandler + ' />';
                 }
                 popupHtml += '<div class="filename">' + escapeHtml(img.fileName) + '</div>';
                 popupHtml += '<div class="meta">';
@@ -163,6 +168,16 @@
                 popupHtml += 'GPS: ' + img.lat.toFixed(6) + ', ' + img.lon.toFixed(6);
                 popupHtml += '</div></div>';
                 marker.bindPopup(popupHtml, { maxWidth: 220 });
+
+                // Request thumbnail on demand when popup opens
+                if (!img.thumb && img.filePath) {
+                    marker.on('popupopen', function() {
+                        try {
+                            window.javaBridge.requestThumbnail(img.filePath);
+                        } catch (e) { /* bridge not ready */ }
+                    });
+                }
+
                 markerClusterGroup.addLayer(marker);
             });
 
@@ -170,11 +185,38 @@
             hideLoading();
         }
 
+        /**
+         * Called from Java when a thumbnail has been generated.
+         * Finds the placeholder img by data-filepath and sets its src.
+         */
+        function updateThumbnail(filePath, url) {
+            var imgs = document.querySelectorAll('img[data-filepath]');
+            for (var i = 0; i < imgs.length; i++) {
+                if (imgs[i].getAttribute('data-filepath') === filePath) {
+                    imgs[i].src = url;
+                    imgs[i].style.display = '';
+                    imgs[i].removeAttribute('data-filepath');
+                    break;
+                }
+            }
+        }
+
         function escapeHtml(text) {
             if (!text) return '';
             var div = document.createElement('div');
             div.appendChild(document.createTextNode(text));
             return div.innerHTML;
+        }
+
+        function escapeAttr(text) {
+            if (!text) return '';
+            return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function openInViewer(filePath) {
+            try {
+                window.javaBridge.openFile(filePath);
+            } catch (e) { /* bridge not ready */ }
         }
 
         function notifyJava() {
