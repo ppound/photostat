@@ -718,18 +718,26 @@ public class ResultsPanel extends VBox {
                         final int errCount = errorCount;
                         Platform.runLater(() -> statusLabel.setText("Errors: " + errCount));
                     } else {
-                        // Update metadata with analysis results
+                        // Merge analysis results with existing metadata (don't overwrite user data)
                         if (result.getTags() != null && !result.getTags().isEmpty()) {
-                            metadata.setTags(result.getTags());
+                            for (String tag : result.getTags()) {
+                                metadata.addTag(tag);
+                            }
                         }
                         if (result.getPersons() != null && !result.getPersons().isEmpty()) {
-                            metadata.setPersons(result.getPersons());
+                            for (String person : result.getPersons()) {
+                                metadata.addPerson(person);
+                            }
                         }
                         if (result.getPlace() != null && !result.getPlace().isEmpty()) {
-                            metadata.setPlace(result.getPlace());
+                            if (metadata.getPlace() == null || metadata.getPlace().isEmpty()) {
+                                metadata.setPlace(result.getPlace());
+                            }
                         }
                         if (result.getRating() != null && !result.getRating().isEmpty()) {
-                            metadata.setRating(result.getRating());
+                            if (metadata.getRating() == null || metadata.getRating().isEmpty()) {
+                                metadata.setRating(result.getRating());
+                            }
                         }
 
                         // Save to OpenSearch
