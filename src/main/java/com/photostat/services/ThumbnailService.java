@@ -580,16 +580,24 @@ public class ThumbnailService {
      * Get a face crop from an image, with disk caching in ~/.photostat/faces/crops/.
      */
     public Image getFaceCrop(String imagePath, int x, int y, int w, int h) {
-        String cropKey = imagePath + "|" + x + "|" + y + "|" + w + "|" + h;
+        String cropKey = "face|" + imagePath + "|" + x + "|" + y + "|" + w + "|" + h;
         String cacheFileName = Integer.toHexString(cropKey.hashCode()) + ".jpg";
         Path cropsDir = Path.of(System.getProperty("user.home"), ".photostat", "faces", "crops");
         Path cropCachePath = cropsDir.resolve(cacheFileName);
+
+        // Check in-memory cache first
+        Image memoryCached = memoryCache.get(cropKey);
+        if (memoryCached != null) {
+            cacheAccessTimes.put(cropKey, System.currentTimeMillis());
+            return memoryCached;
+        }
 
         // Check disk cache
         if (Files.exists(cropCachePath)) {
             try {
                 Image cached = new Image(cropCachePath.toUri().toString());
                 if (!cached.isError()) {
+                    addToMemoryCache(cropKey, cached);
                     return cached;
                 }
             } catch (Exception e) {
@@ -650,7 +658,11 @@ public class ThumbnailService {
                 logger.debug("ThumbnailService", "Failed to cache face crop: " + e.getMessage());
             }
 
-            return convertToFxImage(scaled);
+            Image result = convertToFxImage(scaled);
+            if (result != null) {
+                addToMemoryCache(cropKey, result);
+            }
+            return result;
         } catch (Exception e) {
             logger.debug("ThumbnailService", "Failed to generate face crop: " + e.getMessage());
             return null;

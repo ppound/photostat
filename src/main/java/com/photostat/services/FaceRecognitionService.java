@@ -588,7 +588,7 @@ public class FaceRecognitionService {
             if (Files.exists(clustersPath) && Files.size(clustersPath) > 0) {
                 clusters = objectMapper.readValue(
                         clustersPath.toFile(), new TypeReference<List<FaceCluster>>() {});
-                resolveClusters();
+                resolveClusterCounts();
                 logger.info("FaceRecognitionService", "Loaded " + clusters.size() + " clusters");
             }
         } catch (IOException e) {
@@ -630,8 +630,52 @@ public class FaceRecognitionService {
         }
     }
 
+    /**
+     * Lightweight resolve: only compute photo counts for all clusters (no face list population).
+     * Used during loadState() to avoid resolving face lists for thousands of clusters.
+     */
+    private void resolveClusterCounts() {
+        for (FaceCluster cluster : clusters) {
+            Set<String> uniquePaths = new HashSet<>();
+            for (String faceId : cluster.getFaceIds()) {
+                FaceDetection face = faceIndex.get(faceId);
+                if (face != null) {
+                    uniquePaths.add(face.getImagePath());
+                }
+            }
+            cluster.setPhotoCount(uniquePaths.size());
+        }
+    }
+
+    /**
+     * Full resolve: populate face lists and photo counts for all clusters.
+     * Used after clustering when all data is fresh.
+     */
     private void resolveClusters() {
         for (FaceCluster cluster : clusters) {
+            List<FaceDetection> faces = new ArrayList<>();
+            Set<String> uniquePaths = new HashSet<>();
+            for (String faceId : cluster.getFaceIds()) {
+                FaceDetection face = faceIndex.get(faceId);
+                if (face != null) {
+                    faces.add(face);
+                    uniquePaths.add(face.getImagePath());
+                }
+            }
+            cluster.setFaces(faces);
+            cluster.setPhotoCount(uniquePaths.size());
+        }
+    }
+
+    /**
+     * Resolve face lists and photo counts for a specific page of clusters.
+     * Called on demand by the UI when loading a page of clusters.
+     */
+    public void resolveClustersPage(List<FaceCluster> page) {
+        for (FaceCluster cluster : page) {
+            if (cluster.getFaces() != null && !cluster.getFaces().isEmpty()) {
+                continue; // Already resolved
+            }
             List<FaceDetection> faces = new ArrayList<>();
             Set<String> uniquePaths = new HashSet<>();
             for (String faceId : cluster.getFaceIds()) {

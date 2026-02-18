@@ -13,6 +13,7 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,6 +33,14 @@ public class FacesPanel extends BorderPane {
     private Label summaryLabel;
     private ListView<FaceCluster> clusterListView;
     private VBox detailBox;
+
+    // Cluster list pagination
+    private static final int CLUSTERS_PAGE_SIZE = 50;
+    private static final int FACES_PAGE_SIZE = 20;
+    private List<FaceCluster> allClusters = new ArrayList<>();
+    private int clustersLoaded = 0;
+    private Button loadMoreClustersButton;
+    private Label clusterCountLabel;
 
     public FacesPanel() {
         this.faceService = FaceRecognitionService.getInstance();
@@ -55,17 +64,27 @@ public class FacesPanel extends BorderPane {
         // Main content: split between cluster list and detail
         SplitPane splitPane = new SplitPane();
 
-        // Left: cluster list
+        // Left: cluster list with pagination
         clusterListView = new ListView<>();
         clusterListView.setCellFactory(lv -> new FaceClusterCell());
         clusterListView.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             showClusterDetail(newVal);
         });
 
+        loadMoreClustersButton = new Button("Load More Clusters");
+        loadMoreClustersButton.setOnAction(e -> loadMoreClusters());
+        loadMoreClustersButton.setMaxWidth(Double.MAX_VALUE);
+        loadMoreClustersButton.setVisible(false);
+
+        clusterCountLabel = new Label();
+        clusterCountLabel.getStyleClass().add("text-muted");
+        clusterCountLabel.setStyle("-fx-font-size: 11px;");
+        clusterCountLabel.setVisible(false);
+
         VBox leftBox = new VBox(5);
         Label clustersLabel = new Label("Face Clusters");
         clustersLabel.setStyle("-fx-font-weight: bold;");
-        leftBox.getChildren().addAll(clustersLabel, clusterListView);
+        leftBox.getChildren().addAll(clustersLabel, clusterListView, clusterCountLabel, loadMoreClustersButton);
         VBox.setVgrow(clusterListView, Priority.ALWAYS);
 
         // Right: selected cluster detail
@@ -137,6 +156,43 @@ public class FacesPanel extends BorderPane {
         thread.start();
     }
 
+    /**
+     * Load clusters into the list, sorted by size (largest first), paginated.
+     */
+    private void loadClusterList(List<FaceCluster> clusters) {
+        // Sort by face count descending so the most important clusters appear first
+        allClusters = new ArrayList<>(clusters);
+        allClusters.sort(Comparator.comparingInt((FaceCluster c) -> c.getFaceIds().size()).reversed());
+
+        clustersLoaded = 0;
+        clusterListView.getItems().clear();
+        clearDetailImages();
+        loadMoreClusters();
+    }
+
+    private void loadMoreClusters() {
+        int nextBatch = Math.min(clustersLoaded + CLUSTERS_PAGE_SIZE, allClusters.size());
+        List<FaceCluster> page = allClusters.subList(clustersLoaded, nextBatch);
+
+        // Resolve faces only for this page
+        faceService.resolveClustersPage(page);
+
+        clusterListView.getItems().addAll(page);
+        clustersLoaded = nextBatch;
+
+        boolean hasMore = clustersLoaded < allClusters.size();
+        loadMoreClustersButton.setVisible(hasMore);
+        clusterCountLabel.setVisible(true);
+        clusterCountLabel.setText("Showing " + clustersLoaded + " of " + allClusters.size() + " clusters");
+        if (!hasMore) {
+            loadMoreClustersButton.setText("All clusters loaded");
+            loadMoreClustersButton.setDisable(true);
+        } else {
+            loadMoreClustersButton.setText("Load More Clusters");
+            loadMoreClustersButton.setDisable(false);
+        }
+    }
+
     private void scanForFaces() {
         if (!configService.isFacesEnabled()) {
             Alert alert = new Alert(Alert.AlertType.WARNING);
@@ -160,7 +216,7 @@ public class FacesPanel extends BorderPane {
         progressIndicator.setVisible(true);
         summaryLabel.setText("Fetching image paths...");
         clusterListView.getItems().clear();
-        detailBox.getChildren().clear();
+        clearDetailImages();
 
         Task<List<FaceCluster>> task = new Task<>() {
             @Override
@@ -201,7 +257,7 @@ public class FacesPanel extends BorderPane {
 
         task.setOnSucceeded(e -> {
             List<FaceCluster> result = task.getValue();
-            clusterListView.getItems().setAll(result);
+            loadClusterList(result);
             updateSummary();
             scanButton.setDisable(false);
             progressIndicator.setVisible(false);
@@ -221,10 +277,9 @@ public class FacesPanel extends BorderPane {
         thread.start();
     }
 
-    private static final int FACES_PAGE_SIZE = 50;
-
     private void showClusterDetail(FaceCluster cluster) {
-        detailBox.getChildren().clear();
+        // Release Image references from previous detail to help GC
+        clearDetailImages();
 
         if (cluster == null) return;
 
@@ -428,8 +483,8 @@ public class FacesPanel extends BorderPane {
             sourceIds.add(source.getClusterId());
             faceService.mergeClusters(target.getClusterId(), sourceIds);
 
-            // Reload
-            clusterListView.getItems().setAll(faceService.getClusters());
+            // Reload with pagination
+            loadClusterList(faceService.getClusters());
             updateSummary();
         });
     }
@@ -449,16 +504,77 @@ public class FacesPanel extends BorderPane {
     }
 
     public void refresh() {
+        // Only do a full reload if the list is empty (first visit or after scan)
+        // This prevents re-rendering all cluster cells and leaking Image objects on every tab switch
+        if (clusterListView.getItems().isEmpty() && !faceService.getClusters().isEmpty()) {
+            faceService.loadState();
+            loadClusterList(faceService.getClusters());
+        }
+        updateSummary();
+    }
+
+    /**
+     * Force a full reload of face data from disk.
+     */
+    public void forceRefresh() {
         faceService.loadState();
-        clusterListView.getItems().setAll(faceService.getClusters());
+        clearDetailImages();
+        loadClusterList(faceService.getClusters());
         updateSummary();
         checkPythonStatus();
     }
 
     /**
+     * Clear Image references from the detail panel to allow garbage collection.
+     */
+    private void clearDetailImages() {
+        for (javafx.scene.Node node : detailBox.getChildren()) {
+            if (node instanceof FlowPane flowPane) {
+                for (javafx.scene.Node child : flowPane.getChildren()) {
+                    if (child instanceof VBox vbox) {
+                        for (javafx.scene.Node inner : vbox.getChildren()) {
+                            if (inner instanceof ImageView iv) {
+                                iv.setImage(null);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        detailBox.getChildren().clear();
+    }
+
+    /**
      * Custom ListCell for displaying face clusters.
+     * Reuses layout nodes to avoid creating new objects on every updateItem call.
      */
     private class FaceClusterCell extends ListCell<FaceCluster> {
+        private final HBox row;
+        private final ImageView imageView;
+        private final Label nameLabel;
+        private final Label statsLabel;
+
+        FaceClusterCell() {
+            row = new HBox(10);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.setPadding(new Insets(5));
+
+            imageView = new ImageView();
+            imageView.setFitWidth(48);
+            imageView.setFitHeight(48);
+            imageView.setPreserveRatio(true);
+
+            VBox infoBox = new VBox(2);
+            nameLabel = new Label();
+            nameLabel.setStyle("-fx-font-weight: bold;");
+            statsLabel = new Label();
+            statsLabel.getStyleClass().add("text-muted");
+            statsLabel.setStyle("-fx-font-size: 11px;");
+            infoBox.getChildren().addAll(nameLabel, statsLabel);
+
+            row.getChildren().addAll(imageView, infoBox);
+        }
+
         @Override
         protected void updateItem(FaceCluster cluster, boolean empty) {
             super.updateItem(cluster, empty);
@@ -466,19 +582,15 @@ public class FacesPanel extends BorderPane {
             if (empty || cluster == null) {
                 setText(null);
                 setGraphic(null);
+                imageView.setImage(null);
                 return;
             }
 
-            HBox row = new HBox(10);
-            row.setAlignment(Pos.CENTER_LEFT);
-            row.setPadding(new Insets(5));
+            nameLabel.setText(cluster.getDisplayName());
+            statsLabel.setText(cluster.getFaceIds().size() + " faces, " +
+                    cluster.getPhotoCount() + " photos");
 
-            // Representative face thumbnail
-            ImageView imageView = new ImageView();
-            imageView.setFitWidth(48);
-            imageView.setFitHeight(48);
-            imageView.setPreserveRatio(true);
-
+            imageView.setImage(null);
             if (cluster.getRepresentativeFaceId() != null) {
                 FaceDetection repFace = faceService.getFaceById(cluster.getRepresentativeFaceId());
                 if (repFace != null) {
@@ -486,7 +598,7 @@ public class FacesPanel extends BorderPane {
                             repFace.getImagePath(), repFace.getX(), repFace.getY(),
                             repFace.getWidth(), repFace.getHeight(),
                             (path, image) -> Platform.runLater(() -> {
-                                if (image != null) {
+                                if (image != null && cluster.equals(getItem())) {
                                     imageView.setImage(image);
                                 }
                             })
@@ -494,19 +606,6 @@ public class FacesPanel extends BorderPane {
                 }
             }
 
-            // Name and info
-            VBox infoBox = new VBox(2);
-            Label nameLabel = new Label(cluster.getDisplayName());
-            nameLabel.setStyle("-fx-font-weight: bold;");
-
-            Label statsLabel = new Label(cluster.getFaceIds().size() + " faces, " +
-                    cluster.getPhotoCount() + " photos");
-            statsLabel.getStyleClass().add("text-muted");
-            statsLabel.setStyle("-fx-font-size: 11px;");
-
-            infoBox.getChildren().addAll(nameLabel, statsLabel);
-
-            row.getChildren().addAll(imageView, infoBox);
             setGraphic(row);
         }
     }
