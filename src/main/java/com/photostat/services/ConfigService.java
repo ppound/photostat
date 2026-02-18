@@ -254,6 +254,11 @@ public class ConfigService {
 
     public void saveConfig() {
         try {
+            // Back up before writing
+            if (Files.exists(configPath) && Files.size(configPath) > 0) {
+                Files.copy(configPath, configPath.resolveSibling("config.json.bak"),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
             objectMapper.writeValue(configPath.toFile(), config);
         } catch (IOException e) {
             System.err.println("Failed to save config: " + e.getMessage());
