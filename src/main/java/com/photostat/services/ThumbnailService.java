@@ -36,7 +36,8 @@ public class ThumbnailService {
     private final Map<String, Long> cacheAccessTimes = new ConcurrentHashMap<>();
 
     // Shared thread pool for async thumbnail/face crop loading
-    private final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(4, r -> {
+    private final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors() * 2, r -> {
         Thread t = new Thread(r);
         t.setDaemon(true);
         t.setName("thumbnail-loader-" + t.getId());

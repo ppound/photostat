@@ -485,6 +485,8 @@ The InsightFace `buffalo_l` model (~350MB) downloads automatically on first use.
 
 1. Navigate to the **Faces** tab
 
+   ![Faces Tab](screenshots/faces-tab.png)
+
 2. The toolbar shows Python status: **Available (GPU)** or **Available (CPU)**
 
 3. Click **Scan for Faces** to start detection:
@@ -596,6 +598,8 @@ Navigate to the **Charts** tab to visualize your collection:
 ## GPS Map
 
 The **Map** tab provides an interactive map view of all your geotagged photos, powered by OpenStreetMap and Leaflet.js.
+
+![Map Tab](screenshots/maps-tab.png)
 
 ### Accessing the Map
 

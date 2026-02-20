@@ -137,6 +137,8 @@ Monitor usage:
    - Error count during processing
    - **Cancel** button to stop after the current image
 
+   ![Analysis Dialog](screenshots/analysis-dialog.png)
+
 5. When complete, a summary shows successes, failures, and any errors
 
 6. Results are **automatically saved** to OpenSearch and sidecar files

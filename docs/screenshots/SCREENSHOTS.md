@@ -23,6 +23,9 @@ Add screenshots of the PhotoStat application here. The README.md references the 
 | `charts-overview.png` | Overview charts (camera makes, file types) |
 | `charts-timeline.png` | Timeline chart |
 | `charts-exposure.png` | Exposure analysis charts |
+| `faces-tab.png` | Faces tab showing face clusters and person naming |
+| `maps-tab.png` | Map tab with geotagged photo markers and clusters |
+| `analysis-dialog.png` | AI analysis progress dialog |
 
 ## Screenshot Guidelines
 
