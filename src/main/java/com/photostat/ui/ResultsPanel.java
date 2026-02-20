@@ -183,21 +183,43 @@ public class ResultsPanel extends VBox {
         // Thumbnail column - size driven by configured thumbnail size
         int thumbSize = configService.getThumbnailSize();
         int fitSize = Math.max(60, thumbSize / 2);
-        TableColumn<ImageMetadata, ImageView> thumbnailCol = new TableColumn<>("Thumbnail");
+        TableColumn<ImageMetadata, String> thumbnailCol = new TableColumn<>("Thumbnail");
         thumbnailCol.setPrefWidth(fitSize + 20);
-        thumbnailCol.setCellValueFactory(cellData -> {
-            ImageMetadata metadata = cellData.getValue();
-            ImageView imageView = new ImageView();
-            imageView.setFitWidth(fitSize);
-            imageView.setFitHeight(fitSize);
-            imageView.setPreserveRatio(true);
+        // Use file path as the cell value so updateItem() fires only when the row changes
+        thumbnailCol.setCellValueFactory(cellData ->
+                new SimpleStringProperty(cellData.getValue().getFilePath()));
+        thumbnailCol.setCellFactory(col -> new TableCell<>() {
+            private final ImageView imageView = new ImageView();
+            private String lastLoadedPath = null;
 
-            // Load thumbnail asynchronously
-            thumbnailService.getThumbnailAsync(metadata.getFilePath(), (path, thumbnail) -> {
-                Platform.runLater(() -> imageView.setImage(thumbnail));
-            });
+            {
+                imageView.setFitWidth(fitSize);
+                imageView.setFitHeight(fitSize);
+                imageView.setPreserveRatio(true);
+            }
 
-            return new SimpleObjectProperty<>(imageView);
+            @Override
+            protected void updateItem(String filePath, boolean empty) {
+                super.updateItem(filePath, empty);
+                if (empty || filePath == null) {
+                    setGraphic(null);
+                    lastLoadedPath = null;
+                    return;
+                }
+                setGraphic(imageView);
+                // Only fire async load if this cell is now showing a different image
+                if (!filePath.equals(lastLoadedPath)) {
+                    lastLoadedPath = filePath;
+                    imageView.setImage(null);
+                    thumbnailService.getThumbnailAsync(filePath, (path, thumbnail) ->
+                            Platform.runLater(() -> {
+                                // Guard against cell having been recycled to a different row
+                                if (filePath.equals(lastLoadedPath)) {
+                                    imageView.setImage(thumbnail);
+                                }
+                            }));
+                }
+            }
         });
 
         // Filename column

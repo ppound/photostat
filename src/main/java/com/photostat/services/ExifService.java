@@ -17,9 +17,6 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,14 +36,12 @@ public class ExifService {
             ".pef", ".srw", ".x3f", ".raw", ".rwl"
     );
 
-    // Date formats to try when parsing
-    private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
-            DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
-            DateTimeFormatter.ofPattern("yyyy:MM:dd'T'HH:mm:ss"),
-            DateTimeFormatter.ISO_LOCAL_DATE_TIME
-    );
+    // Compiled once — used in cleanString(), parseFocalLength(), and parseDate()
+    private static final Pattern CONTROL_CHAR_PATTERN = Pattern.compile("[\\x00-\\x1F]");
+    private static final Pattern FOCAL_LENGTH_PATTERN = Pattern.compile("([\\d.]+)\\s*(?:mm)?", Pattern.CASE_INSENSITIVE);
+    // Covers all common EXIF date variants: yyyy:MM:dd, yyyy-MM-dd, yyyy/MM/dd, with T or space separator
+    private static final Pattern DATE_PATTERN = Pattern.compile(
+            "(\\d{4})[:\\-/](\\d{2})[:\\-/](\\d{2}).*?(\\d{2}):(\\d{2}):(\\d{2})");
 
     private ExifService() {
         this.configService = ConfigService.getInstance();
@@ -355,22 +350,14 @@ public class ExifService {
     }
 
     /**
-     * Parse a date string to LocalDateTime.
+     * Parse a date string to LocalDateTime using a single pre-compiled regex.
+     * Handles all common EXIF formats (yyyy:MM:dd, yyyy-MM-dd, yyyy/MM/dd, ISO).
      */
     LocalDateTime parseDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) {
             return null;
         }
-
-        for (DateTimeFormatter formatter : DATE_FORMATTERS) {
-            try {
-                return LocalDateTime.parse(dateStr.trim(), formatter);
-            } catch (DateTimeParseException ignored) {}
-        }
-
-        // Try to extract just the date part
-        Pattern datePattern = Pattern.compile("(\\d{4})[:\\-/](\\d{2})[:\\-/](\\d{2}).*?(\\d{2}):(\\d{2}):(\\d{2})");
-        Matcher matcher = datePattern.matcher(dateStr);
+        Matcher matcher = DATE_PATTERN.matcher(dateStr.trim());
         if (matcher.find()) {
             try {
                 return LocalDateTime.of(
@@ -383,7 +370,6 @@ public class ExifService {
                 );
             } catch (Exception ignored) {}
         }
-
         return null;
     }
 
@@ -392,9 +378,7 @@ public class ExifService {
      */
     Double parseFocalLength(String value) {
         if (value == null || value.isEmpty()) return null;
-
-        Pattern pattern = Pattern.compile("([\\d.]+)\\s*(?:mm)?", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(value);
+        Matcher matcher = FOCAL_LENGTH_PATTERN.matcher(value);
         if (matcher.find()) {
             try {
                 return Double.parseDouble(matcher.group(1));
@@ -459,7 +443,7 @@ public class ExifService {
      */
     String cleanString(String value) {
         if (value == null) return null;
-        return value.trim().replaceAll("[\\x00-\\x1F]", "");
+        return CONTROL_CHAR_PATTERN.matcher(value.trim()).replaceAll("");
     }
 
     /**

@@ -194,13 +194,17 @@ public class IndexerService {
 
                     updateStatus("Indexing with " + indexingThreads + " threads...");
 
-                    List<Future<?>> futures = new ArrayList<>();
+                    // Use CompletionService so futures are consumed as they complete —
+                    // avoids holding all N futures in an ArrayList for large collections.
+                    ExecutorCompletionService<Void> completionService =
+                            new ExecutorCompletionService<>(executor);
+                    int submitted = 0;
 
                     for (Path file : allFiles) {
                         if (isCancelled()) break;
 
-                        futures.add(executor.submit(() -> {
-                            if (isCancelled()) return;
+                        completionService.submit(() -> {
+                            if (isCancelled()) return null;
 
                             try {
                                 String filePath = file.toAbsolutePath().toString();
@@ -210,7 +214,7 @@ public class IndexerService {
                                     stats.skippedFiles.incrementAndGet();
                                     int current = processedCount.incrementAndGet();
                                     throttledProgressUpdate(lastUIUpdate, current, stats.totalFiles.get());
-                                    return;
+                                    return null;
                                 }
 
                                 // Process the file (extract metadata, apply sidecar, compute hashes)
@@ -241,16 +245,20 @@ public class IndexerService {
                             int current = processedCount.incrementAndGet();
                             throttledStatusUpdate(lastUIUpdate, file.getFileName().toString(),
                                     current, stats.totalFiles.get());
-                        }));
+                            return null;
+                        });
+                        submitted++;
                     }
 
-                    // Wait for all tasks to complete
-                    for (Future<?> future : futures) {
-                        if (isCancelled()) break;
+                    // Consume completions as they arrive — O(1) memory per task.
+                    // Workers catch all exceptions internally, so we only need to
+                    // handle InterruptedException from take().
+                    for (int i = 0; i < submitted && !isCancelled(); i++) {
                         try {
-                            future.get();
-                        } catch (Exception e) {
-                            // Task failed, already counted in errorFiles
+                            completionService.take();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
                         }
                     }
 
