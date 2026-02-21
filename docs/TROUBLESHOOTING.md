@@ -11,6 +11,10 @@ This guide covers common issues and their solutions.
 - [Application Freezes](#application-freezes)
 - [AI Analysis Issues](#ai-analysis-issues)
 - [Face Recognition Issues](#face-recognition-issues)
+  - [Python not available](#error-python-with-insightface-not-available)
+  - [GPU not being used](#faces-tab-shows-available-gpu-but-detection-runs-on-cpu)
+  - [Detection is slow](#face-detection-is-slow)
+  - [Named person missing after re-scan](#named-person-not-appearing-in-search-after-re-scan)
 
 ---
 
@@ -273,6 +277,8 @@ java --module-path /path/to/javafx-sdk-21/lib \
 
 ## Face Recognition Issues
 
+For full setup instructions including GPU configuration, see [docs/FACE_RECOGNITION.md](FACE_RECOGNITION.md).
+
 ### Error: "Python with InsightFace not available"
 
 **Cause:** Python or InsightFace is not installed.
@@ -280,13 +286,11 @@ java --module-path /path/to/javafx-sdk-21/lib \
 **Solution:** Install the required Python packages:
 ```bash
 # CPU only
-pip install insightface onnxruntime
+pip install insightface onnxruntime scikit-learn
 
-# With GPU acceleration (NVIDIA CUDA)
-pip install insightface onnxruntime-gpu
-
-# Recommended for better clustering
-pip install scikit-learn
+# GPU (NVIDIA CUDA) — never install both onnxruntime and onnxruntime-gpu
+pip uninstall onnxruntime onnxruntime-gpu -y
+pip install insightface onnxruntime-gpu scikit-learn
 ```
 
 If Python is installed but not found, set the path in **Settings > Face Recognition** or edit `config.json`:
@@ -298,15 +302,38 @@ If Python is installed but not found, set the path in **Settings > Face Recognit
 }
 ```
 
+### Faces tab shows "Available (GPU)" but detection runs on CPU
+
+**Cause:** The "Available (GPU)" status only confirms the CUDA *driver* is detectable — it does not verify that GPU inference will actually work. Two common causes:
+
+**Cause A: Both `onnxruntime` and `onnxruntime-gpu` are installed.** They share the same Python namespace and corrupt each other.
+
+```powershell
+pip uninstall onnxruntime onnxruntime-gpu -y
+pip install onnxruntime-gpu
+```
+
+**Cause B: CUDA Toolkit 12.x is not installed (Windows).** The GPU driver alone is not enough — `onnxruntime-gpu` is built against CUDA 12.x and requires runtime DLLs named `cublasLt64_**12**.dll`. **CUDA 13.x is not compatible** — it ships differently-named DLLs. You must install CUDA 12.x even if CUDA 13.x is already present (multiple versions coexist safely).
+
+1. Install CUDA Toolkit **12.x** (e.g. 12.6) from [developer.nvidia.com/cuda-12-6-0-download-archive](https://developer.nvidia.com/cuda-12-6-0-download-archive)
+2. Add the CUDA 12.x `bin` directory to **System PATH** (not just user PATH):
+   - Find installed versions: `dir "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"`
+   - Add: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.X\bin`
+
+**Verify the fix** with this diagnostic command:
+```powershell
+python -c "import insightface, os; app = insightface.app.FaceAnalysis(name='buffalo_l', root=os.path.expanduser('~/.photostat/faces/models'), providers=['CUDAExecutionProvider','CPUExecutionProvider']); app.prepare(ctx_id=0, det_size=(640,640))"
+```
+You should see `Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvider']`. If it still shows CPU-only, look for errors like `cublasLt64_12.dll which is missing` or `Could not find module 'onnxruntime_providers_cuda.dll'` — both indicate CUDA 12.x bin is not in System PATH.
+
 ### Face detection is slow
 
 **Possible causes:**
-- Running on CPU instead of GPU
+- Running on CPU instead of GPU (see above)
 - Processing a large number of images
 
 **Solutions:**
-- Check if GPU is available: the Faces tab shows "Available (GPU)" or "Available (CPU)" next to the Python status
-- Install `onnxruntime-gpu` for NVIDIA GPU acceleration
+- Confirm GPU is actually being used with the diagnostic command above
 - Use the CLI with parallel workers for large collections:
   ```bash
   java -jar photostat.jar --detect-faces --parallel 4
@@ -316,10 +343,16 @@ If Python is installed but not found, set the path in **Settings > Face Recognit
 ### Face clustering produces too many or too few clusters
 
 **Solution:** Adjust the cluster threshold in **Settings > Face Recognition**:
-- **Higher threshold** (e.g., 0.7-0.8): Stricter matching, more clusters, fewer false merges
-- **Lower threshold** (e.g., 0.4-0.5): Looser matching, fewer clusters, may merge different people
+- **Higher threshold** (e.g., 0.7–0.8): Stricter matching, more clusters, fewer false merges
+- **Lower threshold** (e.g., 0.4–0.5): Looser matching, fewer clusters, may merge different people
 
 You can also manually merge clusters in the Faces tab using the "Merge with..." button.
+
+### Named person not appearing in search after re-scan
+
+**Cause:** Face detection and clustering do not update the search index. Only clicking **Save Name** writes person names to OpenSearch and sidecar files. When new photos are added and re-scanned, the new images in a named cluster are not indexed until Save Name is clicked again.
+
+**Solution:** After each re-scan, open every named cluster in the Faces tab and click **Save Name** to propagate the name to any newly added photos. The GUI displays a warning banner after each scan as a reminder.
 
 ### InsightFace model download fails
 

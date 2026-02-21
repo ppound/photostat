@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -31,6 +32,7 @@ public class FaceRecognitionService {
     private final Path facesDir;
     private final Path faceDataPath;
     private final Path clustersPath;
+    private final Path scannedPathsFile;
     private final Path scriptPath;
 
     private static final int CHUNK_SIZE = 500;
@@ -40,6 +42,15 @@ public class FaceRecognitionService {
     private Map<String, FaceDetection> faceIndex = new HashMap<>();
     /** Set of image paths that have already been scanned for faces. */
     private Set<String> scannedPaths = new HashSet<>();
+
+    /** Live progress tracking — updated during detectFacesBatch for UI display. */
+    private volatile String currentScanFile = null;
+    private volatile int currentScanCount = 0;
+    private volatile int totalScanCount = 0;
+
+    public String getCurrentScanFile() { return currentScanFile; }
+    public int getCurrentScanCount()   { return currentScanCount; }
+    public int getTotalScanCount()     { return totalScanCount; }
 
     private FaceRecognitionService() {
         this.configService = ConfigService.getInstance();
@@ -52,6 +63,7 @@ public class FaceRecognitionService {
         this.facesDir = Path.of(userHome, ".photostat", "faces");
         this.faceDataPath = facesDir.resolve("face_data.json");
         this.clustersPath = facesDir.resolve("clusters.json");
+        this.scannedPathsFile = facesDir.resolve("scanned_paths.json");
         this.scriptPath = Path.of(userHome, ".photostat", "photostat_faces.py");
 
         try {
@@ -191,37 +203,45 @@ public class FaceRecognitionService {
                 "Scanning " + totalToScan + " images (" + skipped + " already scanned)");
 
         List<FaceDetection> allNewDetections = new ArrayList<>();
+        double threshold = configService.getFacesConfidenceThreshold();
 
-        // Process in chunks
-        for (int chunkStart = 0; chunkStart < totalToScan; chunkStart += CHUNK_SIZE) {
-            int chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalToScan);
-            List<String> chunk = pathsToScan.subList(chunkStart, chunkEnd);
-            final int chunkOffset = chunkStart;
+        // Process all chunks with a single persistent Python worker (model loads once)
+        try (PythonWorker worker = new PythonWorker()) {
+            for (int chunkStart = 0; chunkStart < totalToScan; chunkStart += CHUNK_SIZE) {
+                int chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalToScan);
+                List<String> chunk = pathsToScan.subList(chunkStart, chunkEnd);
+                final int chunkOffset = chunkStart;
 
-            logger.info("FaceRecognitionService",
-                    "Processing chunk " + (chunkStart / CHUNK_SIZE + 1) +
-                    " (" + chunk.size() + " images)");
+                logger.info("FaceRecognitionService",
+                        "Processing chunk " + (chunkStart / CHUNK_SIZE + 1) +
+                        " (" + chunk.size() + " images)");
 
-            List<FaceDetection> chunkDetections = runDetectBatch(chunk,
-                    progress -> {
-                        if (progressCallback != null) {
-                            double overallProgress = (skipped + chunkOffset + progress * chunk.size()) / totalImages;
-                            progressCallback.accept(overallProgress);
-                        }
-                    });
+                List<FaceDetection> chunkDetections = worker.detectBatch(chunk, threshold,
+                        progress -> {
+                            if (progressCallback != null) {
+                                double overallProgress = (skipped + chunkOffset + progress * chunk.size()) / totalImages;
+                                // Update live tracking fields for UI display
+                                int approxIdx = Math.min((int) (progress * chunk.size()), chunk.size() - 1);
+                                if (approxIdx >= 0) currentScanFile = chunk.get(approxIdx);
+                                currentScanCount = (int) (skipped + chunkOffset + progress * chunk.size());
+                                totalScanCount = totalImages;
+                                progressCallback.accept(overallProgress);
+                            }
+                        });
 
-            allNewDetections.addAll(chunkDetections);
+                allNewDetections.addAll(chunkDetections);
 
-            // Mark paths as scanned
-            scannedPaths.addAll(chunk);
+                // Mark paths as scanned
+                scannedPaths.addAll(chunk);
 
-            // Save after each chunk for crash safety
-            mergeDetections(chunkDetections);
-            saveState();
+                // Save after each chunk for crash safety
+                mergeDetections(chunkDetections);
+                saveState();
 
-            logger.info("FaceRecognitionService",
-                    "Chunk complete: " + chunkDetections.size() + " faces found. " +
-                    "Total: " + faceDetections.size() + " faces");
+                logger.info("FaceRecognitionService",
+                        "Chunk complete: " + chunkDetections.size() + " faces found. " +
+                        "Total: " + faceDetections.size() + " faces");
+            }
         }
 
         if (progressCallback != null) progressCallback.accept(1.0);
@@ -266,31 +286,32 @@ public class FaceRecognitionService {
         List<FaceDetection> allNewDetections = Collections.synchronizedList(new ArrayList<>());
         ExecutorService executor = Executors.newFixedThreadPool(numWorkers);
         List<Future<List<FaceDetection>>> futures = new ArrayList<>();
+        double threshold = configService.getFacesConfidenceThreshold();
 
         for (List<String> workerPaths : workerChunks) {
             futures.add(executor.submit(() -> {
-                // Each worker processes its paths in sub-chunks
+                // Each Java thread owns one persistent Python worker (model loads once per thread)
                 List<FaceDetection> workerDetections = new ArrayList<>();
-                for (int subStart = 0; subStart < workerPaths.size(); subStart += CHUNK_SIZE) {
-                    int subEnd = Math.min(subStart + CHUNK_SIZE, workerPaths.size());
-                    List<String> subChunk = workerPaths.subList(subStart, subEnd);
+                try (PythonWorker worker = new PythonWorker()) {
+                    for (int subStart = 0; subStart < workerPaths.size(); subStart += CHUNK_SIZE) {
+                        int subEnd = Math.min(subStart + CHUNK_SIZE, workerPaths.size());
+                        List<String> subChunk = workerPaths.subList(subStart, subEnd);
 
-                    List<FaceDetection> chunkResult = runDetectBatch(subChunk, progress -> {
-                        int done = processedCount.incrementAndGet();
-                        if (progressCallback != null) {
-                            progressCallback.accept(done, imagePaths.size());
+                        List<FaceDetection> chunkResult = worker.detectBatch(subChunk, threshold, progress -> {
+                            int done = processedCount.incrementAndGet();
+                            if (progressCallback != null) {
+                                progressCallback.accept(done, imagePaths.size());
+                            }
+                        });
+
+                        workerDetections.addAll(chunkResult);
+
+                        // Save progress
+                        synchronized (FaceRecognitionService.this) {
+                            scannedPaths.addAll(subChunk);
+                            mergeDetections(chunkResult);
+                            saveState();
                         }
-                        // Decrement because the loop increments per-image via PROGRESS lines,
-                        // but we only have chunk-level progress here
-                    });
-
-                    workerDetections.addAll(chunkResult);
-
-                    // Save progress
-                    synchronized (FaceRecognitionService.this) {
-                        scannedPaths.addAll(subChunk);
-                        mergeDetections(chunkResult);
-                        saveState();
                     }
                 }
                 return workerDetections;
@@ -314,74 +335,140 @@ public class FaceRecognitionService {
     }
 
     /**
-     * Run a single detect-batch Python process for a list of image paths.
+     * Persistent Python worker — loads InsightFace once and handles multiple detect-batch
+     * requests over stdin/stdout, eliminating per-chunk model startup cost.
      */
-    private List<FaceDetection> runDetectBatch(List<String> paths, Consumer<Double> progressCallback)
-            throws IOException, InterruptedException {
+    private class PythonWorker implements Closeable {
+        private final Process process;
+        private final PrintWriter stdin;
+        private final BufferedReader stdout;
+        private final Thread stderrThread;
+        private final AtomicReference<Consumer<String>> progressHandler = new AtomicReference<>(null);
+        // Flipped to true once the ready signal arrives; controls stderr log level
+        private final AtomicReference<Boolean> initDone = new AtomicReference<>(false);
 
-        double threshold = configService.getFacesConfidenceThreshold();
-
-        Path inputPath = Files.createTempFile("photostat_faces_input_", ".json");
-        Path outputPath = Files.createTempFile("photostat_faces_output_", ".json");
-        try {
-            objectMapper.writeValue(inputPath.toFile(), paths);
-
+        PythonWorker() throws IOException {
             String pythonPath = configService.getFacesPythonPath();
-            ProcessBuilder pb = new ProcessBuilder(
-                    pythonPath, scriptPath.toString(), "detect-batch",
-                    inputPath.toString(), outputPath.toString(),
-                    String.valueOf(threshold)
-            );
+            ProcessBuilder pb = new ProcessBuilder(pythonPath, scriptPath.toString(), "worker");
             pb.redirectErrorStream(false);
-            Process process = pb.start();
+            this.process = pb.start();
+            this.stdin = new PrintWriter(new OutputStreamWriter(process.getOutputStream()), true);
+            this.stdout = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
-            // Read progress from stderr
-            Thread stderrThread = new Thread(() -> {
+            // Stderr thread: logs at INFO during model init so CUDA/cuDNN errors are visible,
+            // then switches to DEBUG for normal run-time output.
+            this.stderrThread = new Thread(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        if (line.startsWith("PROGRESS:") && progressCallback != null) {
-                            try {
-                                String[] parts = line.substring(9).split("/");
-                                double current = Double.parseDouble(parts[0]);
-                                double total = Double.parseDouble(parts[1]);
-                                progressCallback.accept(current / total);
-                            } catch (Exception ignored) {
+                        if (line.startsWith("PROGRESS:")) {
+                            Consumer<String> handler = progressHandler.get();
+                            if (handler != null) {
+                                handler.accept(line.substring(9)); // "n/total"
                             }
+                        } else if (!initDone.get()) {
+                            // Log everything at INFO during init — this is where onnxruntime
+                            // prints CUDA fallback warnings (e.g. missing cuDNN DLLs)
+                            logger.info("FaceRecognitionService", "Python worker init: " + line);
                         } else {
-                            logger.debug("FaceRecognitionService", "Python: " + line);
+                            logger.debug("FaceRecognitionService", "Python worker: " + line);
                         }
                     }
                 } catch (IOException e) {
-                    logger.debug("FaceRecognitionService", "Error reading stderr: " + e.getMessage());
+                    logger.debug("FaceRecognitionService", "Stderr read error: " + e.getMessage());
                 }
             });
             stderrThread.setDaemon(true);
             stderrThread.start();
 
-            // Read stdout
-            String stdout;
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                stdout = reader.lines().collect(Collectors.joining("\n"));
+            // Block until the Python worker signals it has loaded the model.
+            // InsightFace/onnxruntime prints debug lines (e.g. "Applied providers: [...]")
+            // directly to stdout during init, so we log those at INFO and keep reading.
+            String readyLine = null;
+            String line;
+            while ((line = stdout.readLine()) != null) {
+                if (line.contains("\"ready\"")) {
+                    readyLine = line;
+                    break;
+                }
+                logger.info("FaceRecognitionService", "Python worker init: " + line);
             }
-
-            int exitCode = process.waitFor();
-            stderrThread.join(5000);
-
-            if (exitCode != 0) {
-                throw new IOException("Face detection failed with exit code: " + exitCode + " stdout: " + stdout);
+            if (readyLine == null) {
+                process.destroyForcibly();
+                throw new IOException("Python worker closed before sending ready signal");
             }
-
-            // Read output file
-            if (Files.exists(outputPath) && Files.size(outputPath) > 0) {
-                return objectMapper.readValue(
-                        outputPath.toFile(), new TypeReference<List<FaceDetection>>() {});
+            // Log which providers the model actually loaded on (GPU vs CPU)
+            try {
+                Map<String, Object> readyMsg = objectMapper.readValue(
+                        readyLine, new TypeReference<Map<String, Object>>() {});
+                Object providers = readyMsg.get("providers");
+                if (providers != null) {
+                    boolean gpu = providers.toString().contains("CUDA");
+                    logger.info("FaceRecognitionService",
+                            "Python worker ready — providers: " + providers +
+                            (gpu ? " ✓ GPU" : " — CPU only (check CUDA installation)"));
+                } else {
+                    logger.info("FaceRecognitionService", "Python worker ready");
+                }
+            } catch (Exception ignored) {
+                logger.info("FaceRecognitionService", "Python worker ready");
             }
+            initDone.set(true); // switch stderr logging to DEBUG from here on
+        }
 
-            return Collections.emptyList();
-        } finally {
-            Files.deleteIfExists(inputPath);
-            Files.deleteIfExists(outputPath);
+        List<FaceDetection> detectBatch(List<String> paths, double threshold,
+                                         Consumer<Double> progressCallback) throws IOException {
+            progressHandler.set(progress -> {
+                if (progressCallback != null) {
+                    try {
+                        String[] parts = progress.split("/");
+                        double current = Double.parseDouble(parts[0]);
+                        double total = Double.parseDouble(parts[1]);
+                        progressCallback.accept(current / total);
+                    } catch (Exception ignored) {}
+                }
+            });
+            try {
+                Map<String, Object> request = new LinkedHashMap<>();
+                request.put("command", "detect-batch");
+                request.put("paths", paths);
+                request.put("threshold", threshold);
+                stdin.println(objectMapper.writeValueAsString(request));
+
+                String responseLine = stdout.readLine();
+                if (responseLine == null) {
+                    throw new IOException("Python worker closed unexpectedly");
+                }
+
+                Map<String, Object> response = objectMapper.readValue(
+                        responseLine, new TypeReference<Map<String, Object>>() {});
+                String status = (String) response.get("status");
+                if (!"ok".equals(status)) {
+                    throw new IOException("Python worker error: " + response.get("message"));
+                }
+
+                Object facesObj = response.get("faces");
+                if (facesObj == null) {
+                    return Collections.emptyList();
+                }
+                return objectMapper.convertValue(facesObj, new TypeReference<List<FaceDetection>>() {});
+            } finally {
+                progressHandler.set(null);
+            }
+        }
+
+        @Override
+        public void close() {
+            try {
+                stdin.println(objectMapper.writeValueAsString(Map.of("command", "shutdown")));
+            } catch (Exception ignored) {}
+            stdin.close();
+            try {
+                stderrThread.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            process.destroyForcibly();
         }
     }
 
@@ -568,19 +655,41 @@ public class FaceRecognitionService {
                 faceDetections = objectMapper.readValue(
                         faceDataPath.toFile(), new TypeReference<List<FaceDetection>>() {});
                 rebuildFaceIndex();
-                // Rebuild scanned paths from existing detections
-                scannedPaths.clear();
-                for (FaceDetection fd : faceDetections) {
-                    scannedPaths.add(fd.getImagePath());
-                }
-                logger.info("FaceRecognitionService",
-                        "Loaded " + faceDetections.size() + " face detections from " + scannedPaths.size() + " images");
+                logger.info("FaceRecognitionService", "Loaded " + faceDetections.size() + " face detections");
             }
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to load face data", e);
-            // Only clear if we had no data in memory — don't destroy existing in-memory state
             if (faceDetections.isEmpty()) {
                 faceDetections = new ArrayList<>();
+            }
+        }
+
+        // Load scanned paths — persisted separately so images with zero faces are remembered.
+        // Falls back to deriving from face detections for backward compatibility.
+        scannedPaths.clear();
+        try {
+            if (Files.exists(scannedPathsFile) && Files.size(scannedPathsFile) > 2) {
+                scannedPaths.addAll(objectMapper.readValue(
+                        scannedPathsFile.toFile(), new TypeReference<Set<String>>() {}));
+                logger.info("FaceRecognitionService",
+                        "Loaded " + scannedPaths.size() + " scanned paths (" +
+                        faceDetections.size() + " with faces)");
+            } else {
+                // Backward compat: derive from detections (misses face-free images until next scan)
+                for (FaceDetection fd : faceDetections) {
+                    scannedPaths.add(fd.getImagePath());
+                }
+                if (!scannedPaths.isEmpty()) {
+                    logger.info("FaceRecognitionService",
+                            "Derived " + scannedPaths.size() + " scanned paths from detections " +
+                            "(no scanned_paths.json yet — face-free images will be re-scanned once)");
+                }
+            }
+        } catch (IOException e) {
+            logger.warn("FaceRecognitionService",
+                    "Failed to load scanned_paths.json, deriving from detections: " + e.getMessage());
+            for (FaceDetection fd : faceDetections) {
+                scannedPaths.add(fd.getImagePath());
             }
         }
 
@@ -610,6 +719,8 @@ public class FaceRecognitionService {
             if (faceDetections.isEmpty() && Files.exists(faceDataPath) && Files.size(faceDataPath) > 2) {
                 logger.warn("FaceRecognitionService",
                         "Refusing to overwrite face_data.json with empty list — existing file has data");
+                // Still persist scanned paths so face-free images aren't re-scanned
+                objectMapper.writeValue(scannedPathsFile.toFile(), scannedPaths);
                 return;
             }
 
@@ -625,6 +736,7 @@ public class FaceRecognitionService {
 
             objectMapper.writeValue(faceDataPath.toFile(), faceDetections);
             objectMapper.writeValue(clustersPath.toFile(), clusters);
+            objectMapper.writeValue(scannedPathsFile.toFile(), scannedPaths);
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to save face data", e);
         }
