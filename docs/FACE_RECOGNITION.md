@@ -291,6 +291,12 @@ The InsightFace `buffalo_l` model (~350 MB) is downloaded automatically to `~/.p
 
 > **Important:** Always open a **new** terminal window after installation so the updated PATH takes effect.
 
+**If pip is not available after installing Python:**
+```powershell
+python -m ensurepip --upgrade
+python -m pip install --upgrade pip
+```
+
 If PhotoStat cannot find Python automatically, set the full path in **Settings > Face Recognition** (e.g. `C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe`).
 
 ---
@@ -314,7 +320,13 @@ python3 --version
 pip3 --version
 ```
 
-On macOS, the command is `python3` (not `python`). Set the path in **Settings > Face Recognition** to the output of:
+On macOS, the command is `python3` (not `python`). pip3 is included with both the Homebrew and python.org installs. If it is missing:
+```bash
+python3 -m ensurepip --upgrade
+python3 -m pip install --upgrade pip
+```
+
+Set the Python path in **Settings > Face Recognition** to the output of:
 ```bash
 which python3
 ```
@@ -338,6 +350,23 @@ Verify:
 ```bash
 python3 --version
 pip3 --version
+```
+
+On some minimal Linux installations pip may not be included even after installing `python3`. If `pip3 --version` fails, install it separately:
+
+**Ubuntu / Debian:**
+```bash
+sudo apt install python3-pip
+```
+
+**Fedora / RHEL:**
+```bash
+sudo dnf install python3-pip
+```
+
+Or use Python's built-in bootstrap (works on any distro):
+```bash
+python3 -m ensurepip --upgrade
 ```
 
 On Linux, set the Python path in **Settings > Face Recognition** to `/usr/bin/python3` if PhotoStat does not detect it automatically.
