@@ -40,7 +40,6 @@ public class SettingsDialog extends Dialog<Boolean> {
     private TextField indexNameField;
     private TextField exifToolPathField;
     private Spinner<Integer> batchSizeSpinner;
-    private Spinner<Integer> indexingThreadsSpinner;
     private ComboBox<String> themeCombo;
     private Spinner<Integer> thumbnailSizeSpinner;
     private Spinner<Integer> resultsPerPageSpinner;
@@ -222,14 +221,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         batchSizeSpinner.setPrefWidth(100);
         grid.add(batchSizeSpinner, 1, row);
         grid.add(new Label("(documents per batch)"), 2, row++);
-
-        // Indexing threads
-        grid.add(new Label("Indexing Threads:"), 0, row);
-        indexingThreadsSpinner = new Spinner<>(1, 16, 4);
-        indexingThreadsSpinner.setEditable(true);
-        indexingThreadsSpinner.setPrefWidth(100);
-        grid.add(indexingThreadsSpinner, 1, row);
-        grid.add(new Label("(parallel threads for indexing)"), 2, row++);
 
         // ExifTool path
         grid.add(new Label("ExifTool Path:"), 0, row);
@@ -833,7 +824,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         indexNameField.setText(configService.getIndexName());
         exifToolPathField.setText(configService.getExifToolPath());
         batchSizeSpinner.getValueFactory().setValue(configService.getBatchSize());
-        indexingThreadsSpinner.getValueFactory().setValue(configService.getIndexingThreads());
         themeCombo.setValue("dark".equalsIgnoreCase(configService.getTheme()) ? "Dark" : "Light");
         thumbnailSizeSpinner.getValueFactory().setValue(configService.getThumbnailSize());
         resultsPerPageSpinner.getValueFactory().setValue(configService.getResultsPerPage());
@@ -883,7 +873,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setIndexName(indexNameField.getText().trim());
         configService.setExifToolPath(exifToolPathField.getText().trim());
         configService.setBatchSize(batchSizeSpinner.getValue());
-        configService.setIndexingThreads(indexingThreadsSpinner.getValue());
         // Theme
         String selectedTheme = "Dark".equals(themeCombo.getValue()) ? "dark" : "light";
         configService.setTheme(selectedTheme);

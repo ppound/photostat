@@ -158,7 +158,7 @@ public class IndexerService {
             protected Void call() throws Exception {
                 isIndexing.set(true);
                 IndexingStats stats = new IndexingStats();
-                int indexingThreads = configService.getIndexingThreads();
+                int indexingThreads = Runtime.getRuntime().availableProcessors() * 2;
 
                 try {
                     // Ensure OpenSearch is connected and index exists
