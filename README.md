@@ -47,6 +47,8 @@ After years of photography and using various software like Lightroom, Capture On
 - **Batch Processing** - Analyze via GUI or command-line
 - **Cost Tracking** - Monitor token usage and estimated costs
 
+> See [docs/AI_ANALYSIS.md](docs/AI_ANALYSIS.md) for API key setup, CLI usage, cost tracking, and provider configuration.
+
 ### Face Recognition
 - **Automatic Detection** - Detect faces in your photo collection using InsightFace (Python)
 - **Face Clustering** - Automatically group similar faces using DBSCAN or centroid-based clustering
