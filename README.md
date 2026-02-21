@@ -157,7 +157,7 @@ Download `PhotoStat-1.9.2.msi`, double-click to install, and launch from the Sta
 
 Download `PhotoStat-1.9.2-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
-> **Note:** The macOS installer is unsigned. On first launch, right-click the app and select **Open**, then confirm.
+> **Note:** The macOS installer is unsigned. On first launch, **right-click** the app in Finder and select **Open**, then click **Open** in the dialog. If that doesn't work, go to **System Settings → Privacy & Security** and click **Open Anyway** next to the blocked app message. See [Troubleshooting](docs/TROUBLESHOOTING.md#macos-photostat-is-damaged-or-cannot-be-opened) for details.
 >
 > **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.2-executable-mac-intel.jar`).
 

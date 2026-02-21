@@ -5,6 +5,7 @@ This guide covers common issues and their solutions.
 ## Table of Contents
 
 - [Application Won't Start](#application-wont-start)
+  - [macOS: "PhotoStat is damaged" or "cannot be opened"](#macos-photostat-is-damaged-or-cannot-be-opened)
 - [Can't Connect to OpenSearch](#cant-connect-to-opensearch)
 - [Images Not Appearing](#images-not-appearing)
 - [Thumbnails Not Showing](#thumbnails-not-showing)
@@ -21,6 +22,32 @@ This guide covers common issues and their solutions.
 ## Application Won't Start
 
 > **Using the MSI or DMG installer?** The native installers bundle their own Java runtime, so the "UnsupportedClassVersionError" and "JavaFX missing" errors below only apply to the cross-platform JAR.
+
+### macOS: "PhotoStat is damaged" or "cannot be opened"
+
+**Cause:** macOS Gatekeeper blocks apps that are not signed with an Apple developer certificate.
+
+There are two ways to allow PhotoStat to run:
+
+**Method 1 — Right-click to open (easiest, first launch only):**
+
+1. In Finder, locate the **PhotoStat** app in your Applications folder
+2. **Right-click** (or Control-click) the app icon and select **Open**
+3. A dialog will appear saying the developer cannot be verified — click **Open**
+
+macOS remembers this choice, so subsequent launches work normally by double-clicking.
+
+**Method 2 — Privacy & Security settings (if Method 1 doesn't work):**
+
+After attempting to open the app and seeing a "cannot be opened" or "damaged" warning:
+
+1. Open **System Settings** (Apple menu → System Settings)
+2. Navigate to **Privacy & Security**
+3. Scroll down to the **Security** section
+4. You should see a message like *"PhotoStat was blocked from use because it is not from an identified developer"*
+5. Click **Open Anyway**
+6. Authenticate with your password or Touch ID when prompted
+7. Click **Open** in the final confirmation dialog
 
 ### Error: "UnsupportedClassVersionError"
 
