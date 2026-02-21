@@ -137,42 +137,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" output/PhotoStat-${{ needs.build.outputs.version }}-apple-silicon.dmg --clobber
 
-  package-macos-intel:
-    needs: build
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: fat-jar-intel-mac
-          path: input
-
-      - name: Create DMG installer
-        run: |
-          jpackage \
-            --input input \
-            --main-jar photostat-java-${{ needs.build.outputs.version }}-executable-mac-intel.jar \
-            --main-class com.photostat.Launcher \
-            --name PhotoStat \
-            --app-version ${{ needs.build.outputs.version }} \
-            --vendor "PhotoStat" \
-            --description "Photo metadata indexing and search" \
-            --type dmg \
-            --java-options "--add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED" \
-            --dest output
-
-      - name: Rename DMG with architecture
-        run: mv output/PhotoStat-${{ needs.build.outputs.version }}.dmg output/PhotoStat-${{ needs.build.outputs.version }}-intel.dmg
-
-      - name: Upload DMG to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" output/PhotoStat-${{ needs.build.outputs.version }}-intel.dmg --clobber
+  # package-macos-intel is omitted: GitHub retired the macos-13 (Intel x86_64)
+  # hosted runner. Intel Mac users should use the cross-platform JAR:
+  #   photostat-java-*-executable-mac-intel.jar (attached to each release)

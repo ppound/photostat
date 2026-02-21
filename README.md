@@ -153,11 +153,13 @@ Download the latest release from **[GitHub Releases](https://github.com/ppound/p
 
 Download `PhotoStat-1.9.2.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
 
-#### Option B: macOS Installer (.dmg)
+#### Option B: macOS Installer (.dmg) — Apple Silicon only
 
-Download `PhotoStat-1.9.2.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+Download `PhotoStat-1.9.2-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
 > **Note:** The macOS installer is unsigned. On first launch, right-click the app and select **Open**, then confirm.
+>
+> **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.2-executable-mac-intel.jar`).
 
 #### Option C: Cross-platform JAR
 
