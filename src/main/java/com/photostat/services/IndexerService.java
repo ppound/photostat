@@ -8,9 +8,10 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -188,9 +189,39 @@ public class IndexerService {
 
                     // Phase 2: Process files in parallel
                     AtomicInteger processedCount = new AtomicInteger(0);
-                    List<ImageMetadata> batch = Collections.synchronizedList(new ArrayList<>());
                     AtomicLong lastUIUpdate = new AtomicLong(0);
                     ExecutorService executor = Executors.newFixedThreadPool(indexingThreads);
+
+                    // Drainer thread: workers offer() to the queue lock-free; the drainer
+                    // owns all bulkIndex() calls, eliminating synchronized-block contention.
+                    LinkedBlockingQueue<ImageMetadata> batchQueue = new LinkedBlockingQueue<>();
+                    AtomicBoolean drainerActive = new AtomicBoolean(true);
+                    Thread drainerThread = new Thread(() -> {
+                        List<ImageMetadata> buffer = new ArrayList<>(batchSize);
+                        while (drainerActive.get() || !batchQueue.isEmpty()) {
+                            try {
+                                ImageMetadata item = batchQueue.poll(10, TimeUnit.MILLISECONDS);
+                                if (item != null) {
+                                    buffer.add(item);
+                                    batchQueue.drainTo(buffer, batchSize - 1);
+                                    try {
+                                        int indexed = openSearchService.bulkIndex(buffer);
+                                        stats.indexedFiles.addAndGet(indexed);
+                                    } catch (Exception e) {
+                                        System.err.println("Bulk index error: " + e.getMessage());
+                                    } finally {
+                                        buffer.clear();
+                                    }
+                                }
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
+                        }
+                    });
+                    drainerThread.setName("indexer-batch-drainer");
+                    drainerThread.setDaemon(true);
+                    drainerThread.start();
 
                     updateStatus("Indexing with " + indexingThreads + " threads...");
 
@@ -222,20 +253,8 @@ public class IndexerService {
 
                                 stats.processedFiles.incrementAndGet();
 
-                                // Add to batch and flush when full
-                                List<ImageMetadata> toFlush = null;
-                                synchronized (batch) {
-                                    batch.add(metadata);
-                                    if (batch.size() >= batchSize) {
-                                        toFlush = new ArrayList<>(batch);
-                                        batch.clear();
-                                    }
-                                }
-
-                                if (toFlush != null) {
-                                    int indexed = openSearchService.bulkIndex(toFlush);
-                                    stats.indexedFiles.addAndGet(indexed);
-                                }
+                                // Hand off to drainer — no lock needed
+                                batchQueue.offer(metadata);
 
                             } catch (Exception e) {
                                 stats.errorFiles.incrementAndGet();
@@ -262,7 +281,7 @@ public class IndexerService {
                         }
                     }
 
-                    // Shutdown executor
+                    // Shutdown worker executor
                     executor.shutdown();
                     try {
                         executor.awaitTermination(1, TimeUnit.MINUTES);
@@ -270,13 +289,12 @@ public class IndexerService {
                         executor.shutdownNow();
                     }
 
-                    // Flush remaining batch
-                    synchronized (batch) {
-                        if (!batch.isEmpty() && !isCancelled()) {
-                            int indexed = openSearchService.bulkIndex(new ArrayList<>(batch));
-                            stats.indexedFiles.addAndGet(indexed);
-                            batch.clear();
-                        }
+                    // All workers done — signal drainer to finish and wait for final flush
+                    drainerActive.set(false);
+                    try {
+                        drainerThread.join(60_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                     }
 
                     if (isCancelled()) {
