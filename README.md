@@ -182,6 +182,7 @@ java -jar photostat-java-1.9.2-executable.jar
 |----------|-------------|
 | [User Guide](docs/USER_GUIDE.md) | Detailed usage instructions for all features |
 | [AI Analysis](docs/AI_ANALYSIS.md) | AI setup, CLI mode, and cost tracking |
+| [Face Recognition](docs/FACE_RECOGNITION.md) | Python setup, GPU acceleration, and face detection workflow |
 | [Configuration](docs/CONFIGURATION.md) | All settings and options explained |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 | [Development](docs/DEVELOPMENT.md) | Building from source and project structure |
