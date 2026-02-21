@@ -1091,7 +1091,7 @@ public class SettingsDialog extends Dialog<Boolean> {
             ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf", ".pef"
     );
 
-    private static final int PARALLEL_THREADS = 4;
+    private static final int PARALLEL_THREADS = Runtime.getRuntime().availableProcessors() * 2;
 
     private void preCacheThumbnails() {
         // Check if OpenSearch is connected
@@ -1177,14 +1177,17 @@ public class SettingsDialog extends Dialog<Boolean> {
                     List<String> allFilePaths = openSearchService.searchAllFilePaths(1000);
                     final long totalFiles = allFilePaths.size();
 
-                    // Process all file paths in parallel
-                    List<Future<?>> futures = new ArrayList<>();
+                    // Process all file paths in parallel using CompletionService to avoid
+                    // holding all futures in memory simultaneously for large collections.
+                    ExecutorCompletionService<Void> completionService =
+                            new ExecutorCompletionService<>(executor);
+                    int submitted = 0;
 
                     for (String filePath : allFilePaths) {
                         if (cancelled.get() || cacheFull.get()) break;
 
-                        futures.add(executor.submit(() -> {
-                            if (cancelled.get() || cacheFull.get()) return;
+                        completionService.submit(() -> {
+                            if (cancelled.get() || cacheFull.get()) return null;
 
                             int currentProcessed = processed.incrementAndGet();
                             String fileName = Path.of(filePath).getFileName().toString();
@@ -1192,14 +1195,14 @@ public class SettingsDialog extends Dialog<Boolean> {
                             // Check if file exists
                             if (!Files.exists(Path.of(filePath))) {
                                 skipped.incrementAndGet();
-                                return;
+                                return null;
                             }
 
                             // Check if extension is supported
                             String ext = getFileExtension(filePath).toLowerCase();
                             if (!SUPPORTED_EXTENSIONS.contains(ext)) {
                                 skipped.incrementAndGet();
-                                return;
+                                return null;
                             }
 
                             // Check if already cached
@@ -1213,7 +1216,7 @@ public class SettingsDialog extends Dialog<Boolean> {
                                     statsLabel.setText(String.format("Cached: %d  |  Skipped: %d  |  Failed: %d",
                                             cached.get(), skipped.get(), failed.get()));
                                 });
-                                return;
+                                return null;
                             }
 
                             // Generate thumbnail
@@ -1250,15 +1253,18 @@ public class SettingsDialog extends Dialog<Boolean> {
                             } catch (Exception e) {
                                 failed.incrementAndGet();
                             }
-                        }));
+                            return null;
+                        });
+                        submitted++;
                     }
 
-                    // Wait for all tasks to complete
-                    for (Future<?> future : futures) {
+                    // Consume completions as they arrive — O(1) memory per task
+                    for (int i = 0; i < submitted; i++) {
                         try {
-                            future.get();
-                        } catch (Exception e) {
-                            // Task failed, already counted
+                            completionService.take();
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
                         }
                     }
                 } finally {
