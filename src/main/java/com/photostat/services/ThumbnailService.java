@@ -1,5 +1,6 @@
 package com.photostat.services;
 
+import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.image.Image;
 
 import javax.imageio.ImageIO;
@@ -11,9 +12,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Service for generating and caching image thumbnails.
@@ -25,15 +26,21 @@ public class ThumbnailService {
     private final ConfigService configService;
     private final LoggingService logger;
 
-    // In-memory cache for thumbnails (L1 cache)
-    private final Map<String, Image> memoryCache = new ConcurrentHashMap<>();
+    // In-memory LRU cache for thumbnails (L1 cache) — self-evicting LinkedHashMap
     private static final int MAX_MEMORY_CACHE_SIZE = 500;
+    private final Map<String, Image> memoryCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(MAX_MEMORY_CACHE_SIZE + 1, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Image> eldest) {
+                    return size() > MAX_MEMORY_CACHE_SIZE;
+                }
+            });
 
     // Disk cache directory
     private Path diskCacheDir;
 
-    // Track access times for LRU eviction
-    private final Map<String, Long> cacheAccessTimes = new ConcurrentHashMap<>();
+    // Counter for throttling disk cache enforcement (run every 50 saves)
+    private final AtomicInteger diskSaveCount = new AtomicInteger(0);
 
     // Shared thread pool for async thumbnail/face crop loading
     private final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(
@@ -82,10 +89,9 @@ public class ThumbnailService {
      * Get a thumbnail for an image file.
      */
     public Image getThumbnail(String filePath) {
-        // Check memory cache first (L1)
+        // Check memory cache first (L1) — get() updates LRU order automatically
         Image cached = memoryCache.get(filePath);
         if (cached != null) {
-            updateAccessTime(filePath);
             return cached;
         }
 
@@ -113,27 +119,11 @@ public class ThumbnailService {
     }
 
     /**
-     * Add a thumbnail to the memory cache with size limit.
+     * Add a thumbnail to the memory cache. Eviction is handled automatically by
+     * the LinkedHashMap's removeEldestEntry override.
      */
     private void addToMemoryCache(String filePath, Image thumbnail) {
-        if (memoryCache.size() >= MAX_MEMORY_CACHE_SIZE) {
-            // Evict oldest entry from memory cache
-            String oldestKey = cacheAccessTimes.entrySet().stream()
-                    .filter(e -> memoryCache.containsKey(e.getKey()))
-                    .min(Map.Entry.comparingByValue())
-                    .map(Map.Entry::getKey)
-                    .orElse(memoryCache.keySet().iterator().next());
-            memoryCache.remove(oldestKey);
-        }
         memoryCache.put(filePath, thumbnail);
-        updateAccessTime(filePath);
-    }
-
-    /**
-     * Update access time for LRU tracking.
-     */
-    private void updateAccessTime(String filePath) {
-        cacheAccessTimes.put(filePath, System.currentTimeMillis());
     }
 
     /**
@@ -196,36 +186,29 @@ public class ThumbnailService {
      */
     private void saveToDiskCache(String filePath, Image thumbnail) {
         try {
-            // Check cache size before saving
-            enforceDiskCacheLimit();
-
             Path cachePath = getDiskCachePath(filePath);
 
-            // Convert JavaFX Image to BufferedImage and save as JPEG
+            // Convert JavaFX Image to BufferedImage using SwingFXUtils (avoids per-pixel loop)
             int width = (int) thumbnail.getWidth();
             int height = (int) thumbnail.getHeight();
+            if (width <= 0 || height <= 0) return;
 
-            if (width <= 0 || height <= 0) {
-                return;
-            }
+            BufferedImage argb = SwingFXUtils.fromFXImage(thumbnail, null);
+            if (argb == null) return;
 
+            // Convert ARGB → RGB for JPEG (JPEG doesn't support alpha)
             BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-            javafx.scene.image.PixelReader reader = thumbnail.getPixelReader();
+            Graphics2D g2d = bufferedImage.createGraphics();
+            g2d.drawImage(argb, 0, 0, null);
+            g2d.dispose();
 
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < width; x++) {
-                    javafx.scene.paint.Color fxColor = reader.getColor(x, y);
-                    int r = (int) (fxColor.getRed() * 255);
-                    int g = (int) (fxColor.getGreen() * 255);
-                    int b = (int) (fxColor.getBlue() * 255);
-                    int rgb = (r << 16) | (g << 8) | b;
-                    bufferedImage.setRGB(x, y, rgb);
-                }
-            }
-
-            // Save as JPEG with quality setting
             ImageIO.write(bufferedImage, "jpg", cachePath.toFile());
             logger.debug("ThumbnailService", "Saved to disk cache: " + cachePath);
+
+            // Enforce disk cache limit periodically rather than on every save
+            if (diskSaveCount.incrementAndGet() % 50 == 0) {
+                thumbnailExecutor.submit(this::enforceDiskCacheLimit);
+            }
 
         } catch (Exception e) {
             logger.debug("ThumbnailService", "Failed to save to disk cache: " + e.getMessage());
@@ -514,18 +497,10 @@ public class ThumbnailService {
     }
 
     /**
-     * Convert a BufferedImage to a JavaFX Image.
+     * Convert a BufferedImage to a JavaFX Image using SwingFXUtils (no encoding round-trip).
      */
     private Image convertToFxImage(BufferedImage bufferedImage) {
-        try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(bufferedImage, "png", baos);
-            ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
-            return new Image(bais);
-        } catch (IOException e) {
-            System.err.println("Failed to convert image: " + e.getMessage());
-            return null;
-        }
+        return SwingFXUtils.toFXImage(bufferedImage, null);
     }
 
     /**
@@ -543,7 +518,6 @@ public class ThumbnailService {
      */
     public void clearCache() {
         memoryCache.clear();
-        cacheAccessTimes.clear();
     }
 
     /**
@@ -559,7 +533,6 @@ public class ThumbnailService {
      */
     public void invalidate(String filePath) {
         memoryCache.remove(filePath);
-        cacheAccessTimes.remove(filePath);
 
         // Also remove from disk cache
         try {
@@ -586,10 +559,9 @@ public class ThumbnailService {
         Path cropsDir = Path.of(System.getProperty("user.home"), ".photostat", "faces", "crops");
         Path cropCachePath = cropsDir.resolve(cacheFileName);
 
-        // Check in-memory cache first
+        // Check in-memory cache first — get() updates LRU order automatically
         Image memoryCached = memoryCache.get(cropKey);
         if (memoryCached != null) {
-            cacheAccessTimes.put(cropKey, System.currentTimeMillis());
             return memoryCached;
         }
 
@@ -619,18 +591,14 @@ public class ThumbnailService {
             if (RAW_EXTENSIONS.contains(extension)) {
                 Image preview = generateThumbnailWithExifTool(path, 2000);
                 if (preview != null) {
-                    // Convert FX Image to BufferedImage
+                    // Convert FX Image to BufferedImage using SwingFXUtils (avoids per-pixel loop)
                     int pw = (int) preview.getWidth();
                     int ph = (int) preview.getHeight();
+                    BufferedImage argb = SwingFXUtils.fromFXImage(preview, null);
                     sourceImage = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_RGB);
-                    javafx.scene.image.PixelReader reader = preview.getPixelReader();
-                    for (int py = 0; py < ph; py++) {
-                        for (int px = 0; px < pw; px++) {
-                            javafx.scene.paint.Color c = reader.getColor(px, py);
-                            int rgb = ((int)(c.getRed()*255) << 16) | ((int)(c.getGreen()*255) << 8) | (int)(c.getBlue()*255);
-                            sourceImage.setRGB(px, py, rgb);
-                        }
-                    }
+                    Graphics2D g2d = sourceImage.createGraphics();
+                    g2d.drawImage(argb, 0, 0, null);
+                    g2d.dispose();
                 }
             } else {
                 sourceImage = ImageIO.read(path.toFile());

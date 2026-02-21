@@ -31,6 +31,8 @@ public class FacesPanel extends BorderPane {
     private ProgressIndicator progressIndicator;
     private Label pythonStatusLabel;
     private Label summaryLabel;
+    private Label currentFileLabel;
+    private Label resaveHintLabel;
     private ListView<FaceCluster> clusterListView;
     private VBox detailBox;
 
@@ -60,6 +62,24 @@ public class FacesPanel extends BorderPane {
         summaryLabel = new Label("Click 'Scan for Faces' to detect faces in your indexed images.");
         summaryLabel.setStyle("-fx-font-size: 14px;");
         summaryLabel.setPadding(new Insets(10, 0, 10, 0));
+
+        // Current file being processed — shown only during scanning
+        currentFileLabel = new Label();
+        currentFileLabel.setStyle("-fx-font-size: 11px;");
+        currentFileLabel.getStyleClass().add("text-muted");
+        currentFileLabel.setVisible(false);
+        currentFileLabel.setManaged(false);
+
+        // Warning shown after a scan if named clusters exist — they may have acquired new photos
+        resaveHintLabel = new Label(
+                "\u26a0  Named clusters may contain new photos from this scan. " +
+                "Open each named cluster and click \u2018Save Name\u2019 to update the search index with the new images.");
+        resaveHintLabel.setWrapText(true);
+        resaveHintLabel.setStyle(
+                "-fx-background-color: #fff3cd; -fx-border-color: #ffc107; -fx-border-width: 1; " +
+                "-fx-padding: 8; -fx-border-radius: 4; -fx-background-radius: 4;");
+        resaveHintLabel.setVisible(false);
+        resaveHintLabel.setManaged(false);
 
         // Main content: split between cluster list and detail
         SplitPane splitPane = new SplitPane();
@@ -96,7 +116,7 @@ public class FacesPanel extends BorderPane {
         splitPane.getItems().addAll(leftBox, detailScroll);
         splitPane.setDividerPositions(0.35);
 
-        VBox mainContent = new VBox(5, toolbar, summaryLabel, splitPane);
+        VBox mainContent = new VBox(5, toolbar, summaryLabel, currentFileLabel, resaveHintLabel, splitPane);
         VBox.setVgrow(splitPane, Priority.ALWAYS);
 
         setCenter(mainContent);
@@ -138,12 +158,22 @@ public class FacesPanel extends BorderPane {
             boolean available = faceService.isPythonAvailable();
             String versionInfo = available ? faceService.getPythonVersionInfo() : "";
             boolean gpuAvailable = versionInfo.contains("\"gpu_available\": true");
+            // gpu_error is set when CUDA was attempted but the provider DLL failed to load
+            String gpuError = extractJsonString(versionInfo, "gpu_error");
             Platform.runLater(() -> {
                 if (available) {
                     String statusText = gpuAvailable ? "Available (GPU)" : "Available (CPU)";
                     pythonStatusLabel.setText(statusText);
                     pythonStatusLabel.getStyleClass().removeAll("text-muted", "text-error");
                     pythonStatusLabel.getStyleClass().add("text-success");
+                    if (gpuError != null) {
+                        // GPU was attempted but failed — show the reason as a tooltip
+                        Tooltip tip = new Tooltip(
+                                "GPU unavailable: " + gpuError + "\n\nSee docs/FACE_RECOGNITION.md for setup steps.");
+                        tip.setWrapText(true);
+                        tip.setMaxWidth(420);
+                        pythonStatusLabel.setTooltip(tip);
+                    }
                 } else {
                     pythonStatusLabel.setText("Not found");
                     pythonStatusLabel.getStyleClass().removeAll("text-muted", "text-success");
@@ -154,6 +184,40 @@ public class FacesPanel extends BorderPane {
         });
         thread.setDaemon(true);
         thread.start();
+    }
+
+    /**
+     * Extract a string value from a JSON string by key, without a full JSON parser.
+     * Returns null if the key is not present or the value cannot be extracted.
+     */
+    private String extractJsonString(String json, String key) {
+        if (json == null) return null;
+        String search = "\"" + key + "\":";
+        int idx = json.indexOf(search);
+        if (idx < 0) return null;
+        try {
+            int valueStart = idx + search.length();
+            // Skip whitespace
+            while (valueStart < json.length() && json.charAt(valueStart) == ' ') valueStart++;
+            if (valueStart >= json.length() || json.charAt(valueStart) != '"') return null;
+            valueStart++; // skip opening quote
+            // Read until unescaped closing quote
+            StringBuilder sb = new StringBuilder();
+            for (int i = valueStart; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (c == '\\' && i + 1 < json.length()) {
+                    i++; // skip escaped character
+                    sb.append(json.charAt(i));
+                } else if (c == '"') {
+                    break;
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.isEmpty() ? null : sb.toString();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     /**
@@ -215,6 +279,11 @@ public class FacesPanel extends BorderPane {
         scanButton.setDisable(true);
         progressIndicator.setVisible(true);
         summaryLabel.setText("Fetching image paths...");
+        currentFileLabel.setText("");
+        currentFileLabel.setVisible(true);
+        currentFileLabel.setManaged(true);
+        resaveHintLabel.setVisible(false);
+        resaveHintLabel.setManaged(false);
         clusterListView.getItems().clear();
         clearDetailImages();
 
@@ -242,9 +311,17 @@ public class FacesPanel extends BorderPane {
                 // Detect faces (incremental — skips already-scanned images)
                 faceService.detectFacesBatch(imagePaths, progress -> {
                     Platform.runLater(() -> {
-                        int pct = (int) (progress * 100);
-                        summaryLabel.setText("Detecting faces... " + pct + "%");
+                        int current = faceService.getCurrentScanCount();
+                        int total = faceService.getTotalScanCount();
+                        String countStr = total > 0 ? current + " / " + total : "";
+                        summaryLabel.setText("Detecting faces... " + (int)(progress * 100) + "%" +
+                                (countStr.isEmpty() ? "" : "  (" + countStr + " images)"));
                         progressIndicator.setProgress(progress);
+                        String file = faceService.getCurrentScanFile();
+                        if (file != null) {
+                            int sep = Math.max(file.lastIndexOf('/'), file.lastIndexOf('\\'));
+                            currentFileLabel.setText("Processing: " + file.substring(sep + 1));
+                        }
                     });
                 });
 
@@ -262,6 +339,18 @@ public class FacesPanel extends BorderPane {
             scanButton.setDisable(false);
             progressIndicator.setVisible(false);
             progressIndicator.setProgress(-1);
+            currentFileLabel.setVisible(false);
+            currentFileLabel.setManaged(false);
+
+            // Warn if any clusters are already named — their new photos won't be in the
+            // search index until the user clicks Save Name again on each one.
+            long namedClusters = result.stream()
+                    .filter(c -> c.getPersonName() != null && !c.getPersonName().isEmpty())
+                    .count();
+            if (namedClusters > 0) {
+                resaveHintLabel.setVisible(true);
+                resaveHintLabel.setManaged(true);
+            }
         });
 
         task.setOnFailed(e -> {
@@ -270,6 +359,8 @@ public class FacesPanel extends BorderPane {
             scanButton.setDisable(false);
             progressIndicator.setVisible(false);
             progressIndicator.setProgress(-1);
+            currentFileLabel.setVisible(false);
+            currentFileLabel.setManaged(false);
         });
 
         Thread thread = new Thread(task);

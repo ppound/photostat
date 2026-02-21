@@ -69,6 +69,13 @@ public class FaceDetectCli {
                 boolean gpu = info.contains("\"gpu_available\": true");
                 System.out.println("OK");
                 System.out.println("Execution:   " + (gpu ? "GPU (CUDA)" : "CPU"));
+                if (!gpu && info.contains("\"gpu_error\"")) {
+                    String gpuError = extractJsonString(info, "gpu_error");
+                    if (gpuError != null) {
+                        System.out.println("GPU note:    " + gpuError);
+                        System.out.println("             See docs/FACE_RECOGNITION.md for setup steps.");
+                    }
+                }
                 System.out.println("Python info: " + info);
             }
         }
@@ -164,6 +171,14 @@ public class FaceDetectCli {
                     .count();
             System.out.println("Named clusters: " + namedClusters);
             System.out.println("Scanned images: " + faceService.getScannedCount());
+
+            if (namedClusters > 0 && !detectOnly) {
+                System.out.println();
+                System.out.println("Note: Named clusters may now contain new photos from this scan.");
+                System.out.println("      The search index is NOT updated automatically. To apply person");
+                System.out.println("      names to new photos, open the GUI Faces tab and click");
+                System.out.println("      'Save Name' on each named cluster.");
+            }
         }
 
         return 0;
@@ -386,6 +401,30 @@ public class FaceDetectCli {
         System.out.println("Cluster:     " + configService.getFacesClusterThreshold());
         System.out.println("Workers:     " + parallelWorkers);
         System.out.println("Config:      " + configService.getConfigPath());
+    }
+
+    /** Extract a string value from a JSON string by key without a full JSON parser. */
+    private String extractJsonString(String json, String key) {
+        if (json == null) return null;
+        String search = "\"" + key + "\":";
+        int idx = json.indexOf(search);
+        if (idx < 0) return null;
+        try {
+            int valueStart = idx + search.length();
+            while (valueStart < json.length() && json.charAt(valueStart) == ' ') valueStart++;
+            if (valueStart >= json.length() || json.charAt(valueStart) != '"') return null;
+            valueStart++;
+            StringBuilder sb = new StringBuilder();
+            for (int i = valueStart; i < json.length(); i++) {
+                char c = json.charAt(i);
+                if (c == '\\' && i + 1 < json.length()) { i++; sb.append(json.charAt(i)); }
+                else if (c == '"') break;
+                else sb.append(c);
+            }
+            return sb.isEmpty() ? null : sb.toString();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private boolean connectToOpenSearch() {

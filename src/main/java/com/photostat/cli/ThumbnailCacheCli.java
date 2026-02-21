@@ -132,28 +132,31 @@ public class ThumbnailCacheCli {
 
             long startTime = System.currentTimeMillis();
 
-            // Process all file paths in parallel
-            List<Future<?>> futures = new ArrayList<>();
+            // Process all file paths in parallel using CompletionService to avoid
+            // holding all futures in memory simultaneously for large collections.
+            ExecutorCompletionService<Void> completionService =
+                    new ExecutorCompletionService<>(executor);
+            int submitted = 0;
 
             for (String filePath : allFilePaths) {
                 if (cacheFull.get()) break;
 
-                futures.add(executor.submit(() -> {
-                    if (cacheFull.get()) return;
+                completionService.submit(() -> {
+                    if (cacheFull.get()) return null;
 
                     int currentProcessed = processed.incrementAndGet();
 
                     // Check if file exists
                     if (!Files.exists(Path.of(filePath))) {
                         skipped.incrementAndGet();
-                        return;
+                        return null;
                     }
 
                     // Check if extension is supported
                     String ext = getFileExtension(filePath).toLowerCase();
                     if (!supportedExtensions.contains(ext)) {
                         skipped.incrementAndGet();
-                        return;
+                        return null;
                     }
 
                     // Check if already cached
@@ -161,7 +164,7 @@ public class ThumbnailCacheCli {
                         skipped.incrementAndGet();
                         updateProgress(currentProcessed, totalDocs, filePath, "Skipped",
                                 lastProgressUpdate, cached.get(), skipped.get(), failed.get());
-                        return;
+                        return null;
                     }
 
                     // Generate thumbnail
@@ -183,15 +186,18 @@ public class ThumbnailCacheCli {
                     } catch (Exception e) {
                         failed.incrementAndGet();
                     }
-                }));
+                    return null;
+                });
+                submitted++;
             }
 
-            // Wait for all tasks to complete
-            for (Future<?> future : futures) {
+            // Consume completions as they arrive — O(1) memory per task
+            for (int i = 0; i < submitted; i++) {
                 try {
-                    future.get();
-                } catch (Exception e) {
-                    // Task failed, already counted
+                    completionService.take();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
                 }
             }
 

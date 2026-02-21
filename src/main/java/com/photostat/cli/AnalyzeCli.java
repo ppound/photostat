@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -419,38 +420,70 @@ public class AnalyzeCli {
                                         AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
         for (File file : files) {
             current.incrementAndGet();
-            processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens);
+            processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens, null);
         }
     }
 
     /**
-     * Run parallel (multi-threaded) analysis using ExecutorService.
+     * Run parallel (multi-threaded) analysis using ExecutorCompletionService.
+     * A single drainer thread serializes all OpenSearch writes, eliminating contention.
      */
     private void runParallelAnalysis(List<File> files, int total,
                                       AtomicInteger success, AtomicInteger failed, AtomicInteger current,
                                       AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
         ExecutorService executor = Executors.newFixedThreadPool(parallelThreads);
-        List<Future<?>> futures = new ArrayList<>();
+        ExecutorCompletionService<Void> completionService = new ExecutorCompletionService<>(executor);
+        LinkedBlockingQueue<ImageMetadata> updateQueue = new LinkedBlockingQueue<>();
 
+        // Drainer: single thread writes all queued metadata to OpenSearch sequentially
+        AtomicBoolean drainerActive = new AtomicBoolean(true);
+        Thread drainer = new Thread(() -> {
+            while (drainerActive.get() || !updateQueue.isEmpty()) {
+                try {
+                    ImageMetadata m = updateQueue.poll(50, TimeUnit.MILLISECONDS);
+                    if (m != null) {
+                        try {
+                            openSearchService.updateDocument(m);
+                        } catch (Exception e) {
+                            System.err.println("OpenSearch update failed: " + e.getMessage());
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        });
+        drainer.setName("analyze-os-drainer");
+        drainer.setDaemon(true);
+        drainer.start();
+
+        int submitted = 0;
         for (File file : files) {
-            futures.add(executor.submit(() -> {
+            completionService.submit(() -> {
                 current.incrementAndGet();
-                processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens);
-            }));
+                processFile(file, total, success, failed, current, totalInputTokens, totalOutputTokens, updateQueue);
+                return null;
+            });
+            submitted++;
         }
 
-        // Wait for all tasks to complete
-        for (Future<?> future : futures) {
+        // Wait for all worker tasks to complete
+        for (int i = 0; i < submitted; i++) {
             try {
-                future.get();
-            } catch (InterruptedException | ExecutionException e) {
-                // Errors are already handled in processFile
+                completionService.take();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             }
         }
 
         executor.shutdown();
+
+        // Signal drainer to finish remaining items and exit
+        drainerActive.set(false);
         try {
-            executor.awaitTermination(1, TimeUnit.HOURS);
+            drainer.join(30_000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
@@ -458,10 +491,13 @@ public class AnalyzeCli {
 
     /**
      * Process a single file with retry logic for rate limit errors.
+     * If updateQueue is non-null, enqueues the metadata for the drainer thread to write;
+     * otherwise writes directly to OpenSearch (sequential mode).
      */
     private void processFile(File file, int total,
                               AtomicInteger success, AtomicInteger failed, AtomicInteger current,
-                              AtomicLong totalInputTokens, AtomicLong totalOutputTokens) {
+                              AtomicLong totalInputTokens, AtomicLong totalOutputTokens,
+                              LinkedBlockingQueue<ImageMetadata> updateQueue) {
         String filePath = file.getAbsolutePath();
 
         if (showProgress) {
@@ -515,8 +551,10 @@ public class AnalyzeCli {
                 }
             }
 
-            // Save to OpenSearch (synchronized to avoid conflicts)
-            synchronized (openSearchService) {
+            // Write to OpenSearch: queue for drainer (parallel) or direct (sequential)
+            if (updateQueue != null) {
+                updateQueue.offer(metadata);
+            } else {
                 openSearchService.updateDocument(metadata);
             }
 

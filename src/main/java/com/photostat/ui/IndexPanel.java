@@ -394,7 +394,7 @@ public class IndexPanel extends BorderPane {
             progressBar.setProgress(0);
             statusLabel.setText("Indexing " + selectedDirs.size() + " director" +
                     (selectedDirs.size() == 1 ? "y" : "ies") + " with " +
-                    configService.getIndexingThreads() + " threads...");
+                    (Runtime.getRuntime().availableProcessors() * 2) + " threads...");
 
             indexerService.startIndexing(selectedDirs);
         });

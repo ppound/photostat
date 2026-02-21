@@ -56,6 +56,8 @@ After years of photography and using various software like Lightroom, Capture On
 - **GPU Acceleration** - Automatically uses CUDA GPU when available for faster detection
 - **CLI Support** - Batch face detection with parallel workers via `--detect-faces`
 
+> See [docs/FACE_RECOGNITION.md](docs/FACE_RECOGNITION.md) for full setup instructions, Windows GPU configuration, and workflow details.
+
 ### Duplicate Detection
 - **Exact Duplicates** - SHA-256 content hashing finds byte-for-byte copies
 - **Visual Duplicates** - Perceptual hashing (dHash) finds resized, recompressed, or re-exported copies

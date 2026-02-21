@@ -7,6 +7,7 @@ Commands:
     detect <image_path> [threshold] - Detect faces in a single image
     detect-batch <input_json> <output_json> [threshold] - Batch detection
     cluster <face_data_json> <output_json> [threshold]  - Cluster faces
+    worker                          - Persistent worker: reads JSON commands from stdin
 """
 
 import json
@@ -15,8 +16,63 @@ import os
 import numpy as np
 
 
+def _test_cuda_provider():
+    """Test if onnxruntime-gpu can use the CUDA provider.
+
+    Returns (True, None) if GPU inference should work.
+    Returns (False, human_readable_error) if it will not.
+
+    We use get_available_providers() rather than ctypes because on Windows,
+    Python 3.8+ activates safe DLL search mode (SetDefaultDllDirectories) which
+    removes PATH from DLL lookup. ctypes therefore cannot find CUDA DLLs even when
+    they are in PATH. onnxruntime works around this by calling AddDllDirectory
+    internally before loading its providers — get_available_providers() exercises
+    that same code path, making it the only reliable test without running inference.
+    """
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return False, "onnxruntime not installed"
+
+    if sys.platform == "darwin":
+        return False, "CUDA not supported on macOS"
+
+    ort_dir = os.path.dirname(ort.__file__)
+
+    # Check onnxruntime-gpu is installed — the CPU package lacks the CUDA provider DLL.
+    # This also catches the "both onnxruntime and onnxruntime-gpu installed" conflict
+    # where the GPU package files exist but the Python namespace is corrupted.
+    if sys.platform == "win32":
+        cuda_provider_dll = os.path.join(ort_dir, "capi", "onnxruntime_providers_cuda.dll")
+    else:
+        cuda_provider_dll = os.path.join(ort_dir, "capi", "libonnxruntime_providers_cuda.so")
+
+    if not os.path.exists(cuda_provider_dll):
+        return False, "onnxruntime-gpu not installed (run: pip uninstall onnxruntime && pip install onnxruntime-gpu)"
+
+    # Ask onnxruntime which providers it can actually load using its own DLL loader.
+    # If CUDAExecutionProvider appears, onnxruntime successfully loaded the provider —
+    # the same result we get during real inference.
+    try:
+        available = ort.get_available_providers()
+    except Exception as e:
+        return False, f"Failed to query onnxruntime providers: {e}"
+
+    if "CUDAExecutionProvider" in available:
+        return True, None
+
+    return False, (
+        "CUDA provider not available. Possible causes: "
+        "(1) NVIDIA GPU driver not installed, "
+        "(2) CUDA Toolkit 12.x not installed (CUDA 13.x is not compatible — "
+        "install CUDA 12.6 from developer.nvidia.com/cuda-12-6-0-download-archive), "
+        "(3) both onnxruntime and onnxruntime-gpu are installed "
+        "(fix: pip uninstall onnxruntime onnxruntime-gpu -y && pip install onnxruntime-gpu)."
+    )
+
+
 def check():
-    """Verify insightface + onnxruntime + sklearn are installed."""
+    """Verify insightface + onnxruntime are installed, and test actual GPU inference capability."""
     try:
         import insightface
         import onnxruntime
@@ -26,12 +82,21 @@ def check():
             "onnxruntime_version": onnxruntime.__version__
         }
 
-        # Check available execution providers
+        # Check declared providers
         available_providers = onnxruntime.get_available_providers()
         result["available_providers"] = available_providers
-        result["gpu_available"] = "CUDAExecutionProvider" in available_providers
 
-        # If GPU available, try to get device info
+        # Only mark gpu_available=true if the CUDA provider library actually loads.
+        # get_available_providers() returning CUDA just means the driver is visible —
+        # it does NOT confirm that cuBLAS/cuDNN runtime DLLs are present.
+        if "CUDAExecutionProvider" in available_providers:
+            gpu_ok, gpu_error = _test_cuda_provider()
+            result["gpu_available"] = gpu_ok
+            if gpu_error:
+                result["gpu_error"] = gpu_error
+        else:
+            result["gpu_available"] = False
+
         if result["gpu_available"]:
             try:
                 import torch
@@ -193,6 +258,56 @@ def cmd_detect_batch(args):
     }))
 
 
+def cmd_worker():
+    """Persistent worker mode: reads JSON commands from stdin, writes JSON responses to stdout.
+
+    Loads the InsightFace model once, then processes detect-batch commands indefinitely
+    until a shutdown command is received or stdin is closed.
+    """
+    import cv2
+    app = get_face_app()
+
+    # Report which providers the detection model actually loaded on (GPU vs CPU)
+    providers = []
+    try:
+        providers = app.det_model.session.get_providers()
+    except Exception:
+        try:
+            import onnxruntime
+            providers = onnxruntime.get_available_providers()
+        except Exception:
+            pass
+    print(json.dumps({"status": "ready", "providers": providers}), flush=True)
+
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            request = json.loads(line)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"status": "error", "message": str(e)}), flush=True)
+            continue
+
+        command = request.get("command")
+        if command == "detect-batch":
+            paths = request.get("paths", [])
+            threshold = float(request.get("threshold", 0.6))
+            faces = []
+            total = len(paths)
+            for i, image_path in enumerate(paths):
+                print(f"PROGRESS:{i+1}/{total}", file=sys.stderr, flush=True)
+                try:
+                    faces.extend(detect_faces_in_image(app, image_path, threshold))
+                except Exception as e:
+                    print(f"Error processing {image_path}: {e}", file=sys.stderr, flush=True)
+            print(json.dumps({"status": "ok", "faces": faces}), flush=True)
+        elif command == "shutdown":
+            break
+        else:
+            print(json.dumps({"status": "error", "message": f"unknown command: {command}"}), flush=True)
+
+
 def cluster_with_sklearn(embeddings_norm, threshold):
     """Cluster using sklearn DBSCAN — O(N log N), memory-efficient."""
     from sklearn.cluster import DBSCAN
@@ -352,6 +467,8 @@ def main():
         cmd_detect_batch(args)
     elif command == "cluster":
         cmd_cluster(args)
+    elif command == "worker":
+        cmd_worker()
     else:
         print(f"Unknown command: {command}", file=sys.stderr)
         sys.exit(1)
