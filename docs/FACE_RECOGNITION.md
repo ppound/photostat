@@ -23,6 +23,7 @@ PhotoStat can automatically detect faces in your photo collection, group similar
   - [Examples](#examples)
 - [How Incremental Scanning Works](#how-incremental-scanning-works)
 - [Performance Notes](#performance-notes)
+- [Installing Python 3](#installing-python-3)
 
 ---
 
@@ -44,6 +45,8 @@ The workflow is:
 - **Python 3.8+** in your system PATH (or configured in Settings > Face Recognition)
 - **pip** for installing packages
 - **NVIDIA GPU + CUDA Toolkit** (optional but strongly recommended — see below)
+
+If Python is not installed, see [Installing Python 3](#installing-python-3) at the bottom of this guide.
 
 ---
 
@@ -260,3 +263,81 @@ Progress is saved after every 500 images during scanning, so it is safe to inter
 For large collections (10,000+ images), GPU acceleration is strongly recommended. A 10,000-image collection takes roughly 15–30 minutes on CPU vs. 10–20 minutes on a mid-range GPU with parallel workers.
 
 The InsightFace `buffalo_l` model (~350 MB) is downloaded automatically to `~/.photostat/faces/models/` on first use. Subsequent runs reuse the cached model.
+
+---
+
+## Installing Python 3
+
+### Windows
+
+**Option A — Microsoft Store (easiest)**
+
+1. Open the **Microsoft Store**, search for **Python 3**, and install the latest 3.x release.
+2. Open a new PowerShell window and verify:
+   ```powershell
+   python --version
+   pip --version
+   ```
+
+**Option B — python.org installer**
+
+1. Download the installer from [python.org/downloads](https://www.python.org/downloads/)
+2. Run the installer and **check "Add Python to PATH"** before clicking Install.
+3. Open a new PowerShell window and verify:
+   ```powershell
+   python --version
+   pip --version
+   ```
+
+> **Important:** Always open a **new** terminal window after installation so the updated PATH takes effect.
+
+If PhotoStat cannot find Python automatically, set the full path in **Settings > Face Recognition** (e.g. `C:\Users\YourName\AppData\Local\Programs\Python\Python312\python.exe`).
+
+---
+
+### macOS
+
+macOS does not include a modern Python by default. Install via Homebrew (recommended) or python.org.
+
+**Homebrew:**
+```bash
+brew install python
+```
+
+**python.org installer:**
+
+Download from [python.org/downloads](https://www.python.org/downloads/macos/) and run the `.pkg` installer.
+
+Verify:
+```bash
+python3 --version
+pip3 --version
+```
+
+On macOS, the command is `python3` (not `python`). Set the path in **Settings > Face Recognition** to the output of:
+```bash
+which python3
+```
+
+---
+
+### Linux
+
+**Ubuntu / Debian:**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip
+```
+
+**Fedora / RHEL:**
+```bash
+sudo dnf install python3 python3-pip
+```
+
+Verify:
+```bash
+python3 --version
+pip3 --version
+```
+
+On Linux, set the Python path in **Settings > Face Recognition** to `/usr/bin/python3` if PhotoStat does not detect it automatically.
