@@ -83,6 +83,7 @@ jobs:
             --app-version "${{ needs.build.outputs.version }}" `
             --vendor "PhotoStat" `
             --description "Photo metadata indexing and search" `
+            --icon packaging\icon.ico `
             --type msi `
             --java-options "--add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED" `
             --win-menu `
@@ -115,6 +116,21 @@ jobs:
           name: fat-jar-apple-silicon
           path: input
 
+      - name: Convert PNG icon to ICNS
+        run: |
+          mkdir -p PhotoStat.iconset
+          sips -z 16   16   packaging/icon.png --out PhotoStat.iconset/icon_16x16.png
+          sips -z 32   32   packaging/icon.png --out PhotoStat.iconset/icon_16x16@2x.png
+          sips -z 32   32   packaging/icon.png --out PhotoStat.iconset/icon_32x32.png
+          sips -z 64   64   packaging/icon.png --out PhotoStat.iconset/icon_32x32@2x.png
+          sips -z 128  128  packaging/icon.png --out PhotoStat.iconset/icon_128x128.png
+          sips -z 256  256  packaging/icon.png --out PhotoStat.iconset/icon_128x128@2x.png
+          sips -z 256  256  packaging/icon.png --out PhotoStat.iconset/icon_256x256.png
+          sips -z 512  512  packaging/icon.png --out PhotoStat.iconset/icon_256x256@2x.png
+          sips -z 512  512  packaging/icon.png --out PhotoStat.iconset/icon_512x512.png
+          sips -z 1024 1024 packaging/icon.png --out PhotoStat.iconset/icon_512x512@2x.png
+          iconutil -c icns PhotoStat.iconset --output packaging/icon.icns
+
       - name: Create DMG installer
         run: |
           jpackage \
@@ -125,6 +141,7 @@ jobs:
             --app-version ${{ needs.build.outputs.version }} \
             --vendor "PhotoStat" \
             --description "Photo metadata indexing and search" \
+            --icon packaging/icon.icns \
             --type dmg \
             --java-options "--add-opens javafx.graphics/com.sun.javafx.tk=ALL-UNNAMED" \
             --dest output

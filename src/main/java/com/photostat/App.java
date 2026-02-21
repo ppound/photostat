@@ -5,6 +5,7 @@ import com.photostat.ui.MainWindow;
 import javafx.application.Application;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 
@@ -51,6 +52,11 @@ public class App extends Application {
 
         // Configure stage
         primaryStage.setTitle(APP_TITLE);
+        try {
+            primaryStage.getIcons().add(new Image(App.class.getResourceAsStream("/icon.png")));
+        } catch (Exception e) {
+            System.err.println("Could not load app icon: " + e.getMessage());
+        }
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
