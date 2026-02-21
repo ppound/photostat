@@ -313,12 +313,13 @@ pip uninstall onnxruntime onnxruntime-gpu -y
 pip install onnxruntime-gpu
 ```
 
-**Cause B: CUDA Toolkit 12.x is not installed (Windows).** The GPU driver alone is not enough — `onnxruntime-gpu` is built against CUDA 12.x and requires runtime DLLs named `cublasLt64_**12**.dll`. **CUDA 13.x is not compatible** — it ships differently-named DLLs. You must install CUDA 12.x even if CUDA 13.x is already present (multiple versions coexist safely).
+**Cause B: CUDA Toolkit 12.x and/or cuDNN not installed (Windows).** The GPU driver alone is not enough. `onnxruntime-gpu` requires both CUDA 12.x runtime DLLs (`cublasLt64_12.dll`, etc.) and cuDNN DLLs (`cudnn64_9.dll`, etc.). **CUDA 13.x is not compatible.** You must install CUDA 12.x even if CUDA 13.x is already present (multiple versions coexist safely).
 
 1. Install CUDA Toolkit **12.x** (e.g. 12.6) from [developer.nvidia.com/cuda-12-6-0-download-archive](https://developer.nvidia.com/cuda-12-6-0-download-archive)
 2. Add the CUDA 12.x `bin` directory to **System PATH** (not just user PATH):
    - Find installed versions: `dir "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"`
    - Add: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.X\bin`
+3. Install **cuDNN** from [developer.nvidia.com/cudnn-downloads](https://developer.nvidia.com/cudnn-downloads) — choose the **Tar** installer type, extract it, and copy all `.dll` files from its `bin\` folder into `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.X\bin\`. See [docs/FACE_RECOGNITION.md — Windows GPU Setup](FACE_RECOGNITION.md#windows-gpu-setup) for detailed steps.
 
 **Verify the fix** with this diagnostic command:
 ```powershell

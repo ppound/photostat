@@ -98,7 +98,32 @@ The CUDA `bin` directory must be in the **System** PATH (not just user PATH, whi
    If you have CUDA 13.x installed, make sure the **12.x** bin directory is also listed here.
 5. Click **OK** on all dialogs
 
-**Step 3 — Verify there is no `onnxruntime` conflict**
+**Step 3 — Install cuDNN**
+
+cuDNN provides the deep neural network primitives that onnxruntime-gpu uses during face detection. Without it, GPU inference will fall back to CPU even when the CUDA Toolkit is installed.
+
+1. Go to [developer.nvidia.com/cudnn-downloads](https://developer.nvidia.com/cudnn-downloads)
+2. Select your OS (**Windows**), architecture (**x86_64**), and choose the version that matches your CUDA 12.x install
+3. Under **Installer Type**, choose **Tar** (the tarball — not the exe installer, which targets a different location)
+4. Download and extract the archive — you will get a folder containing `bin\`, `include\`, and `lib\` subdirectories
+
+5. Copy the DLLs from the extracted `bin\` folder into your CUDA 12.x `bin` directory:
+   ```
+   # Source (inside the extracted cuDNN archive):
+   cudnn-windows-x86_64-...\bin\cudnn64_9.dll
+   cudnn-windows-x86_64-...\bin\cudnn_ops64_9.dll
+   cudnn-windows-x86_64-...\bin\cudnn_cnn64_9.dll
+   (and any other .dll files in the bin\ folder)
+
+   # Destination:
+   C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\
+   ```
+
+   > The exact DLL names depend on the cuDNN version (e.g. `cudnn64_9.dll` for cuDNN 9.x). Copy all `.dll` files from the cuDNN `bin\` folder to the CUDA `bin\` directory.
+
+6. No PATH change is needed — the DLLs are now in the CUDA `bin` directory that is already in System PATH.
+
+**Step 5 — Verify there is no `onnxruntime` conflict**
 
 ```powershell
 pip show onnxruntime onnxruntime-gpu
