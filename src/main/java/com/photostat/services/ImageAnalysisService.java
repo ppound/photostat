@@ -602,8 +602,15 @@ public class ImageAnalysisService {
             }
             String prompt = configService.getClaudeAnalysisPrompt();
 
+            // Normalize path for consistent hashing (Windows filesystems are case-insensitive,
+            // so file walker may return different casing between runs)
+            String normalizedPath = path.toAbsolutePath().normalize().toString();
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                normalizedPath = normalizedPath.toLowerCase();
+            }
+
             // Combine: provider + model + prompt + image path + file size + modification time
-            String hashInput = provider + "|" + model + "|" + prompt + "|" + imagePath + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
+            String hashInput = provider + "|" + model + "|" + prompt + "|" + normalizedPath + "|" + attrs.size() + "|" + attrs.lastModifiedTime().toMillis();
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(hashInput.getBytes("UTF-8"));
