@@ -50,9 +50,6 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "enabled": true,
     "max_size_mb": 500
   },
-  "sidecar": {
-    "enabled": true
-  },
   "faces": {
     "python_path": "python3",
     "enabled": true,
@@ -140,12 +137,6 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 | `cache.max_size_mb` | integer | `500` | Maximum cache size in MB |
 
 **Cache location:** `~/.photostat/cache/`
-
-### Sidecar Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `sidecar.enabled` | boolean | `true` | Save custom metadata to sidecar files |
 
 ### AI Settings
 

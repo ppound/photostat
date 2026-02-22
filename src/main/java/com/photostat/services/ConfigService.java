@@ -104,14 +104,6 @@ public class ConfigService {
             }
         }
 
-        // Ensure sidecar section exists
-        if (!config.containsKey("sidecar")) {
-            Map<String, Object> sidecar = new HashMap<>();
-            sidecar.put("enabled", true);
-            config.put("sidecar", sidecar);
-            changed = true;
-        }
-
         // Ensure cache section exists
         if (!config.containsKey("cache")) {
             Map<String, Object> cache = new HashMap<>();
@@ -206,11 +198,6 @@ public class ConfigService {
         cache.put("enabled", true);        // Disk cache enabled by default
         cache.put("max_size_mb", 500);     // 500 MB default max size
         defaultConfig.put("cache", cache);
-
-        // Sidecar file settings
-        Map<String, Object> sidecar = new HashMap<>();
-        sidecar.put("enabled", true);      // Sidecar files enabled by default
-        defaultConfig.put("sidecar", sidecar);
 
         // AI settings (provider selection)
         Map<String, Object> ai = new HashMap<>();
@@ -447,15 +434,6 @@ public class ConfigService {
 
     public void setThumbnailCacheMaxSizeMB(int sizeMB) {
         setNestedValue("cache", "max_size_mb", sizeMB);
-    }
-
-    // Sidecar file settings
-    public boolean isSidecarEnabled() {
-        return getNestedBoolean("sidecar", "enabled", true);
-    }
-
-    public void setSidecarEnabled(boolean enabled) {
-        setNestedValue("sidecar", "enabled", enabled);
     }
 
     // Claude API settings

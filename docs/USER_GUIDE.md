@@ -720,19 +720,11 @@ Sidecar files allow custom metadata (persons, places, tags) to persist even when
 }
 ```
 
-**Configure Sidecar Settings:**
-
-1. Open **File > Settings**
-2. Navigate to the **Indexing** tab
-3. Toggle **"Save custom metadata to sidecar files"**
-
 **Benefits:**
 - Custom metadata survives index rebuilds
 - Metadata travels with images if files are moved/copied
 - Can be backed up alongside photos
 - Human-readable JSON format
-
-**Note:** If disabled, custom metadata is only stored in OpenSearch and will be lost if the index is deleted.
 
 ---
 

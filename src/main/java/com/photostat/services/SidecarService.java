@@ -19,14 +19,12 @@ import java.util.Map;
 public class SidecarService {
 
     private static SidecarService instance;
-    private final ConfigService configService;
     private final LoggingService logger;
     private final ObjectMapper objectMapper;
 
     private static final String SIDECAR_EXTENSION = ".photostat.json";
 
     private SidecarService() {
-        this.configService = ConfigService.getInstance();
         this.logger = LoggingService.getInstance();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -59,10 +57,6 @@ public class SidecarService {
      */
     @SuppressWarnings("unchecked")
     public SidecarData readSidecar(String imagePath) {
-        if (!configService.isSidecarEnabled()) {
-            return null;
-        }
-
         Path sidecarPath = getSidecarPath(imagePath);
         if (!Files.exists(sidecarPath)) {
             return null;
@@ -105,11 +99,6 @@ public class SidecarService {
      */
     @SuppressWarnings("unchecked")
     public boolean writeSidecar(String imagePath, List<String> persons, String place, List<String> tags, String rating) {
-        if (!configService.isSidecarEnabled()) {
-            logger.debug("SidecarService", "Sidecar files disabled, skipping write");
-            return false;
-        }
-
         // Check if there's any custom metadata to write
         boolean hasPersons = persons != null && !persons.isEmpty();
         boolean hasPlace = place != null && !place.trim().isEmpty();
@@ -213,11 +202,6 @@ public class SidecarService {
      * Preserves existing custom metadata while updating cache field.
      */
     public boolean updateAnalysisCache(String imagePath, String analysisHash) {
-        if (!configService.isSidecarEnabled()) {
-            logger.debug("SidecarService", "Sidecar files disabled, skipping analysis cache update");
-            return false;
-        }
-
         Path sidecarPath = getSidecarPath(imagePath);
         Map<String, Object> data = new HashMap<>();
 

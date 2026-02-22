@@ -53,9 +53,6 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Spinner<Integer> cacheMaxSizeSpinner;
     private Label cacheStatsLabel;
 
-    // Sidecar settings
-    private CheckBox sidecarEnabledCheckbox;
-
     // File extension checkboxes
     private final Map<String, CheckBox> extensionCheckboxes = new LinkedHashMap<>();
 
@@ -233,11 +230,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         browseExifTool.setOnAction(e -> browseForExifTool());
         grid.add(browseExifTool, 2, row++);
 
-        // Sidecar files
-        grid.add(new Label("Sidecar Files:"), 0, row);
-        sidecarEnabledCheckbox = new CheckBox("Save custom metadata to sidecar files");
-        grid.add(sidecarEnabledCheckbox, 1, row++, 2, 1);
-
         // File types to index
         Label fileTypesLabel = new Label("File Types to Index:");
         fileTypesLabel.setStyle("-fx-font-weight: bold;");
@@ -269,14 +261,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         exifToolInfoLabel.setWrapText(true);
         exifToolInfoLabel.getStyleClass().add("info-label");
 
-        Label sidecarInfoLabel = new Label(
-                "Sidecar files (.photostat.json) store custom metadata (persons, places, tags) alongside images. " +
-                        "This preserves metadata when rebuilding the index."
-        );
-        sidecarInfoLabel.setWrapText(true);
-        sidecarInfoLabel.getStyleClass().add("info-label");
-
-        pane.getChildren().addAll(grid, new Separator(), fileTypesLabel, extensionsPane, fileTypesInfoLabel, new Separator(), exifToolInfoLabel, sidecarInfoLabel);
+        pane.getChildren().addAll(grid, new Separator(), fileTypesLabel, extensionsPane, fileTypesInfoLabel, new Separator(), exifToolInfoLabel);
 
         return pane;
     }
@@ -836,9 +821,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         cacheEnabledCheckbox.setSelected(configService.isThumbnailCacheEnabled());
         cacheMaxSizeSpinner.getValueFactory().setValue(configService.getThumbnailCacheMaxSizeMB());
 
-        // Sidecar settings
-        sidecarEnabledCheckbox.setSelected(configService.isSidecarEnabled());
-
         // AI Provider settings
         String provider = configService.getAiProvider();
         aiProviderCombo.setValue("gemini".equalsIgnoreCase(provider) ? "Gemini" : "Claude");
@@ -893,9 +875,6 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Cache settings
         configService.setThumbnailCacheEnabled(cacheEnabledCheckbox.isSelected());
         configService.setThumbnailCacheMaxSizeMB(cacheMaxSizeSpinner.getValue());
-
-        // Sidecar settings
-        configService.setSidecarEnabled(sidecarEnabledCheckbox.isSelected());
 
         // File extensions
         List<String> selectedExtensions = new ArrayList<>();
