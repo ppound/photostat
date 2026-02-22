@@ -383,19 +383,21 @@ public class ImageAnalysisService {
             // Create resized image
             BufferedImage resizedImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_RGB);
             Graphics2D g2d = resizedImage.createGraphics();
+            try {
+                // Use high-quality rendering hints
+                g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-            // Use high-quality rendering hints
-            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                // Fill with white background (for transparent images)
+                g2d.setColor(Color.WHITE);
+                g2d.fillRect(0, 0, newWidth, newHeight);
 
-            // Fill with white background (for transparent images)
-            g2d.setColor(Color.WHITE);
-            g2d.fillRect(0, 0, newWidth, newHeight);
-
-            // Draw the resized image
-            g2d.drawImage(originalImage, 0, 0, newWidth, newHeight, null);
-            g2d.dispose();
+                // Draw the resized image
+                g2d.drawImage(originalImage, 0, 0, newWidth, newHeight, null);
+            } finally {
+                g2d.dispose();
+            }
 
             // Compress as JPEG
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

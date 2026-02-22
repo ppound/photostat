@@ -241,7 +241,7 @@ public class ConfigService {
         return defaultConfig;
     }
 
-    public void saveConfig() {
+    public synchronized void saveConfig() {
         try {
             // Back up before writing
             if (Files.exists(configPath) && Files.size(configPath) > 0) {
@@ -313,7 +313,7 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    public List<String> getDirectories() {
+    public synchronized List<String> getDirectories() {
         Map<String, Object> indexing = (Map<String, Object>) config.get("indexing");
         if (indexing != null && indexing.containsKey("directories")) {
             return new ArrayList<>((List<String>) indexing.get("directories"));
@@ -340,10 +340,10 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    public List<String> getFileExtensions() {
+    public synchronized List<String> getFileExtensions() {
         Map<String, Object> indexing = (Map<String, Object>) config.get("indexing");
         if (indexing != null && indexing.containsKey("file_extensions")) {
-            return (List<String>) indexing.get("file_extensions");
+            return new ArrayList<>((List<String>) indexing.get("file_extensions"));
         }
         return List.of(".jpg", ".jpeg", ".png");
     }
@@ -584,7 +584,7 @@ public class ConfigService {
 
     // Helper methods
     @SuppressWarnings("unchecked")
-    private String getNestedString(String section, String key, String defaultValue) {
+    private synchronized String getNestedString(String section, String key, String defaultValue) {
         Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
         if (sectionMap != null && sectionMap.containsKey(key)) {
             Object value = sectionMap.get(key);
@@ -594,7 +594,7 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    private int getNestedInt(String section, String key, int defaultValue) {
+    private synchronized int getNestedInt(String section, String key, int defaultValue) {
         Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
         if (sectionMap != null && sectionMap.containsKey(key)) {
             Object value = sectionMap.get(key);
@@ -606,7 +606,7 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    private double getNestedDouble(String section, String key, double defaultValue) {
+    private synchronized double getNestedDouble(String section, String key, double defaultValue) {
         Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
         if (sectionMap != null && sectionMap.containsKey(key)) {
             Object value = sectionMap.get(key);
@@ -618,7 +618,7 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    private boolean getNestedBoolean(String section, String key, boolean defaultValue) {
+    private synchronized boolean getNestedBoolean(String section, String key, boolean defaultValue) {
         Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
         if (sectionMap != null && sectionMap.containsKey(key)) {
             Object value = sectionMap.get(key);
@@ -630,7 +630,7 @@ public class ConfigService {
     }
 
     @SuppressWarnings("unchecked")
-    private void setNestedValue(String section, String key, Object value) {
+    private synchronized void setNestedValue(String section, String key, Object value) {
         Map<String, Object> sectionMap = (Map<String, Object>) config.get(section);
         if (sectionMap == null) {
             sectionMap = new HashMap<>();

@@ -261,13 +261,14 @@ public class ExifService {
         String exifToolPath = configService.getExifToolPath();
         Map<String, Object> allExif = new HashMap<>();
 
+        Process process = null;
         try {
             ProcessBuilder pb = new ProcessBuilder(
                     exifToolPath, "-json", "-all", filePath.toString()
             );
             pb.redirectErrorStream(true);
 
-            Process process = pb.start();
+            process = pb.start();
             StringBuilder output = new StringBuilder();
 
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
@@ -277,7 +278,8 @@ public class ExifService {
                 }
             }
 
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
+            int exitCode = finished ? process.exitValue() : -1;
             if (exitCode == 0 && output.length() > 0) {
                 // Parse JSON output
                 List<Map<String, Object>> results = objectMapper.readValue(
@@ -344,6 +346,10 @@ public class ExifService {
             // Fall back to metadata-extractor
             extractWithMetadataExtractor(filePath, metadata);
             return;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
 
         metadata.setAllExif(allExif);
@@ -469,13 +475,23 @@ public class ExifService {
      * Check if ExifTool is available on the system.
      */
     public boolean isExifToolAvailable() {
+        Process process = null;
         try {
             ProcessBuilder pb = new ProcessBuilder(configService.getExifToolPath(), "-ver");
-            Process process = pb.start();
-            int exitCode = process.waitFor();
-            return exitCode == 0;
+            pb.redirectErrorStream(true);
+            process = pb.start();
+            // Drain output to prevent blocking
+            try (InputStream is = process.getInputStream()) {
+                is.readAllBytes();
+            }
+            boolean finished = process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            return finished && process.exitValue() == 0;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
     }
 }
