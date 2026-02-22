@@ -671,8 +671,27 @@
     -fx-background-color: #1a1a1a;
 }
 
+.warning-banner {
+    -fx-background-color: #2d2200;
+    -fx-border-color: #8a7000;
+    -fx-border-width: 1;
+    -fx-padding: 8;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-text-fill: #ffcc44;
+}
+
 .delete-button {
-    -fx-text-fill: #ff6666;
+    -fx-background-color: #8b2020;
+    -fx-text-fill: white;
+}
+
+.delete-button:hover {
+    -fx-background-color: #a02828;
+}
+
+.delete-button:pressed {
+    -fx-background-color: #6b1818;
 }
 
 .chip {

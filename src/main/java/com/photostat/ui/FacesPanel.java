@@ -75,9 +75,7 @@ public class FacesPanel extends BorderPane {
                 "\u26a0  Named clusters may contain new photos from this scan. " +
                 "Open each named cluster and click \u2018Save Name\u2019 to update the search index with the new images.");
         resaveHintLabel.setWrapText(true);
-        resaveHintLabel.setStyle(
-                "-fx-background-color: #fff3cd; -fx-border-color: #ffc107; -fx-border-width: 1; " +
-                "-fx-padding: 8; -fx-border-radius: 4; -fx-background-radius: 4;");
+        resaveHintLabel.getStyleClass().add("warning-banner");
         resaveHintLabel.setVisible(false);
         resaveHintLabel.setManaged(false);
 
