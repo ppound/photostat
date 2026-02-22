@@ -44,6 +44,10 @@ public class App extends Application {
             height = defaultHeight;
         }
 
+        // Clamp to current screen so the window never extends beyond the visible area
+        width = Math.min(width, (int) screenBounds.getWidth());
+        height = Math.min(height, (int) screenBounds.getHeight());
+
         Scene scene = new Scene(mainWindow, width, height);
         mainScene = scene;
 
@@ -61,14 +65,17 @@ public class App extends Application {
         primaryStage.setMinWidth(800);
         primaryStage.setMinHeight(600);
 
-        // Center window on screen
-        primaryStage.setX((screenBounds.getWidth() - width) / 2 + screenBounds.getMinX());
-        primaryStage.setY((screenBounds.getHeight() - height) / 2 + screenBounds.getMinY());
+        // Center window on screen, ensuring it stays within visible bounds
+        double x = (screenBounds.getWidth() - width) / 2 + screenBounds.getMinX();
+        double y = (screenBounds.getHeight() - height) / 2 + screenBounds.getMinY();
+        primaryStage.setX(Math.max(x, screenBounds.getMinX()));
+        primaryStage.setY(Math.max(y, screenBounds.getMinY()));
 
-        // Save window size on close
+        // Save scene (content) size on close — not stage size, which includes
+        // window decorations and would grow the window on every launch cycle
         primaryStage.setOnCloseRequest(event -> {
-            configService.setWindowWidth((int) primaryStage.getWidth());
-            configService.setWindowHeight((int) primaryStage.getHeight());
+            configService.setWindowWidth((int) scene.getWidth());
+            configService.setWindowHeight((int) scene.getHeight());
             configService.saveConfig();
         });
 
