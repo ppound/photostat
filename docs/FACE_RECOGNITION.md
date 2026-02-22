@@ -162,6 +162,8 @@ Both mean CUDA 12.x is not installed or its `bin` directory is not in PATH. CUDA
 
 ## Using Face Recognition (GUI)
 
+![Faces Tab](screenshots/faces-tab.png)
+
 ### Scanning for Faces
 
 1. Open the **Faces** tab
