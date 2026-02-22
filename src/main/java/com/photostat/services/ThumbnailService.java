@@ -380,75 +380,16 @@ public class ThumbnailService {
         String exifToolPath = configService.getExifToolPath();
 
         try {
-            // Try to extract the embedded preview/thumbnail
-            ProcessBuilder pb = new ProcessBuilder(
-                    exifToolPath,
-                    "-b",                    // Binary output
-                    "-PreviewImage",         // Extract preview image
-                    path.toString()
-            );
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-            byte[] imageData;
-
-            try (InputStream is = process.getInputStream();
-                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    baos.write(buffer, 0, bytesRead);
+            // Try PreviewImage, then JpgFromRaw, then ThumbnailImage
+            byte[] imageData = null;
+            for (String tag : new String[]{"-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"}) {
+                imageData = runExifToolExtract(exifToolPath, tag, path);
+                if (imageData != null && imageData.length >= 100) {
+                    break;
                 }
-                imageData = baos.toByteArray();
             }
 
-            int exitCode = process.waitFor();
-
-            // If PreviewImage failed, try JpgFromRaw
-            if (exitCode != 0 || imageData.length < 100) {
-                pb = new ProcessBuilder(
-                        exifToolPath,
-                        "-b",
-                        "-JpgFromRaw",
-                        path.toString()
-                );
-                process = pb.start();
-
-                try (InputStream is = process.getInputStream();
-                     ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        baos.write(buffer, 0, bytesRead);
-                    }
-                    imageData = baos.toByteArray();
-                }
-                exitCode = process.waitFor();
-            }
-
-            // If still no luck, try ThumbnailImage
-            if (exitCode != 0 || imageData.length < 100) {
-                pb = new ProcessBuilder(
-                        exifToolPath,
-                        "-b",
-                        "-ThumbnailImage",
-                        path.toString()
-                );
-                process = pb.start();
-
-                try (InputStream is = process.getInputStream();
-                     ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        baos.write(buffer, 0, bytesRead);
-                    }
-                    imageData = baos.toByteArray();
-                }
-                process.waitFor();
-            }
-
-            if (imageData.length > 100) {
+            if (imageData != null && imageData.length > 100) {
                 // Read the extracted image
                 try (ByteArrayInputStream bais = new ByteArrayInputStream(imageData)) {
                     BufferedImage originalImage = ImageIO.read(bais);
@@ -464,6 +405,43 @@ public class ThumbnailService {
         }
 
         return null;
+    }
+
+    /**
+     * Run ExifTool to extract an embedded image tag. Returns the raw bytes,
+     * or null if extraction failed. Ensures the process is always cleaned up.
+     */
+    private byte[] runExifToolExtract(String exifToolPath, String tag, Path path) {
+        Process process = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(exifToolPath, "-b", tag, path.toString());
+            pb.redirectErrorStream(true);
+            process = pb.start();
+
+            byte[] imageData;
+            try (InputStream is = process.getInputStream();
+                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    baos.write(buffer, 0, bytesRead);
+                }
+                imageData = baos.toByteArray();
+            }
+
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return null;
+            }
+            return (process.exitValue() == 0 && imageData.length >= 100) ? imageData : null;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }
     }
 
     /**

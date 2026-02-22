@@ -48,11 +48,11 @@ import java.util.stream.Collectors;
 public class OpenSearchService {
 
     private static OpenSearchService instance;
-    private OpenSearchClient client;
+    private volatile OpenSearchClient client;
     private final ConfigService configService;
     private final ObjectMapper objectMapper;
     private final LoggingService logger;
-    private boolean connected = false;
+    private volatile boolean connected = false;
 
     private OpenSearchService() {
         this.configService = ConfigService.getInstance();
@@ -85,7 +85,7 @@ public class OpenSearchService {
     /**
      * Connect to OpenSearch with explicit parameters.
      */
-    public void connect(String host, int port, boolean ssl, String username, String password) throws Exception {
+    public synchronized void connect(String host, int port, boolean ssl, String username, String password) throws Exception {
         String scheme = ssl ? "https" : "http";
         HttpHost httpHost = new HttpHost(scheme, host, port);
 
@@ -129,7 +129,7 @@ public class OpenSearchService {
     /**
      * Check if connected to OpenSearch.
      */
-    public boolean isConnected() {
+    public synchronized boolean isConnected() {
         if (!connected || client == null) {
             return false;
         }
@@ -145,7 +145,7 @@ public class OpenSearchService {
     /**
      * Test connection to OpenSearch.
      */
-    public boolean testConnection() {
+    public synchronized boolean testConnection() {
         try {
             if (client == null) {
                 connect();

@@ -37,11 +37,11 @@ public class FaceRecognitionService {
 
     private static final int CHUNK_SIZE = 500;
 
-    private List<FaceDetection> faceDetections = new ArrayList<>();
-    private List<FaceCluster> clusters = new ArrayList<>();
-    private Map<String, FaceDetection> faceIndex = new HashMap<>();
+    private List<FaceDetection> faceDetections = Collections.synchronizedList(new ArrayList<>());
+    private List<FaceCluster> clusters = Collections.synchronizedList(new ArrayList<>());
+    private final Map<String, FaceDetection> faceIndex = new ConcurrentHashMap<>();
     /** Set of image paths that have already been scanned for faces. */
-    private Set<String> scannedPaths = new HashSet<>();
+    private final Set<String> scannedPaths = ConcurrentHashMap.newKeySet();
 
     /** Live progress tracking — updated during detectFacesBatch for UI display. */
     private volatile String currentScanFile = null;
@@ -104,23 +104,28 @@ public class FaceRecognitionService {
      * Check if Python and InsightFace are available.
      */
     public boolean isPythonAvailable() {
+        Process process = null;
         try {
             String pythonPath = configService.getFacesPythonPath();
             ProcessBuilder pb = new ProcessBuilder(pythonPath, scriptPath.toString(), "check");
-            pb.redirectErrorStream(false);
-            Process process = pb.start();
+            pb.redirectErrorStream(true);
+            process = pb.start();
 
             String output;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 output = reader.lines().collect(Collectors.joining("\n"));
             }
 
-            int exitCode = process.waitFor();
-            if (exitCode == 0 && output.contains("\"status\": \"ok\"")) {
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (finished && process.exitValue() == 0 && output.contains("\"status\": \"ok\"")) {
                 return true;
             }
         } catch (Exception e) {
             logger.debug("FaceRecognitionService", "Python check failed: " + e.getMessage());
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
         return false;
     }
@@ -129,21 +134,30 @@ public class FaceRecognitionService {
      * Get version info from the Python environment.
      */
     public String getPythonVersionInfo() {
+        Process process = null;
         try {
             String pythonPath = configService.getFacesPythonPath();
             ProcessBuilder pb = new ProcessBuilder(pythonPath, scriptPath.toString(), "check");
-            pb.redirectErrorStream(false);
-            Process process = pb.start();
+            pb.redirectErrorStream(true);
+            process = pb.start();
 
             String output;
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 output = reader.lines().collect(Collectors.joining("\n"));
             }
 
-            process.waitFor();
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return "{\"status\": \"error\", \"message\": \"timeout\"}";
+            }
             return output;
         } catch (Exception e) {
             return "{\"status\": \"error\", \"message\": \"" + e.getMessage() + "\"}";
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
         }
     }
 
@@ -509,26 +523,29 @@ public class FaceRecognitionService {
                     inputPath.toString(), outputPath.toString(),
                     String.valueOf(threshold)
             );
-            pb.redirectErrorStream(false);
+            pb.redirectErrorStream(true);
             Process process = pb.start();
-
-            // Consume stderr
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logger.debug("FaceRecognitionService", "Python cluster: " + line);
+            try {
+                // Read combined stdout/stderr
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        logger.debug("FaceRecognitionService", "Python cluster: " + line);
+                    }
                 }
-            }
 
-            // Read stdout
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String stdout = reader.lines().collect(Collectors.joining("\n"));
-                logger.info("FaceRecognitionService", "Cluster result: " + stdout);
-            }
-
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new IOException("Face clustering failed with exit code: " + exitCode);
+                boolean finished = process.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
+                if (!finished) {
+                    process.destroyForcibly();
+                    throw new IOException("Face clustering timed out after 5 minutes");
+                }
+                if (process.exitValue() != 0) {
+                    throw new IOException("Face clustering failed with exit code: " + process.exitValue());
+                }
+            } finally {
+                if (process.isAlive()) {
+                    process.destroyForcibly();
+                }
             }
 
             // Read output
@@ -557,7 +574,8 @@ public class FaceRecognitionService {
                     }
                 }
 
-                this.clusters = newClusters;
+                this.clusters.clear();
+                this.clusters.addAll(newClusters);
                 resolveClusters();
                 saveState();
                 return clusters;
@@ -649,19 +667,18 @@ public class FaceRecognitionService {
     /**
      * Load state from JSON files on disk.
      */
-    public void loadState() {
+    public synchronized void loadState() {
         try {
             if (Files.exists(faceDataPath) && Files.size(faceDataPath) > 0) {
-                faceDetections = objectMapper.readValue(
+                List<FaceDetection> loaded = objectMapper.readValue(
                         faceDataPath.toFile(), new TypeReference<List<FaceDetection>>() {});
+                faceDetections.clear();
+                faceDetections.addAll(loaded);
                 rebuildFaceIndex();
                 logger.info("FaceRecognitionService", "Loaded " + faceDetections.size() + " face detections");
             }
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to load face data", e);
-            if (faceDetections.isEmpty()) {
-                faceDetections = new ArrayList<>();
-            }
         }
 
         // Load scanned paths — persisted separately so images with zero faces are remembered.
@@ -695,16 +712,15 @@ public class FaceRecognitionService {
 
         try {
             if (Files.exists(clustersPath) && Files.size(clustersPath) > 0) {
-                clusters = objectMapper.readValue(
+                List<FaceCluster> loaded = objectMapper.readValue(
                         clustersPath.toFile(), new TypeReference<List<FaceCluster>>() {});
+                clusters.clear();
+                clusters.addAll(loaded);
                 resolveClusterCounts();
                 logger.info("FaceRecognitionService", "Loaded " + clusters.size() + " clusters");
             }
         } catch (IOException e) {
             logger.error("FaceRecognitionService", "Failed to load clusters", e);
-            if (clusters.isEmpty()) {
-                clusters = new ArrayList<>();
-            }
         }
     }
 
