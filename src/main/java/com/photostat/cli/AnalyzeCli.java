@@ -72,10 +72,16 @@ public class AnalyzeCli {
             printConfig();
         }
 
-        // Check if API is configured
+        // Check if provider is configured
         if (!imageAnalysisService.isConfigured()) {
-            System.err.println("Error: No API key configured for " + imageAnalysisService.getProviderName());
-            System.err.println("Please configure your API key in ~/.photostat/config.json or via the GUI Settings.");
+            String provider = configService.getAiProvider();
+            if ("moondream".equalsIgnoreCase(provider)) {
+                System.err.println("Error: Moondream Python dependencies not found.");
+                System.err.println("Install with: pip install \"transformers>=4.51,<5\" torch Pillow accelerate");
+            } else {
+                System.err.println("Error: No API key configured for " + imageAnalysisService.getProviderName());
+                System.err.println("Please configure your API key in ~/.photostat/config.json or via the GUI Settings.");
+            }
             return 1;
         }
 
@@ -161,7 +167,12 @@ public class AnalyzeCli {
         }
 
         // Run analysis
-        return runAnalysis(filesToAnalyze);
+        try {
+            return runAnalysis(filesToAnalyze);
+        } finally {
+            // Shutdown Moondream worker if it was started
+            imageAnalysisService.shutdown();
+        }
     }
 
     private boolean parseArgs(String[] args) {
@@ -183,14 +194,19 @@ public class AnalyzeCli {
                 case "--provider":
                     if (i + 1 < args.length) {
                         providerOverride = args[++i].toLowerCase();
-                        if (!providerOverride.equals("claude") && !providerOverride.equals("gemini")) {
-                            System.err.println("Error: --provider must be 'claude' or 'gemini'");
+                        if (!providerOverride.equals("claude") && !providerOverride.equals("gemini") && !providerOverride.equals("moondream")) {
+                            System.err.println("Error: --provider must be 'claude', 'gemini', or 'moondream'");
                             return false;
                         }
                         // Override the provider in config
                         configService.setAiProvider(providerOverride);
+                        // Force single thread for moondream (single model instance)
+                        if (providerOverride.equals("moondream") && parallelThreads > 1) {
+                            System.out.println("Note: Moondream uses a single model instance; forcing --parallel 1");
+                            parallelThreads = 1;
+                        }
                     } else {
-                        System.err.println("Error: --provider requires 'claude' or 'gemini'");
+                        System.err.println("Error: --provider requires 'claude', 'gemini', or 'moondream'");
                         printUsage();
                         return false;
                     }
@@ -216,6 +232,11 @@ public class AnalyzeCli {
                             if (parallelThreads < 1 || parallelThreads > 8) {
                                 System.err.println("Error: --parallel must be between 1 and 8");
                                 return false;
+                            }
+                            // Force single thread for moondream
+                            if ("moondream".equalsIgnoreCase(configService.getAiProvider()) && parallelThreads > 1) {
+                                System.out.println("Note: Moondream uses a single model instance; forcing --parallel 1");
+                                parallelThreads = 1;
                             }
                         } catch (NumberFormatException e) {
                             System.err.println("Error: --parallel requires a number");
@@ -250,7 +271,7 @@ public class AnalyzeCli {
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --dir <path>           Analyze specific directory (overrides config)");
-        System.out.println("  --provider <name>      Use 'claude' or 'gemini' (overrides config)");
+        System.out.println("  --provider <name>      Use 'claude', 'gemini', or 'moondream' (overrides config)");
         System.out.println("  --parallel <n>         Run n parallel analyses (1-8, default: 1)");
         System.out.println("  --dry-run              Show what would be analyzed without calling API");
         System.out.println("  --force                Re-analyze even if cached");
@@ -263,6 +284,7 @@ public class AnalyzeCli {
         System.out.println("Examples:");
         System.out.println("  java -jar photostat.jar --analyze");
         System.out.println("  java -jar photostat.jar --analyze --provider gemini");
+        System.out.println("  java -jar photostat.jar --analyze --provider moondream");
         System.out.println("  java -jar photostat.jar --analyze --dir /path/to/photos --force");
         System.out.println("  java -jar photostat.jar --analyze --dry-run");
     }
@@ -360,8 +382,14 @@ public class AnalyzeCli {
         AtomicLong totalOutputTokens = new AtomicLong(0);
 
         String provider = configService.getAiProvider();
-        String model = "gemini".equalsIgnoreCase(provider) ?
-                configService.getGeminiModel() : configService.getClaudeModel();
+        String model;
+        if ("gemini".equalsIgnoreCase(provider)) {
+            model = configService.getGeminiModel();
+        } else if ("moondream".equalsIgnoreCase(provider)) {
+            model = configService.getMoondreamModel();
+        } else {
+            model = configService.getClaudeModel();
+        }
 
         if (!quiet) {
             System.out.println("\nStarting analysis of " + total + " images using " +
@@ -638,6 +666,9 @@ public class AnalyzeCli {
             outputPricePer1M = 5.00;
         } else if (modelLower.contains("claude")) {
             // Claude models - we don't have token counts for Claude currently
+            return 0;
+        } else if (modelLower.contains("moondream")) {
+            // Local model - free
             return 0;
         } else {
             // Unknown model - use conservative estimate

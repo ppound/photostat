@@ -3,6 +3,7 @@ package com.photostat.ui;
 import com.photostat.App;
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
+import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
@@ -66,6 +67,11 @@ public class SettingsDialog extends Dialog<Boolean> {
     // Gemini API settings
     private PasswordField geminiApiKeyField;
     private ComboBox<String> geminiModelCombo;
+
+    // Moondream settings
+    private TextField moondreamPythonPathField;
+    private ComboBox<String> moondreamModelCombo;
+    private Label moondreamStatusLabel;
 
     // Analysis prompt
     private TextArea analysisPromptArea;
@@ -433,7 +439,7 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         providerGrid.add(new Label("AI Provider:"), 0, 0);
         aiProviderCombo = new ComboBox<>();
-        aiProviderCombo.getItems().addAll("Claude", "Gemini");
+        aiProviderCombo.getItems().addAll("Claude", "Gemini", "Moondream");
         aiProviderCombo.setPrefWidth(150);
         providerGrid.add(aiProviderCombo, 1, 0);
 
@@ -518,12 +524,56 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         geminiSection.setContent(geminiGrid);
 
+        // Moondream settings section
+        TitledPane moondreamSection = new TitledPane();
+        moondreamSection.setText("Moondream Settings (Local AI)");
+        moondreamSection.setCollapsible(false);
+
+        GridPane moondreamGrid = new GridPane();
+        moondreamGrid.setHgap(10);
+        moondreamGrid.setVgap(10);
+        moondreamGrid.setPadding(new Insets(10));
+
+        moondreamGrid.add(new Label("Python Path:"), 0, 0);
+        moondreamPythonPathField = new TextField();
+        moondreamPythonPathField.setPromptText("python3");
+        moondreamPythonPathField.setPrefWidth(250);
+        moondreamGrid.add(moondreamPythonPathField, 1, 0);
+
+        moondreamGrid.add(new Label("Model:"), 0, 1);
+        moondreamModelCombo = new ComboBox<>();
+        moondreamModelCombo.getItems().addAll(
+            "vikhyatk/moondream2"
+        );
+        moondreamModelCombo.setEditable(true);
+        moondreamModelCombo.setPrefWidth(250);
+        moondreamGrid.add(moondreamModelCombo, 1, 1);
+
+        Button testMoondreamButton = new Button("Test");
+        moondreamStatusLabel = new Label("");
+        testMoondreamButton.setOnAction(e -> testMoondreamSetup());
+        HBox moondreamTestBox = new HBox(10, testMoondreamButton, moondreamStatusLabel);
+        moondreamGrid.add(moondreamTestBox, 1, 2);
+
+        Label moondreamInfoLabel = new Label(
+            "Free local AI analysis. No API key needed.\n" +
+            "Install: pip install \"transformers>=4.51,<5\" torch Pillow accelerate\n" +
+            "First run downloads the model (~1.5 GB).\n" +
+            "Slower than cloud APIs (~5-15s per image on CPU)."
+        );
+        moondreamInfoLabel.setWrapText(true);
+        moondreamInfoLabel.getStyleClass().add("info-label-small");
+        moondreamGrid.add(moondreamInfoLabel, 1, 3);
+
+        moondreamSection.setContent(moondreamGrid);
+
         // Cost comparison info
         Label costInfoLabel = new Label(
             "Cost Comparison (approximate per 1000 images):\n" +
             "• Claude Sonnet: ~$1.50-3.00 (best quality)\n" +
             "• Claude Haiku: ~$0.15-0.30 (fast, good quality)\n" +
-            "• Gemini Flash: ~$0.05-0.10 (cheapest)"
+            "• Gemini Flash: ~$0.05-0.10 (cheapest)\n" +
+            "• Moondream: Free (local, no API key needed)"
         );
         costInfoLabel.setWrapText(true);
         costInfoLabel.getStyleClass().add("info-label");
@@ -546,7 +596,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         promptContent.getChildren().addAll(analysisPromptArea, resetPromptButton);
         promptSection.setContent(promptContent);
 
-        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, new Separator(), costInfoLabel, promptSection);
+        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, moondreamSection, new Separator(), costInfoLabel, promptSection);
 
         // Wrap in ScrollPane for vertical scrolling
         ScrollPane scrollPane = new ScrollPane(pane);
@@ -668,6 +718,45 @@ public class SettingsDialog extends Dialog<Boolean> {
                 Platform.runLater(() -> {
                     facesPythonStatusLabel.setText("Error: " + e.getMessage());
                     setStatusStyle(facesPythonStatusLabel, "text-error");
+                });
+            }
+        }).start();
+    }
+
+    private void testMoondreamSetup() {
+        moondreamStatusLabel.setText("Checking...");
+        setStatusStyle(moondreamStatusLabel, "text-muted");
+
+        String pythonPath = moondreamPythonPathField.getText().trim();
+        if (pythonPath.isEmpty()) pythonPath = "python3";
+
+        final String finalPythonPath = pythonPath;
+
+        new Thread(() -> {
+            try {
+                // Temporarily set python path for the check
+                String original = configService.getMoondreamPythonPath();
+                configService.setMoondreamPythonPath(finalPythonPath);
+
+                ImageAnalysisService analysisService = ImageAnalysisService.getInstance();
+                boolean available = analysisService.isMoondreamAvailable();
+                String versionInfo = analysisService.getMoondreamVersionInfo();
+
+                configService.setMoondreamPythonPath(original);
+
+                Platform.runLater(() -> {
+                    if (available) {
+                        moondreamStatusLabel.setText("Available - " + versionInfo);
+                        setStatusStyle(moondreamStatusLabel, "text-success");
+                    } else {
+                        moondreamStatusLabel.setText("Not found. Install: pip install \"transformers>=4.51,<5\" torch Pillow accelerate");
+                        setStatusStyle(moondreamStatusLabel, "text-error");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    moondreamStatusLabel.setText("Error: " + e.getMessage());
+                    setStatusStyle(moondreamStatusLabel, "text-error");
                 });
             }
         }).start();
@@ -823,7 +912,13 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // AI Provider settings
         String provider = configService.getAiProvider();
-        aiProviderCombo.setValue("gemini".equalsIgnoreCase(provider) ? "Gemini" : "Claude");
+        if ("gemini".equalsIgnoreCase(provider)) {
+            aiProviderCombo.setValue("Gemini");
+        } else if ("moondream".equalsIgnoreCase(provider)) {
+            aiProviderCombo.setValue("Moondream");
+        } else {
+            aiProviderCombo.setValue("Claude");
+        }
 
         // Claude API settings
         claudeApiKeyField.setText(configService.getClaudeApiKey());
@@ -832,6 +927,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Gemini API settings
         geminiApiKeyField.setText(configService.getGeminiApiKey());
         geminiModelCombo.setValue(configService.getGeminiModel());
+
+        // Moondream settings
+        moondreamPythonPathField.setText(configService.getMoondreamPythonPath());
+        moondreamModelCombo.setValue(configService.getMoondreamModel());
 
         // Face recognition settings
         facesEnabledCheckbox.setSelected(configService.isFacesEnabled());
@@ -887,7 +986,13 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // AI Provider settings
         String selectedProvider = aiProviderCombo.getValue();
-        configService.setAiProvider("Gemini".equals(selectedProvider) ? "gemini" : "claude");
+        if ("Gemini".equals(selectedProvider)) {
+            configService.setAiProvider("gemini");
+        } else if ("Moondream".equals(selectedProvider)) {
+            configService.setAiProvider("moondream");
+        } else {
+            configService.setAiProvider("claude");
+        }
 
         // Claude API settings
         configService.setClaudeApiKey(claudeApiKeyField.getText().trim());
@@ -899,6 +1004,15 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setGeminiApiKey(geminiApiKeyField.getText().trim());
         if (geminiModelCombo.getValue() != null) {
             configService.setGeminiModel(geminiModelCombo.getValue());
+        }
+
+        // Moondream settings
+        String moondreamPythonPath = moondreamPythonPathField.getText().trim();
+        if (!moondreamPythonPath.isEmpty()) {
+            configService.setMoondreamPythonPath(moondreamPythonPath);
+        }
+        if (moondreamModelCombo.getValue() != null && !moondreamModelCombo.getValue().trim().isEmpty()) {
+            configService.setMoondreamModel(moondreamModelCombo.getValue().trim());
         }
 
         // Analysis prompt

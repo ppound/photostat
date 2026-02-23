@@ -130,6 +130,15 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure moondream section exists
+        if (!config.containsKey("moondream")) {
+            Map<String, Object> moondream = new HashMap<>();
+            moondream.put("python_path", DEFAULT_PYTHON_PATH);
+            moondream.put("model", "vikhyatk/moondream2");
+            config.put("moondream", moondream);
+            changed = true;
+        }
+
         // Ensure faces section exists
         if (!config.containsKey("faces")) {
             Map<String, Object> faces = new HashMap<>();
@@ -216,6 +225,12 @@ public class ConfigService {
         gemini.put("api_key", "");
         gemini.put("model", "gemini-2.0-flash");
         defaultConfig.put("gemini", gemini);
+
+        // Moondream (local AI) settings
+        Map<String, Object> moondream = new HashMap<>();
+        moondream.put("python_path", DEFAULT_PYTHON_PATH);
+        moondream.put("model", "vikhyatk/moondream2");
+        defaultConfig.put("moondream", moondream);
 
         // Face recognition settings
         Map<String, Object> faces = new HashMap<>();
@@ -485,6 +500,26 @@ public class ConfigService {
 
     public void setGeminiModel(String model) {
         setNestedValue("gemini", "model", model);
+    }
+
+    // Moondream settings
+    private static final String DEFAULT_PYTHON_PATH =
+            System.getProperty("os.name").toLowerCase().contains("win") ? "python" : "python3";
+
+    public String getMoondreamPythonPath() {
+        return getNestedString("moondream", "python_path", DEFAULT_PYTHON_PATH);
+    }
+
+    public void setMoondreamPythonPath(String path) {
+        setNestedValue("moondream", "python_path", path);
+    }
+
+    public String getMoondreamModel() {
+        return getNestedString("moondream", "model", "vikhyatk/moondream2");
+    }
+
+    public void setMoondreamModel(String model) {
+        setNestedValue("moondream", "model", model);
     }
 
     // Face recognition settings

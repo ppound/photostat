@@ -9,6 +9,7 @@ PhotoStat can automatically analyze your images using AI vision capabilities to 
   - [Choosing a Provider](#choosing-a-provider)
   - [Configuring Claude (Anthropic)](#configuring-claude-anthropic)
   - [Configuring Gemini (Google)](#configuring-gemini-google)
+  - [Configuring Moondream (Local)](#configuring-moondream-local)
   - [API Costs](#api-costs)
 - [Using AI Analysis in the GUI](#using-ai-analysis-in-the-gui)
 - [Analysis Caching](#analysis-caching)
@@ -26,10 +27,11 @@ PhotoStat can automatically analyze your images using AI vision capabilities to 
 
 ## Overview
 
-Two AI providers are supported:
+Three AI providers are supported:
 
 - **Claude** (Anthropic) - High-quality analysis with excellent scene understanding
 - **Gemini** (Google) - Cost-effective alternative with fast processing
+- **Moondream** (Local) - Free, offline analysis using a local 2B-parameter vision model
 
 **What the AI Analyzes:**
 
@@ -48,8 +50,9 @@ Two AI providers are supported:
 
 | Provider | Pros | Cons |
 |----------|------|------|
-| **Claude** | Excellent scene understanding, detailed descriptions | Higher cost |
-| **Gemini** | Very cost-effective, fast processing | May be less detailed |
+| **Claude** | Excellent scene understanding, detailed descriptions | Higher cost, requires API key |
+| **Gemini** | Very cost-effective, fast processing | May be less detailed, requires API key |
+| **Moondream** | Free, no API key, works offline, private | Slower (~5-15s/image on CPU), less detailed than cloud models |
 
 ### Configuring Claude (Anthropic)
 
@@ -104,10 +107,66 @@ Two AI providers are supported:
 6. Click **Test API Key** to verify
 7. Click **OK** to save
 
+### Configuring Moondream (Local)
+
+Moondream is a free, local AI model that runs entirely on your machine. No API key or internet connection required.
+
+**Prerequisites:**
+
+- Python 3.8+
+- ~2 GB disk space (for model download on first run)
+- ~2 GB RAM (CPU mode) or CUDA-capable GPU for faster processing
+
+**Installation:**
+
+```bash
+pip install "transformers>=4.51,<5" torch Pillow accelerate
+```
+
+> **Note:** On Windows, if the quoted version constraint causes issues, use: `pip install transformers==4.51.3 torch Pillow accelerate`
+
+**GPU Acceleration (Recommended):**
+
+The default `pip install torch` installs a CPU-only version. GPU acceleration is **strongly recommended** — CPU mode takes minutes per image, while GPU mode takes a few seconds.
+
+To install PyTorch with NVIDIA CUDA support:
+
+```bash
+pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124
+```
+
+> **Note:** Use `cu124` for CUDA 12.4 or `cu118` for CUDA 11.8. Check your CUDA version with `nvidia-smi`. This is a ~2.5 GB download.
+
+To verify GPU is detected, click **Test** in the Moondream settings — it should report `"device": "cuda"` instead of `"device": "cpu"`.
+
+**Setup in PhotoStat:**
+
+1. Open **File > Settings**
+2. Navigate to the **AI Analysis** tab
+3. Select **Moondream** as the provider
+4. Set **Python Path** if not using the default `python3`
+5. Click **Test** to verify the setup — check that it reports `cuda` for GPU
+6. Click **OK** to save
+
+**Performance:**
+
+| Hardware | Speed (per image) |
+|----------|-------------------|
+| CPU only | Minutes (not recommended) |
+| NVIDIA GPU (CUDA) | ~1-3 seconds |
+
+**Limitations:**
+
+- Less detailed analysis than Claude or Gemini
+- Single-threaded only (one image at a time)
+- First run downloads the model (~1.5 GB)
+- GPU (CUDA) strongly recommended for usable performance
+
 ### API Costs
 
 | Provider | Cost Level | Best For |
 |----------|------------|----------|
+| Moondream | Free | Privacy-sensitive, offline, no budget |
 | Claude Haiku | Low | Large batches, basic tagging |
 | Gemini Flash | Very Low | Cost-sensitive batch processing |
 | Claude Sonnet | Medium | Balanced quality and cost |
@@ -117,6 +176,7 @@ Two AI providers are supported:
 Monitor usage:
 - Claude: [console.anthropic.com](https://console.anthropic.com/)
 - Gemini: [aistudio.google.com](https://aistudio.google.com/)
+- Moondream: Free, no usage tracking needed
 
 ---
 
@@ -160,7 +220,7 @@ PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
 - When re-analyzing, images with matching hashes are skipped
 - The progress dialog shows "Cached (skipped)" count for unchanged images
 - Cache is invalidated when you:
-  - Switch AI providers (Claude ↔ Gemini)
+  - Switch AI providers (Claude / Gemini / Moondream)
   - Change the model in settings
   - Modify the analysis prompt in config.json
   - Edit or replace the image file
@@ -238,7 +298,7 @@ java -jar photostat-java-1.9.6-executable.jar --analyze --dry-run
 |--------|-------------|
 | `--analyze` | Run batch analysis mode |
 | `--dir <path>` | Analyze specific directory (overrides config) |
-| `--provider <name>` | Use 'claude' or 'gemini' (overrides config) |
+| `--provider <name>` | Use 'claude', 'gemini', or 'moondream' (overrides config) |
 | `--parallel <n>` | Run n parallel analyses (1-8, default: 1) |
 | `--dry-run` | Show what would be analyzed without making API calls |
 | `--force` | Re-analyze all images, ignoring cache |
@@ -251,6 +311,9 @@ java -jar photostat-java-1.9.6-executable.jar --analyze --dry-run
 ```bash
 # Analyze with Gemini instead of configured provider
 java -jar photostat-java-1.9.6-executable.jar --analyze --provider gemini
+
+# Analyze with Moondream (free, local)
+java -jar photostat-java-1.9.6-executable.jar --analyze --provider moondream
 
 # Analyze a specific directory
 java -jar photostat-java-1.9.6-executable.jar --analyze --dir /path/to/photos
@@ -347,3 +410,6 @@ Note: Claude API does not provide token usage in responses, so cost tracking is 
 | "API error: 429" | Rate limited - wait and try again with fewer images, or use `--parallel` with lower thread count |
 | "Analysis failed" | Check internet connection; verify image format is supported |
 | "Retrying after rate limit" | The CLI automatically retries with exponential backoff |
+| "Moondream Python dependencies not found" | Run `pip install "transformers>=4.51,<5" torch Pillow accelerate` |
+| "Moondream worker closed before sending ready signal" | Check Python path in settings; ensure moondream is installed for that Python |
+| Moondream is very slow | GPU is required for usable performance. Install PyTorch with CUDA: `pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124`. Verify with Test button — should report `cuda` not `cpu` |
