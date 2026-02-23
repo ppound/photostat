@@ -595,8 +595,14 @@ public class ResultsPanel extends VBox {
         }
 
         if (!imageAnalysisService.isConfigured()) {
-            showAlert(Alert.AlertType.ERROR, "API Key Required",
-                    "Please configure your API key in Settings (AI Analysis tab).");
+            String provider = ConfigService.getInstance().getAiProvider();
+            if ("moondream".equalsIgnoreCase(provider)) {
+                showAlert(Alert.AlertType.ERROR, "Moondream Not Available",
+                        "Moondream Python dependencies not found.\nInstall with: pip install \"transformers>=4.51,<5\" torch Pillow accelerate\nThen verify the Python path in Settings (AI Analysis tab).");
+            } else {
+                showAlert(Alert.AlertType.ERROR, "API Key Required",
+                        "Please configure your API key in Settings (AI Analysis tab).");
+            }
             return;
         }
 
@@ -623,8 +629,10 @@ public class ResultsPanel extends VBox {
         String providerName = imageAnalysisService.getProviderName();
         confirm.setTitle("Analyze Images");
         confirm.setHeaderText("Analyze " + supportedImages.size() + " image(s) with " + providerName + "?");
-        confirm.setContentText("This will use the " + providerName + " API to analyze each image and populate metadata fields (tags, persons, place, rating)." +
-                unsupportedMsg + "\n\nNote: API usage incurs costs.");
+        boolean isLocal = "moondream".equalsIgnoreCase(ConfigService.getInstance().getAiProvider());
+        String costNote = isLocal ? "\n\nMoondream runs locally — no API costs." : "\n\nNote: API usage incurs costs.";
+        confirm.setContentText("This will use " + providerName + " to analyze each image and populate metadata fields (tags, persons, place, rating)." +
+                unsupportedMsg + costNote);
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {

@@ -56,6 +56,10 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "confidence_threshold": 0.6,
     "cluster_threshold": 0.6
   },
+  "moondream": {
+    "python_path": "python3",
+    "model": "vikhyatk/moondream2"
+  },
   "ai": {
     "provider": "claude"
   },
@@ -142,7 +146,7 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `ai.provider` | string | `claude` | AI provider: "claude" or "gemini" |
+| `ai.provider` | string | `claude` | AI provider: "claude", "gemini", or "moondream" |
 
 ### Claude Settings
 
@@ -157,6 +161,17 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 - `claude-opus-4-20250514`
 - `claude-3-5-sonnet-20241022`
 - `claude-3-5-haiku-20241022`
+
+### Moondream Settings (Local AI)
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `moondream.python_path` | string | `python3` | Path to Python executable with moondream package |
+| `moondream.model` | string | `vikhyatk/moondream2` | Moondream model identifier |
+
+**Prerequisites:** `pip install "transformers>=4.51,<5" torch Pillow accelerate`
+
+**Notes:** Moondream runs locally with no API key required. The model (~1.5 GB) is downloaded automatically on first use. GPU acceleration is **strongly recommended** — install PyTorch with CUDA support: `pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124`
 
 ### Face Recognition Settings
 
@@ -224,6 +239,7 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 ├── photostat.log.1          # Rotated log files
 ├── photostat.log.2
 ├── photostat_faces.py       # Face detection Python script (extracted from JAR)
+├── photostat_moondream.py   # Moondream AI analysis script (extracted from JAR)
 ├── map.html                 # GPS map view (generated at runtime)
 ├── cache/                   # Thumbnail cache directory
 │   └── *.jpg                # Cached thumbnails

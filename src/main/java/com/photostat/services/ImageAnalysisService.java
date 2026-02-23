@@ -16,15 +16,14 @@ import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.time.Duration;
@@ -32,9 +31,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * Service for analyzing images using Claude or Gemini vision APIs.
+ * Service for analyzing images using Claude, Gemini, or Moondream (local) vision APIs.
  */
 public class ImageAnalysisService {
 
@@ -50,6 +51,10 @@ public class ImageAnalysisService {
     private static final int MAX_IMAGE_SIZE = 1024;  // Max dimension in pixels for API optimization
     private static final float JPEG_QUALITY = 0.85f; // JPEG compression quality
 
+    // Moondream persistent worker
+    private MoondreamWorker moondreamWorker;
+    private final Path moondreamScriptPath;
+
     private ImageAnalysisService() {
         this.configService = ConfigService.getInstance();
         this.sidecarService = SidecarService.getInstance();
@@ -58,6 +63,11 @@ public class ImageAnalysisService {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
+
+        // Set up Moondream script path and extract from resources
+        String userHome = System.getProperty("user.home");
+        this.moondreamScriptPath = Path.of(userHome, ".photostat", "photostat_moondream.py");
+        extractMoondreamScript();
     }
 
     public static synchronized ImageAnalysisService getInstance() {
@@ -101,12 +111,14 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Analyze an image using the configured AI provider (Claude or Gemini).
+     * Analyze an image using the configured AI provider (Claude, Gemini, or Moondream).
      */
     public AnalysisResult analyzeImage(String imagePath) {
         String provider = configService.getAiProvider();
         if ("gemini".equalsIgnoreCase(provider)) {
             return analyzeImageWithGemini(imagePath);
+        } else if ("moondream".equalsIgnoreCase(provider)) {
+            return analyzeImageWithMoondream(imagePath);
         } else {
             return analyzeImageWithClaude(imagePath);
         }
@@ -334,6 +346,409 @@ public class ImageAnalysisService {
         }
     }
 
+    /**
+     * Analyze an image using the local Moondream model via a persistent Python worker.
+     * Uses multiple simple questions instead of a single complex prompt, since Moondream
+     * is a small model that works best with short, direct queries.
+     */
+    private AnalysisResult analyzeImageWithMoondream(String imagePath) {
+        AnalysisResult result = new AnalysisResult();
+
+        try {
+            Path path = Path.of(imagePath);
+            if (!Files.exists(path)) {
+                result.setError("Image file not found: " + imagePath);
+                return result;
+            }
+
+            // Optimize image and write to temp file for Python to read
+            byte[] optimizedBytes = optimizeImageForApi(path.toFile());
+            if (optimizedBytes == null) {
+                result.setError("Failed to process image");
+                return result;
+            }
+
+            Path tempImage = Files.createTempFile("photostat_moondream_", ".jpg");
+            try {
+                Files.write(tempImage, optimizedBytes);
+
+                // Lazy-init worker (synchronized for thread safety)
+                MoondreamWorker worker = getMoondreamWorker();
+                String tempPath = tempImage.toString();
+
+                logger.info("ImageAnalysisService", "Sending image to Moondream (local): " + imagePath);
+
+                // Ask multiple simple questions in one call — encodes the image only once
+                List<String> prompts = List.of(
+                        "List descriptive tags for this photo separated by commas. Include the type of photography, main subjects, mood, and setting.",
+                        "Are there any people in this image? If yes, briefly describe each person. If no, say \"none\".",
+                        "What is the location or type of place shown in this image? Give a short answer.",
+                        "Rate the photographic quality of this image from 1 to 5 stars. Consider composition, sharpness, and artistic value. Reply with just the number of stars like: ***"
+                );
+
+                List<String> responses = worker.analyzeMulti(tempPath, prompts);
+
+                String tagsResponse = responses.size() > 0 ? responses.get(0) : "";
+                String personsResponse = responses.size() > 1 ? responses.get(1) : "";
+                String placeResponse = responses.size() > 2 ? responses.get(2) : "";
+                String ratingResponse = responses.size() > 3 ? responses.get(3) : "";
+
+                logger.debug("ImageAnalysisService", "Moondream tags: " + tagsResponse);
+                logger.debug("ImageAnalysisService", "Moondream persons: " + personsResponse);
+                logger.debug("ImageAnalysisService", "Moondream place: " + placeResponse);
+                logger.debug("ImageAnalysisService", "Moondream rating: " + ratingResponse);
+
+                parseMoondreamResults(result, tagsResponse, personsResponse, placeResponse, ratingResponse);
+
+                // Save analysis cache if successful
+                if (!result.hasError()) {
+                    saveAnalysisCache(imagePath);
+                }
+
+                logger.info("ImageAnalysisService", "Moondream analysis complete. Tags: " + result.getTags().size() +
+                        ", Persons: " + result.getPersons().size() + ", Rating: " + result.getRating());
+
+            } finally {
+                Files.deleteIfExists(tempImage);
+            }
+
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to analyze image with Moondream", e);
+            result.setError("Moondream analysis failed: " + e.getMessage());
+            // Null out worker on failure so it recreates on next call
+            synchronized (this) {
+                if (moondreamWorker != null) {
+                    moondreamWorker.close();
+                    moondreamWorker = null;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Parse Moondream's simple text responses into an AnalysisResult.
+     */
+    private void parseMoondreamResults(AnalysisResult result, String tagsResponse,
+                                        String personsResponse, String placeResponse, String ratingResponse) {
+        // Parse tags — split on commas, clean up
+        if (tagsResponse != null && !tagsResponse.isEmpty()) {
+            List<String> tags = new ArrayList<>();
+            for (String tag : tagsResponse.split(",")) {
+                String cleaned = tag.trim()
+                        .replaceAll("^[-•*\\d.]+\\s*", "") // remove list markers
+                        .replaceAll("^\"(.*)\"$", "$1");    // remove quotes
+                if (!cleaned.isEmpty() && cleaned.length() < 50) {
+                    // Capitalize first letter
+                    tags.add(cleaned.substring(0, 1).toUpperCase() + cleaned.substring(1));
+                }
+            }
+            result.setTags(tags);
+        }
+
+        // Parse persons
+        if (personsResponse != null && !personsResponse.isEmpty()) {
+            String lower = personsResponse.toLowerCase().trim();
+            if (!lower.contains("none") && !lower.contains("no people") && !lower.contains("no one")
+                    && !lower.startsWith("no") && !lower.contains("there are no") && !lower.contains("there is no")) {
+                // Strip leading "yes, " / "yes " prefix that Moondream often adds
+                String stripped = personsResponse.trim().replaceFirst("(?i)^yes[,.:;!]?\\s*", "");
+                List<String> persons = new ArrayList<>();
+                // Split on common delimiters
+                for (String person : stripped.split("[,;]|\\band\\b")) {
+                    String cleaned = person.trim()
+                            .replaceAll("^[-•*\\d.]+\\s*", "")
+                            .replaceAll("^\"(.*)\"$", "$1");
+                    if (!cleaned.isEmpty() && cleaned.length() < 80) {
+                        persons.add(cleaned);
+                    }
+                }
+                result.setPersons(persons);
+            }
+        }
+
+        // Parse place
+        if (placeResponse != null && !placeResponse.isEmpty()) {
+            String cleaned = placeResponse.trim();
+            String lower = cleaned.toLowerCase();
+            if (!lower.contains("cannot determine") && !lower.contains("not possible")
+                    && !lower.equals("unknown") && !lower.equals("null") && !lower.equals("n/a")) {
+                // Take first sentence if response is long
+                int period = cleaned.indexOf('.');
+                if (period > 0 && period < 80) {
+                    cleaned = cleaned.substring(0, period);
+                } else if (cleaned.length() > 80) {
+                    cleaned = cleaned.substring(0, 80);
+                }
+                result.setPlace(cleaned);
+            }
+        }
+
+        // Parse rating — look for star patterns or numbers
+        if (ratingResponse != null && !ratingResponse.isEmpty()) {
+            String rating = null;
+            // Count asterisks
+            long starCount = ratingResponse.chars().filter(c -> c == '*').count();
+            if (starCount >= 1 && starCount <= 5) {
+                rating = "*".repeat((int) starCount);
+            } else {
+                // Look for digit 1-5
+                for (char c : ratingResponse.toCharArray()) {
+                    if (c >= '1' && c <= '5') {
+                        rating = "*".repeat(c - '0');
+                        break;
+                    }
+                }
+            }
+            if (rating == null) {
+                rating = "***"; // default to average
+            }
+            result.setRating(rating);
+        }
+    }
+
+    /**
+     * Get or create the Moondream worker (lazy init with crash recovery).
+     */
+    private synchronized MoondreamWorker getMoondreamWorker() throws IOException {
+        if (moondreamWorker == null) {
+            moondreamWorker = new MoondreamWorker();
+        }
+        return moondreamWorker;
+    }
+
+    /**
+     * Extract the Moondream Python script from JAR resources to ~/.photostat/.
+     */
+    private void extractMoondreamScript() {
+        try (InputStream is = getClass().getResourceAsStream("/photostat_moondream.py")) {
+            if (is == null) {
+                logger.debug("ImageAnalysisService", "Moondream Python script not found in resources");
+                return;
+            }
+            Files.createDirectories(moondreamScriptPath.getParent());
+            Files.copy(is, moondreamScriptPath, StandardCopyOption.REPLACE_EXISTING);
+            logger.debug("ImageAnalysisService", "Extracted Moondream script to: " + moondreamScriptPath);
+        } catch (IOException e) {
+            logger.error("ImageAnalysisService", "Failed to extract Moondream script", e);
+        }
+    }
+
+    /**
+     * Check if Moondream Python dependencies are available.
+     */
+    public boolean isMoondreamAvailable() {
+        Process process = null;
+        try {
+            String pythonPath = configService.getMoondreamPythonPath();
+            ProcessBuilder pb = new ProcessBuilder(pythonPath, moondreamScriptPath.toString(), "check");
+            pb.redirectErrorStream(true);
+            process = pb.start();
+
+            String output;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                output = reader.lines().collect(Collectors.joining("\n"));
+            }
+
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            return finished && process.exitValue() == 0 && output.contains("\"status\": \"ok\"");
+        } catch (Exception e) {
+            logger.debug("ImageAnalysisService", "Moondream check failed: " + e.getMessage());
+            return false;
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }
+    }
+
+    /**
+     * Get Moondream version/device info.
+     */
+    public String getMoondreamVersionInfo() {
+        Process process = null;
+        try {
+            String pythonPath = configService.getMoondreamPythonPath();
+            ProcessBuilder pb = new ProcessBuilder(pythonPath, moondreamScriptPath.toString(), "check");
+            pb.redirectErrorStream(true);
+            process = pb.start();
+
+            String output;
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                output = reader.lines().collect(Collectors.joining("\n"));
+            }
+
+            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                return "Timeout checking Moondream";
+            }
+            return output;
+        } catch (Exception e) {
+            return "Error: " + e.getMessage();
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }
+    }
+
+    /**
+     * Shutdown the Moondream worker process. Call on application exit.
+     */
+    public synchronized void shutdown() {
+        if (moondreamWorker != null) {
+            moondreamWorker.close();
+            moondreamWorker = null;
+        }
+    }
+
+    /**
+     * Persistent Moondream Python worker — loads model once and handles multiple
+     * analyze requests over stdin/stdout JSON protocol.
+     */
+    private class MoondreamWorker {
+        private final Process process;
+        private final PrintWriter stdin;
+        private final BufferedReader stdout;
+        private final Thread stderrThread;
+        private final List<String> stderrLines = java.util.Collections.synchronizedList(new ArrayList<>());
+
+        MoondreamWorker() throws IOException {
+            String pythonPath = configService.getMoondreamPythonPath();
+            logger.info("ImageAnalysisService", "Launching Moondream worker: " + pythonPath + " " + moondreamScriptPath);
+            ProcessBuilder pb = new ProcessBuilder(pythonPath, moondreamScriptPath.toString(), "worker");
+            pb.redirectErrorStream(false);
+            this.process = pb.start();
+            this.stdin = new PrintWriter(new OutputStreamWriter(process.getOutputStream()), true);
+            this.stdout = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+            // Stderr thread — captures output for error reporting
+            this.stderrThread = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        stderrLines.add(line);
+                        logger.info("ImageAnalysisService", "Moondream worker: " + line);
+                    }
+                } catch (IOException e) {
+                    logger.debug("ImageAnalysisService", "Moondream stderr read error: " + e.getMessage());
+                }
+            });
+            stderrThread.setDaemon(true);
+            stderrThread.start();
+
+            // Wait for ready signal with timeout (model loading can take a while)
+            logger.info("ImageAnalysisService", "Starting Moondream worker (model loading may take 10-60s)...");
+            String readyLine = null;
+            String line;
+            long deadline = System.currentTimeMillis() + 120_000; // 2 minute timeout
+            while ((line = stdout.readLine()) != null) {
+                if (line.contains("\"ready\"")) {
+                    readyLine = line;
+                    break;
+                }
+                // Check if it's an error response from the script
+                if (line.contains("\"error\"")) {
+                    process.destroyForcibly();
+                    throw new IOException("Moondream worker failed to start: " + line);
+                }
+                logger.info("ImageAnalysisService", "Moondream worker init: " + line);
+                if (System.currentTimeMillis() > deadline) {
+                    process.destroyForcibly();
+                    throw new IOException("Moondream worker timed out during model loading (120s)");
+                }
+            }
+            if (readyLine == null) {
+                process.destroyForcibly();
+                // Wait briefly for stderr thread to capture error output
+                try { stderrThread.join(2000); } catch (InterruptedException ignored) {}
+                String stderrOutput = stderrLines.isEmpty() ? "no error output"
+                        : String.join("\n", stderrLines.subList(Math.max(0, stderrLines.size() - 10), stderrLines.size()));
+                throw new IOException("Moondream worker closed before sending ready signal. Stderr: " + stderrOutput);
+            }
+
+            // Log device info
+            try {
+                JsonNode readyMsg = objectMapper.readTree(readyLine);
+                String device = readyMsg.path("device").asText("unknown");
+                logger.info("ImageAnalysisService", "Moondream worker ready — device: " + device);
+            } catch (Exception ignored) {
+                logger.info("ImageAnalysisService", "Moondream worker ready");
+            }
+        }
+
+        String analyze(String imagePath, String prompt) throws IOException {
+            ObjectNode request = objectMapper.createObjectNode();
+            request.put("command", "analyze");
+            request.put("image_path", imagePath);
+            request.put("prompt", prompt);
+            stdin.println(objectMapper.writeValueAsString(request));
+
+            String responseLine = stdout.readLine();
+            if (responseLine == null) {
+                throw new IOException("Moondream worker closed unexpectedly");
+            }
+
+            JsonNode response = objectMapper.readTree(responseLine);
+            String status = response.path("status").asText("");
+            if (!"ok".equals(status)) {
+                throw new IOException("Moondream worker error: " + response.path("message").asText("unknown error"));
+            }
+
+            return response.path("response").asText("");
+        }
+
+        /**
+         * Encode image once and answer multiple questions — much faster than separate analyze calls.
+         */
+        List<String> analyzeMulti(String imagePath, List<String> prompts) throws IOException {
+            ObjectNode request = objectMapper.createObjectNode();
+            request.put("command", "analyze_multi");
+            request.put("image_path", imagePath);
+            ArrayNode promptsArray = objectMapper.createArrayNode();
+            for (String prompt : prompts) {
+                promptsArray.add(prompt);
+            }
+            request.set("prompts", promptsArray);
+            stdin.println(objectMapper.writeValueAsString(request));
+
+            String responseLine = stdout.readLine();
+            if (responseLine == null) {
+                throw new IOException("Moondream worker closed unexpectedly");
+            }
+
+            JsonNode response = objectMapper.readTree(responseLine);
+            String status = response.path("status").asText("");
+            if (!"ok".equals(status)) {
+                throw new IOException("Moondream worker error: " + response.path("message").asText("unknown error"));
+            }
+
+            List<String> results = new ArrayList<>();
+            JsonNode responses = response.path("responses");
+            if (responses.isArray()) {
+                for (JsonNode r : responses) {
+                    results.add(r.asText(""));
+                }
+            }
+            return results;
+        }
+
+        void close() {
+            try {
+                stdin.println(objectMapper.writeValueAsString(Map.of("command", "shutdown")));
+            } catch (Exception ignored) {}
+            stdin.close();
+            try {
+                stderrThread.join(3000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            process.destroyForcibly();
+        }
+    }
+
     String getMediaType(String imagePath) {
         String lower = imagePath.toLowerCase();
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
@@ -558,10 +973,13 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Check if the API key is configured for the current provider.
+     * Check if the current provider is configured (API key or Python availability).
      */
     public boolean isConfigured() {
         String provider = configService.getAiProvider();
+        if ("moondream".equalsIgnoreCase(provider)) {
+            return isMoondreamAvailable();
+        }
         String apiKey;
         if ("gemini".equalsIgnoreCase(provider)) {
             apiKey = configService.getGeminiApiKey();
@@ -578,6 +996,8 @@ public class ImageAnalysisService {
         String provider = configService.getAiProvider();
         if ("gemini".equalsIgnoreCase(provider)) {
             return "Gemini";
+        } else if ("moondream".equalsIgnoreCase(provider)) {
+            return "Moondream (Local)";
         } else {
             return "Claude";
         }
@@ -597,6 +1017,8 @@ public class ImageAnalysisService {
             String model;
             if ("gemini".equalsIgnoreCase(provider)) {
                 model = configService.getGeminiModel();
+            } else if ("moondream".equalsIgnoreCase(provider)) {
+                model = configService.getMoondreamModel();
             } else {
                 model = configService.getClaudeModel();
             }
