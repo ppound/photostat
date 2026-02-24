@@ -4,6 +4,7 @@ import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
 import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.LoggingService;
+import com.photostat.services.MetadataSuggestionsCache;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
@@ -30,6 +31,7 @@ public class DetailPanel extends VBox {
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
     private final ImageAnalysisService imageAnalysisService;
+    private final MetadataSuggestionsCache suggestionsCache;
     private final LoggingService logger;
 
     private ImageView previewImage;
@@ -66,6 +68,7 @@ public class DetailPanel extends VBox {
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
         this.imageAnalysisService = ImageAnalysisService.getInstance();
+        this.suggestionsCache = MetadataSuggestionsCache.getInstance();
         this.logger = LoggingService.getInstance();
         initializeUI();
     }
@@ -237,6 +240,11 @@ public class DetailPanel extends VBox {
         tagsField.setPromptText("Comma-separated tags");
         grid.add(tagsLabel, 0, row);
         grid.add(tagsField, 1, row++);
+
+        // Attach autocomplete to metadata fields
+        AutoCompleteHelper.attach(personsField, suggestionsCache::getPersons, true);
+        AutoCompleteHelper.attach(placeField, suggestionsCache::getPlaces, false);
+        AutoCompleteHelper.attach(tagsField, suggestionsCache::getTags, true);
 
         // Rating field
         Label ratingLabel = new Label("Rating:");
@@ -463,6 +471,9 @@ public class DetailPanel extends VBox {
             currentMetadata = null;
             return;
         }
+
+        // Ensure suggestions cache is loaded (lazy, only fetches once)
+        suggestionsCache.ensureLoaded();
 
         // Store current metadata for actions
         currentMetadata = metadata;

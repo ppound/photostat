@@ -3,6 +3,7 @@ package com.photostat.ui;
 import com.photostat.models.ImageMetadata;
 import com.photostat.services.FileOperationsService;
 import com.photostat.services.LoggingService;
+import com.photostat.services.MetadataSuggestionsCache;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
@@ -13,8 +14,11 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -22,7 +26,9 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Screen;
@@ -53,6 +59,7 @@ public class SlideshowStage extends Stage {
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
     private final FileOperationsService fileOperationsService;
+    private final MetadataSuggestionsCache suggestionsCache;
     private final LoggingService logger;
 
     private int currentIndex;
@@ -83,6 +90,7 @@ public class SlideshowStage extends Stage {
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
         this.fileOperationsService = FileOperationsService.getInstance();
+        this.suggestionsCache = MetadataSuggestionsCache.getInstance();
         this.logger = LoggingService.getInstance();
 
         // Root layout
@@ -467,22 +475,19 @@ public class SlideshowStage extends Stage {
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getTags() != null ? String.join(", ", metadata.getTags()) : "";
 
-        TextInputDialog dialog = new TextInputDialog(existing);
-        dialog.initOwner(this);
-        dialog.setTitle("Tags");
-        dialog.setHeaderText("Edit tags for " + metadata.getFileName());
-        dialog.setContentText("Tags (comma-separated):");
-        dialog.showAndWait().ifPresent(input -> {
-            String trimmed = input.trim();
-            if (!trimmed.isEmpty()) {
-                for (String tag : trimmed.split(",")) {
-                    String t = tag.trim();
-                    if (!t.isEmpty()) metadata.addTag(t);
-                }
-            }
-            saveMetadata(metadata);
-            showToast("Tags updated");
-        });
+        showMetadataInputDialog("Tags", "Edit tags for " + metadata.getFileName(),
+                "Tags (comma-separated):", existing, suggestionsCache::getTags, true)
+                .ifPresent(input -> {
+                    String trimmed = input.trim();
+                    if (!trimmed.isEmpty()) {
+                        for (String tag : trimmed.split(",")) {
+                            String t = tag.trim();
+                            if (!t.isEmpty()) metadata.addTag(t);
+                        }
+                    }
+                    saveMetadata(metadata);
+                    showToast("Tags updated");
+                });
     }
 
     private void promptAddPerson() {
@@ -490,22 +495,19 @@ public class SlideshowStage extends Stage {
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getPersons() != null ? String.join(", ", metadata.getPersons()) : "";
 
-        TextInputDialog dialog = new TextInputDialog(existing);
-        dialog.initOwner(this);
-        dialog.setTitle("Persons");
-        dialog.setHeaderText("Edit persons for " + metadata.getFileName());
-        dialog.setContentText("Persons (comma-separated):");
-        dialog.showAndWait().ifPresent(input -> {
-            String trimmed = input.trim();
-            if (!trimmed.isEmpty()) {
-                for (String person : trimmed.split(",")) {
-                    String p = person.trim();
-                    if (!p.isEmpty()) metadata.addPerson(p);
-                }
-            }
-            saveMetadata(metadata);
-            showToast("Persons updated");
-        });
+        showMetadataInputDialog("Persons", "Edit persons for " + metadata.getFileName(),
+                "Persons (comma-separated):", existing, suggestionsCache::getPersons, true)
+                .ifPresent(input -> {
+                    String trimmed = input.trim();
+                    if (!trimmed.isEmpty()) {
+                        for (String person : trimmed.split(",")) {
+                            String p = person.trim();
+                            if (!p.isEmpty()) metadata.addPerson(p);
+                        }
+                    }
+                    saveMetadata(metadata);
+                    showToast("Persons updated");
+                });
     }
 
     private void promptSetPlace() {
@@ -513,16 +515,54 @@ public class SlideshowStage extends Stage {
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getPlace() != null ? metadata.getPlace() : "";
 
-        TextInputDialog dialog = new TextInputDialog(existing);
+        showMetadataInputDialog("Place", "Edit place for " + metadata.getFileName(),
+                "Place:", existing, suggestionsCache::getPlaces, false)
+                .ifPresent(input -> {
+                    metadata.setPlace(input.trim());
+                    saveMetadata(metadata);
+                    showToast("Place updated");
+                });
+    }
+
+    /**
+     * Show a dialog with an autocomplete-enabled text field for metadata input.
+     */
+    private java.util.Optional<String> showMetadataInputDialog(String title, String header,
+            String label, String currentValue,
+            java.util.function.Supplier<List<String>> suggestions, boolean commaSeparated) {
+        Dialog<String> dialog = new Dialog<>();
         dialog.initOwner(this);
-        dialog.setTitle("Place");
-        dialog.setHeaderText("Edit place for " + metadata.getFileName());
-        dialog.setContentText("Place:");
-        dialog.showAndWait().ifPresent(input -> {
-            metadata.setPlace(input.trim());
-            saveMetadata(metadata);
-            showToast("Place updated");
+        dialog.setTitle(title);
+        dialog.setHeaderText(header);
+
+        ButtonType okButton = new ButtonType("OK", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(okButton, ButtonType.CANCEL);
+
+        TextField field = new TextField(currentValue);
+        field.setPrefWidth(350);
+        AutoCompleteHelper.attach(field, suggestions, commaSeparated);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(10, 10, 10, 10));
+        grid.add(new Label(label), 0, 0);
+        grid.add(field, 1, 0);
+        GridPane.setHgrow(field, Priority.ALWAYS);
+
+        dialog.getDialogPane().setContent(grid);
+
+        // Focus the text field when dialog opens
+        Platform.runLater(field::requestFocus);
+
+        dialog.setResultConverter(buttonType -> {
+            if (buttonType == okButton) {
+                return field.getText();
+            }
+            return null;
         });
+
+        return dialog.showAndWait();
     }
 
     private void saveMetadata(ImageMetadata metadata) {
