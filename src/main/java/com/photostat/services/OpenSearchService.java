@@ -637,6 +637,21 @@ public class OpenSearchService {
     }
 
     /**
+     * Search for images within a date range, sorted by date descending.
+     */
+    public List<ImageMetadata> searchByDateRange(String fromDate, String toDate, int from, int size) throws IOException {
+        Map<String, Object> filters = new HashMap<>();
+        // Must pass LocalDateTime so addFilters hits the date_from/date_to branch
+        // (String values would match the term filter branch instead)
+        java.time.LocalDate from_date = java.time.LocalDate.parse(fromDate);
+        java.time.LocalDate to_date = java.time.LocalDate.parse(toDate);
+        filters.put("date_from", from_date.atStartOfDay());
+        filters.put("date_to", to_date.atTime(23, 59, 59));
+        SearchResult result = search(null, filters, from, size);
+        return result.getResults();
+    }
+
+    /**
      * Generate a consistent document ID from file path.
      * Normalizes path to handle case-insensitivity on Windows.
      */

@@ -1,6 +1,8 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.ConfigService;
+import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
 import com.photostat.services.SidecarService;
@@ -27,6 +29,7 @@ public class DetailPanel extends VBox {
     private final ThumbnailService thumbnailService;
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
+    private final ImageAnalysisService imageAnalysisService;
     private final LoggingService logger;
 
     private ImageView previewImage;
@@ -46,6 +49,7 @@ public class DetailPanel extends VBox {
     private Button saveMetadataButton;
     private Button copyMetadataButton;
     private Button pasteMetadataButton;
+    private Button analyzeButton;
     private Runnable metadataSavedCallback;
     private java.util.function.Consumer<String> statusCallback;
 
@@ -61,6 +65,7 @@ public class DetailPanel extends VBox {
         this.thumbnailService = ThumbnailService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
+        this.imageAnalysisService = ImageAnalysisService.getInstance();
         this.logger = LoggingService.getInstance();
         initializeUI();
     }
@@ -97,7 +102,11 @@ public class DetailPanel extends VBox {
         Button openFolderButton = new Button("Open Folder");
         openFolderButton.setOnAction(e -> openCurrentFolder());
 
-        HBox buttonBox = new HBox(10, openButton, openFolderButton);
+        analyzeButton = new Button("Analyze");
+        analyzeButton.setOnAction(e -> analyzeCurrentImage());
+        analyzeButton.setTooltip(new Tooltip("Analyze image with AI to populate metadata"));
+
+        HBox buttonBox = new HBox(10, openButton, openFolderButton, analyzeButton);
 
         // Scrollable content
         ScrollPane scrollPane = new ScrollPane();
@@ -233,7 +242,27 @@ public class DetailPanel extends VBox {
         Label ratingLabel = new Label("Rating:");
         ratingLabel.setStyle("-fx-font-weight: bold;");
         ratingField = new TextField();
-        ratingField.setPromptText("e.g., *, **, ***, ****, *****");
+        ratingField.setPromptText("1-5 or * to *****");
+        ratingField.setTextFormatter(new TextFormatter<String>(change -> {
+            if (!change.isContentChange()) return change;
+            String newText = change.getControlText().substring(0, change.getRangeStart())
+                    + change.getText()
+                    + change.getControlText().substring(change.getRangeEnd());
+            if (newText.isEmpty()) return change;
+            // Convert single digit 1-5 to stars
+            if (newText.matches("[1-5]")) {
+                int n = Integer.parseInt(newText);
+                String stars = "*".repeat(n);
+                change.setText(stars);
+                change.setRange(0, change.getControlText().length());
+                change.setCaretPosition(n);
+                change.setAnchor(n);
+                return change;
+            }
+            // Only allow 1-5 star characters
+            if (newText.matches("\\*{1,5}")) return change;
+            return null;
+        }));
         grid.add(ratingLabel, 0, row);
         grid.add(ratingField, 1, row++);
 
@@ -645,6 +674,99 @@ public class DetailPanel extends VBox {
                 }
             }).start();
         }
+    }
+
+    private void analyzeCurrentImage() {
+        ImageMetadata metadata = getCurrentMetadata();
+        if (metadata == null) return;
+
+        String filePath = metadata.getFilePath();
+        String lower = filePath.toLowerCase();
+        if (!(lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+              lower.endsWith(".png") || lower.endsWith(".gif") || lower.endsWith(".webp"))) {
+            showError("Unsupported Format", "AI analysis only supports JPG, PNG, GIF, and WebP images.");
+            return;
+        }
+
+        if (!imageAnalysisService.isConfigured()) {
+            String provider = ConfigService.getInstance().getAiProvider();
+            if ("moondream".equalsIgnoreCase(provider)) {
+                showError("Moondream Not Available",
+                        "Moondream Python dependencies not found.\nInstall with: pip install \"transformers>=4.51,<5\" torch Pillow accelerate");
+            } else {
+                showError("API Key Required", "Please configure your API key in Settings (AI Analysis tab).");
+            }
+            return;
+        }
+
+        if (imageAnalysisService.isAnalysisCached(filePath)) {
+            updateStatusMessage("Analysis already cached for " + metadata.getFileName());
+            return;
+        }
+
+        String providerName = imageAnalysisService.getProviderName();
+        analyzeButton.setDisable(true);
+        analyzeButton.setText("Analyzing...");
+        updateStatusMessage("Analyzing " + metadata.getFileName() + " with " + providerName + "...");
+
+        new Thread(() -> {
+            try {
+                ImageAnalysisService.AnalysisResult result = imageAnalysisService.analyzeImage(filePath);
+
+                Platform.runLater(() -> {
+                    analyzeButton.setDisable(false);
+                    analyzeButton.setText("Analyze");
+
+                    if (result.hasError()) {
+                        showError("Analysis Failed", result.getError());
+                        updateStatusMessage("Analysis failed: " + result.getError());
+                    } else {
+                        // Merge results without overwriting user data
+                        if (result.getTags() != null) {
+                            for (String tag : result.getTags()) metadata.addTag(tag);
+                        }
+                        if (result.getPersons() != null) {
+                            for (String person : result.getPersons()) metadata.addPerson(person);
+                        }
+                        if (result.getPlace() != null && !result.getPlace().isEmpty()) {
+                            if (metadata.getPlace() == null || metadata.getPlace().isEmpty()) {
+                                metadata.setPlace(result.getPlace());
+                            }
+                        }
+                        if (result.getRating() != null && !result.getRating().isEmpty()) {
+                            if (metadata.getRating() == null || metadata.getRating().isEmpty()) {
+                                metadata.setRating(result.getRating());
+                            }
+                        }
+
+                        // Persist
+                        try {
+                            openSearchService.updateDocument(metadata);
+                            sidecarService.writeSidecar(metadata);
+                        } catch (Exception e) {
+                            logger.error("DetailPanel", "Failed to save analysis results", e);
+                        }
+
+                        // Refresh display
+                        showMetadata(metadata);
+                        if (metadataSavedCallback != null) metadataSavedCallback.run();
+                        updateStatusMessage("Analysis complete for " + metadata.getFileName());
+                    }
+                });
+            } catch (Exception e) {
+                logger.error("DetailPanel", "Analysis failed", e);
+                Platform.runLater(() -> {
+                    analyzeButton.setDisable(false);
+                    analyzeButton.setText("Analyze");
+                    showError("Analysis Error", e.getMessage());
+                    updateStatusMessage("Analysis error: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private void updateStatusMessage(String message) {
+        if (statusCallback != null) statusCallback.accept(message);
     }
 
     private void openCurrentFolder() {
