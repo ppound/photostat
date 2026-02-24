@@ -232,12 +232,15 @@ public class TimelinePanel extends BorderPane {
 
     private void buildMonthSections(VBox monthsBox, TreeMap<String, Long> months) {
         monthsBox.getChildren().clear();
+        int index = 0;
         for (Map.Entry<String, Long> entry : months.entrySet()) {
-            monthsBox.getChildren().add(buildMonthSection(entry.getKey(), entry.getValue()));
+            // Only expand the first (most recent) month
+            monthsBox.getChildren().add(buildMonthSection(entry.getKey(), entry.getValue(), index == 0));
+            index++;
         }
     }
 
-    private VBox buildMonthSection(String monthKey, long count) {
+    private VBox buildMonthSection(String monthKey, long count, boolean expanded) {
         VBox section = new VBox(4);
         section.setPadding(new Insets(4, 0, 8, 0));
 
@@ -260,38 +263,73 @@ public class TimelinePanel extends BorderPane {
             toDate = monthKey;
         }
 
+        String finalFromDate = fromDate;
+        String finalToDate = toDate;
+
         // Month header
         HBox header = new HBox(8);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(4, 8, 4, 8));
+        header.setCursor(Cursor.HAND);
+
+        Label arrow = new Label(expanded ? "\u25BC" : "\u25B6");
+        arrow.setStyle("-fx-text-fill: #aaa; -fx-font-size: 11;");
 
         Label monthLabel = new Label(monthName);
         monthLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
         monthLabel.setStyle("-fx-text-fill: #ddd;");
 
-        Label monthCount = new Label(String.valueOf(count));
+        Label monthCount = new Label("(" + count + ")");
         monthCount.setStyle("-fx-text-fill: #888; -fx-font-size: 12;");
 
         Separator sep = new Separator();
         HBox.setHgrow(sep, Priority.ALWAYS);
 
-        String finalFromDate = fromDate;
-        String finalToDate = toDate;
-
-        // Thumbnail grid
-        FlowPane thumbnailGrid = new FlowPane(4, 4);
-        thumbnailGrid.setPadding(new Insets(4, 0, 0, 0));
         Button slideshowBtn = new Button("\u25B6 Slideshow");
         slideshowBtn.setStyle("-fx-font-size: 11;");
         slideshowBtn.setOnAction(e -> launchSlideshow(finalFromDate, finalToDate, count));
 
-        header.getChildren().addAll(monthLabel, sep, monthCount, slideshowBtn);
+        header.getChildren().addAll(arrow, monthLabel, monthCount, sep, slideshowBtn);
 
-        section.getChildren().addAll(header, thumbnailGrid);
+        // Content area for thumbnails
+        VBox contentArea = new VBox(4);
 
-        // Load initial batch of thumbnails
-        loadThumbnails(thumbnailGrid, section, finalFromDate, finalToDate, 0, INITIAL_BATCH, count);
+        if (expanded) {
+            FlowPane thumbnailGrid = new FlowPane(4, 4);
+            thumbnailGrid.setPadding(new Insets(4, 0, 0, 0));
+            contentArea.getChildren().add(thumbnailGrid);
+            loadThumbnails(thumbnailGrid, contentArea, finalFromDate, finalToDate, 0, INITIAL_BATCH, count);
+            contentArea.setVisible(true);
+            contentArea.setManaged(true);
+        } else {
+            contentArea.setVisible(false);
+            contentArea.setManaged(false);
+        }
 
+        // Click header to expand/collapse
+        header.setOnMouseClicked(e -> {
+            if (e.getTarget() instanceof Button || e.getTarget() instanceof Label &&
+                    ((Label) e.getTarget()).getParent() instanceof Button) {
+                return; // Don't toggle when clicking the slideshow button
+            }
+            boolean isExpanded = contentArea.isVisible();
+            if (isExpanded) {
+                arrow.setText("\u25B6");
+                contentArea.getChildren().clear();
+                contentArea.setVisible(false);
+                contentArea.setManaged(false);
+            } else {
+                arrow.setText("\u25BC");
+                FlowPane thumbnailGrid = new FlowPane(4, 4);
+                thumbnailGrid.setPadding(new Insets(4, 0, 0, 0));
+                contentArea.getChildren().add(thumbnailGrid);
+                loadThumbnails(thumbnailGrid, contentArea, finalFromDate, finalToDate, 0, INITIAL_BATCH, count);
+                contentArea.setVisible(true);
+                contentArea.setManaged(true);
+            }
+        });
+
+        section.getChildren().addAll(header, contentArea);
         return section;
     }
 
