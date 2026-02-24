@@ -27,6 +27,7 @@ public class MainWindow extends BorderPane {
     private DuplicatesPanel duplicatesPanel;
     private FacesPanel facesPanel;
     private MapPanel mapPanel;
+    private TimelinePanel timelinePanel;
     private ChartsPanel chartsPanel;
 
     private Label statusLabel;
@@ -69,17 +70,25 @@ public class MainWindow extends BorderPane {
         mapPanel = new MapPanel();
         mapTab.setContent(mapPanel);
 
+        // Create Timeline tab
+        Tab timelineTab = new Tab("Timeline");
+        timelinePanel = new TimelinePanel();
+        timelinePanel.setStatusCallback(this::updateStatus);
+        timelineTab.setContent(timelinePanel);
+
         // Create Charts tab
         Tab chartsTab = new Tab("Charts");
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, chartsTab);
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, chartsTab);
 
         // Refresh panels when switching tabs
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab == chartsTab) {
                 chartsPanel.refresh();
+            } else if (newTab == timelineTab) {
+                timelinePanel.refresh();
             } else if (newTab == mapTab) {
                 mapPanel.refresh();
             } else if (newTab == facesTab) {
@@ -280,6 +289,10 @@ public class MainWindow extends BorderPane {
         } else if (selectedTab.getText().equals("Map")) {
             if (mapPanel != null) {
                 mapPanel.refresh();
+            }
+        } else if (selectedTab.getText().equals("Timeline")) {
+            if (timelinePanel != null) {
+                timelinePanel.refresh();
             }
         } else if (selectedTab.getText().equals("Charts")) {
             if (chartsPanel != null) {
