@@ -242,7 +242,27 @@ public class DetailPanel extends VBox {
         Label ratingLabel = new Label("Rating:");
         ratingLabel.setStyle("-fx-font-weight: bold;");
         ratingField = new TextField();
-        ratingField.setPromptText("e.g., *, **, ***, ****, *****");
+        ratingField.setPromptText("1-5 or * to *****");
+        ratingField.setTextFormatter(new TextFormatter<String>(change -> {
+            if (!change.isContentChange()) return change;
+            String newText = change.getControlText().substring(0, change.getRangeStart())
+                    + change.getText()
+                    + change.getControlText().substring(change.getRangeEnd());
+            if (newText.isEmpty()) return change;
+            // Convert single digit 1-5 to stars
+            if (newText.matches("[1-5]")) {
+                int n = Integer.parseInt(newText);
+                String stars = "*".repeat(n);
+                change.setText(stars);
+                change.setRange(0, change.getControlText().length());
+                change.setCaretPosition(n);
+                change.setAnchor(n);
+                return change;
+            }
+            // Only allow 1-5 star characters
+            if (newText.matches("\\*{1,5}")) return change;
+            return null;
+        }));
         grid.add(ratingLabel, 0, row);
         grid.add(ratingField, 1, row++);
 
