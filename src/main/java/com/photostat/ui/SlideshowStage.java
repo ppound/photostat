@@ -15,6 +15,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -201,6 +202,18 @@ public class SlideshowStage extends Stage {
                 break;
             case I:
                 toggleHud();
+                event.consume();
+                break;
+            case T:
+                promptAddTag();
+                event.consume();
+                break;
+            case P:
+                promptAddPerson();
+                event.consume();
+                break;
+            case L:
+                promptSetPlace();
                 event.consume();
                 break;
             case DELETE:
@@ -447,6 +460,85 @@ public class SlideshowStage extends Stage {
                 }
             }
         });
+    }
+
+    private void promptAddTag() {
+        if (images.isEmpty()) return;
+        ImageMetadata metadata = images.get(currentIndex);
+        String existing = metadata.getTags() != null ? String.join(", ", metadata.getTags()) : "";
+
+        TextInputDialog dialog = new TextInputDialog(existing);
+        dialog.initOwner(this);
+        dialog.setTitle("Tags");
+        dialog.setHeaderText("Edit tags for " + metadata.getFileName());
+        dialog.setContentText("Tags (comma-separated):");
+        dialog.showAndWait().ifPresent(input -> {
+            String trimmed = input.trim();
+            if (!trimmed.isEmpty()) {
+                for (String tag : trimmed.split(",")) {
+                    String t = tag.trim();
+                    if (!t.isEmpty()) metadata.addTag(t);
+                }
+            }
+            saveMetadata(metadata);
+            showToast("Tags updated");
+        });
+    }
+
+    private void promptAddPerson() {
+        if (images.isEmpty()) return;
+        ImageMetadata metadata = images.get(currentIndex);
+        String existing = metadata.getPersons() != null ? String.join(", ", metadata.getPersons()) : "";
+
+        TextInputDialog dialog = new TextInputDialog(existing);
+        dialog.initOwner(this);
+        dialog.setTitle("Persons");
+        dialog.setHeaderText("Edit persons for " + metadata.getFileName());
+        dialog.setContentText("Persons (comma-separated):");
+        dialog.showAndWait().ifPresent(input -> {
+            String trimmed = input.trim();
+            if (!trimmed.isEmpty()) {
+                for (String person : trimmed.split(",")) {
+                    String p = person.trim();
+                    if (!p.isEmpty()) metadata.addPerson(p);
+                }
+            }
+            saveMetadata(metadata);
+            showToast("Persons updated");
+        });
+    }
+
+    private void promptSetPlace() {
+        if (images.isEmpty()) return;
+        ImageMetadata metadata = images.get(currentIndex);
+        String existing = metadata.getPlace() != null ? metadata.getPlace() : "";
+
+        TextInputDialog dialog = new TextInputDialog(existing);
+        dialog.initOwner(this);
+        dialog.setTitle("Place");
+        dialog.setHeaderText("Edit place for " + metadata.getFileName());
+        dialog.setContentText("Place:");
+        dialog.showAndWait().ifPresent(input -> {
+            metadata.setPlace(input.trim());
+            saveMetadata(metadata);
+            showToast("Place updated");
+        });
+    }
+
+    private void saveMetadata(ImageMetadata metadata) {
+        if (ratingCallback != null) {
+            ratingCallback.accept(metadata, metadata.getRating());
+        }
+        Thread thread = new Thread(() -> {
+            try {
+                openSearchService.updateDocument(metadata);
+                sidecarService.writeSidecar(metadata);
+            } catch (Exception e) {
+                logger.error("SlideshowStage", "Failed to save metadata for " + metadata.getFilePath(), e);
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void showToast(String text) {
