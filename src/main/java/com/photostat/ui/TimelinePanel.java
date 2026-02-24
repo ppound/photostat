@@ -47,8 +47,6 @@ public class TimelinePanel extends BorderPane {
     private final Map<String, VBox> yearContentMap = new LinkedHashMap<>();
     private final Set<String> expandedYears = new HashSet<>();
 
-    // Track loaded images per month grid for slideshow
-    private final Map<FlowPane, List<ImageMetadata>> gridImagesMap = new HashMap<>();
 
     public TimelinePanel() {
         this.openSearchService = OpenSearchService.getInstance();
@@ -277,22 +275,21 @@ public class TimelinePanel extends BorderPane {
         Separator sep = new Separator();
         HBox.setHgrow(sep, Priority.ALWAYS);
 
+        String finalFromDate = fromDate;
+        String finalToDate = toDate;
+
         // Thumbnail grid
         FlowPane thumbnailGrid = new FlowPane(4, 4);
         thumbnailGrid.setPadding(new Insets(4, 0, 0, 0));
-        gridImagesMap.put(thumbnailGrid, new ArrayList<>());
+        Button slideshowBtn = new Button("\u25B6 Slideshow");
+        slideshowBtn.setStyle("-fx-font-size: 11;");
+        slideshowBtn.setOnAction(e -> launchSlideshow(finalFromDate, finalToDate, count));
 
-        Hyperlink slideshowLink = new Hyperlink("Slideshow");
-        slideshowLink.setStyle("-fx-text-fill: #6699cc; -fx-font-size: 11;");
-        slideshowLink.setOnAction(e -> launchSlideshow(thumbnailGrid, 0));
-
-        header.getChildren().addAll(monthLabel, sep, monthCount, slideshowLink);
+        header.getChildren().addAll(monthLabel, sep, monthCount, slideshowBtn);
 
         section.getChildren().addAll(header, thumbnailGrid);
 
         // Load initial batch of thumbnails
-        String finalFromDate = fromDate;
-        String finalToDate = toDate;
         loadThumbnails(thumbnailGrid, section, finalFromDate, finalToDate, 0, INITIAL_BATCH, count);
 
         return section;
@@ -307,17 +304,7 @@ public class TimelinePanel extends BorderPane {
                 Platform.runLater(() -> {
                     int fitSize = Math.max(60, thumbnailSize / 2);
 
-                    // Track images for this grid
-                    List<ImageMetadata> gridImages = gridImagesMap.get(grid);
-                    if (gridImages == null) {
-                        gridImages = new ArrayList<>();
-                        gridImagesMap.put(grid, gridImages);
-                    }
-
                     for (ImageMetadata image : images) {
-                        gridImages.add(image);
-                        final int imageIndex = gridImages.size() - 1;
-
                         ImageView imageView = new ImageView();
                         imageView.setFitWidth(fitSize);
                         imageView.setFitHeight(fitSize);
@@ -385,16 +372,36 @@ public class TimelinePanel extends BorderPane {
         thread.start();
     }
 
-    private void launchSlideshow(FlowPane grid, int startIndex) {
-        List<ImageMetadata> images = gridImagesMap.get(grid);
-        if (images == null || images.isEmpty()) return;
+    private void launchSlideshow(String fromDate, String toDate, long totalCount) {
+        updateStatus("Loading all images for slideshow...");
 
-        BiConsumer<ImageMetadata, String> ratingCallback = (metadata, rating) -> {
-            Platform.runLater(() -> detailPanel.showMetadata(metadata));
-        };
+        Thread thread = new Thread(() -> {
+            try {
+                // Fetch all images for this month, not just the loaded thumbnails
+                int batchSize = (int) Math.min(totalCount, 10000);
+                List<ImageMetadata> allImages = openSearchService.searchByDateRange(fromDate, toDate, 0, batchSize);
 
-        SlideshowStage slideshow = new SlideshowStage(images, startIndex, ratingCallback);
-        slideshow.show();
+                Platform.runLater(() -> {
+                    if (allImages.isEmpty()) {
+                        updateStatus("No images found for slideshow");
+                        return;
+                    }
+
+                    BiConsumer<ImageMetadata, String> ratingCallback = (metadata, rating) -> {
+                        Platform.runLater(() -> detailPanel.showMetadata(metadata));
+                    };
+
+                    SlideshowStage slideshow = new SlideshowStage(allImages, 0, ratingCallback);
+                    slideshow.show();
+                    updateStatus("Slideshow: " + allImages.size() + " images");
+                });
+            } catch (Exception e) {
+                logger.error("TimelinePanel", "Failed to load images for slideshow", e);
+                Platform.runLater(() -> updateStatus("Failed to load slideshow: " + e.getMessage()));
+            }
+        });
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void openInSystemViewer(String filePath) {
