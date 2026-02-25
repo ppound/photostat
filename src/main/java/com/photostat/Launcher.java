@@ -3,6 +3,7 @@ package com.photostat;
 import com.photostat.cli.AnalyzeCli;
 import com.photostat.cli.DuplicatesCli;
 import com.photostat.cli.FaceDetectCli;
+import com.photostat.cli.RcloneUploadCli;
 import com.photostat.cli.ThumbnailCacheCli;
 
 /**
@@ -33,13 +34,15 @@ public class Launcher {
         for (String arg : args) {
             if ("--analyze".equals(arg) || "--cache-thumbnails".equals(arg) ||
                     "--find-duplicates".equals(arg) || "--detect-faces".equals(arg) ||
+                    "--rclone-upload".equals(arg) ||
                     "--help".equals(arg) || "-h".equals(arg)) {
                 // --help should show CLI help if it's the only arg or paired with a CLI command
                 if ("--help".equals(arg) || "-h".equals(arg)) {
                     // Check if a CLI command is also present
                     for (String a : args) {
                         if ("--analyze".equals(a) || "--cache-thumbnails".equals(a) ||
-                                "--find-duplicates".equals(a) || "--detect-faces".equals(a)) {
+                                "--find-duplicates".equals(a) || "--detect-faces".equals(a) ||
+                                "--rclone-upload".equals(a)) {
                             return true;
                         }
                     }
@@ -50,7 +53,8 @@ public class Launcher {
                     }
                 }
                 return "--analyze".equals(arg) || "--cache-thumbnails".equals(arg) ||
-                        "--find-duplicates".equals(arg) || "--detect-faces".equals(arg);
+                        "--find-duplicates".equals(arg) || "--detect-faces".equals(arg) ||
+                        "--rclone-upload".equals(arg);
             }
         }
         return false;
@@ -66,13 +70,17 @@ public class Launcher {
         String command = null;
         for (String arg : args) {
             if ("--cache-thumbnails".equals(arg) || "--find-duplicates".equals(arg) ||
-                    "--analyze".equals(arg) || "--detect-faces".equals(arg)) {
+                    "--analyze".equals(arg) || "--detect-faces".equals(arg) ||
+                    "--rclone-upload".equals(arg)) {
                 command = arg;
                 break;
             }
         }
 
-        if ("--cache-thumbnails".equals(command)) {
+        if ("--rclone-upload".equals(command)) {
+            RcloneUploadCli cli = new RcloneUploadCli();
+            exitCode = cli.run(args);
+        } else if ("--cache-thumbnails".equals(command)) {
             ThumbnailCacheCli cli = new ThumbnailCacheCli();
             exitCode = cli.run(args);
         } else if ("--find-duplicates".equals(command)) {
@@ -101,6 +109,7 @@ public class Launcher {
         System.out.println("  java -jar photostat.jar --cache-thumbnails Pre-generate thumbnail cache");
         System.out.println("  java -jar photostat.jar --find-duplicates  Find duplicate images");
         System.out.println("  java -jar photostat.jar --detect-faces     Detect and cluster faces");
+        System.out.println("  java -jar photostat.jar --rclone-upload    Upload to cloud via rclone");
         System.out.println("  java -jar photostat.jar --help             Show this help");
         System.out.println();
         System.out.println("For command-specific options:");
@@ -108,5 +117,6 @@ public class Launcher {
         System.out.println("  java -jar photostat.jar --cache-thumbnails --help");
         System.out.println("  java -jar photostat.jar --find-duplicates --help");
         System.out.println("  java -jar photostat.jar --detect-faces --help");
+        System.out.println("  java -jar photostat.jar --rclone-upload --help");
     }
 }

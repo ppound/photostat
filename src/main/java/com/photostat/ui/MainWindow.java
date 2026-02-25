@@ -2,13 +2,18 @@ package com.photostat.ui;
 
 import com.photostat.services.ConfigService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.RcloneService;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Main application window with tab-based navigation.
@@ -201,11 +206,16 @@ public class MainWindow extends BorderPane {
             }
         });
 
+        Button uploadButton = new Button("Upload to Cloud");
+        uploadButton.setOnAction(e -> showUploadDialog());
+
         toolbar.getItems().addAll(
                 settingsButton,
                 new Separator(),
                 refreshButton,
-                clearFiltersButton
+                clearFiltersButton,
+                new Separator(),
+                uploadButton
         );
 
         return toolbar;
@@ -313,6 +323,152 @@ public class MainWindow extends BorderPane {
         });
         thread.setDaemon(true);
         thread.start();
+    }
+
+    private void showUploadDialog() {
+        RcloneService rcloneService = RcloneService.getInstance();
+
+        // Check if rclone is installed
+        if (!rcloneService.isInstalled()) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("rclone Not Found");
+            alert.setHeaderText(null);
+            alert.setContentText("rclone is not installed or not on PATH. Install it from https://rclone.org/downloads/ and configure the path in Settings > Cloud Upload.");
+            alert.show();
+            return;
+        }
+
+        // Check if configured
+        if (!rcloneService.isConfigured()) {
+            Alert alert = new Alert(Alert.AlertType.WARNING);
+            alert.setTitle("Cloud Upload Not Configured");
+            alert.setHeaderText(null);
+            alert.setContentText("Please configure a remote name and upload directories in Settings > Cloud Upload.");
+            alert.show();
+            return;
+        }
+
+        String remoteName = configService.getRcloneRemoteName();
+        String remotePath = configService.getRcloneRemotePath();
+        List<String> dirs = configService.getRcloneUploadDirectories();
+
+        // Create progress dialog
+        Dialog<Void> progressDialog = new Dialog<>();
+        progressDialog.setTitle("Upload to Cloud");
+        progressDialog.setHeaderText("Uploading to " + remoteName + ":" + (remotePath.isEmpty() ? "" : remotePath));
+
+        ProgressBar progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(500);
+
+        Label statusLabel = new Label("Starting upload...");
+        statusLabel.setPrefWidth(500);
+        statusLabel.setWrapText(true);
+
+        TextArea outputArea = new TextArea();
+        outputArea.setEditable(false);
+        outputArea.setPrefWidth(500);
+        outputArea.setPrefHeight(200);
+        outputArea.setWrapText(true);
+        outputArea.setStyle("-fx-font-family: monospace; -fx-font-size: 11px;");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(20));
+        content.getChildren().addAll(progressBar, statusLabel, outputArea);
+        VBox.setVgrow(outputArea, Priority.ALWAYS);
+
+        progressDialog.getDialogPane().setContent(content);
+        progressDialog.setResizable(true);
+        progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
+
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+
+        Task<List<RcloneService.UploadResult>> uploadTask = new Task<>() {
+            @Override
+            protected List<RcloneService.UploadResult> call() {
+                int totalDirs = dirs.size();
+                java.util.List<RcloneService.UploadResult> results = new java.util.ArrayList<>();
+
+                for (int i = 0; i < totalDirs; i++) {
+                    if (cancelled.get()) break;
+
+                    String dir = dirs.get(i);
+                    int dirIndex = i + 1;
+
+                    Platform.runLater(() -> {
+                        progressBar.setProgress((double)(dirIndex - 1) / totalDirs);
+                        statusLabel.setText("[" + dirIndex + "/" + totalDirs + "] Uploading: " + dir);
+                    });
+
+                    RcloneService.UploadResult result = rcloneService.uploadDirectory(
+                            dir, remoteName, remotePath, false, progress -> {
+                                if (!cancelled.get() && progress.getStatusLine() != null && !progress.getStatusLine().isEmpty()) {
+                                    Platform.runLater(() -> {
+                                        outputArea.appendText(progress.getStatusLine() + "\n");
+                                    });
+                                }
+                            });
+                    results.add(result);
+                }
+
+                return results;
+            }
+        };
+
+        progressDialog.setOnCloseRequest(event -> {
+            cancelled.set(true);
+            rcloneService.cancelUpload();
+        });
+
+        uploadTask.setOnSucceeded(event -> {
+            List<RcloneService.UploadResult> results = uploadTask.getValue();
+            long successCount = results.stream().filter(RcloneService.UploadResult::isSuccess).count();
+            long failCount = results.size() - successCount;
+
+            Platform.runLater(() -> {
+                progressBar.setProgress(1.0);
+                if (cancelled.get()) {
+                    statusLabel.setText("Upload cancelled");
+                } else {
+                    statusLabel.setText("Upload complete: " + successCount + " succeeded, " + failCount + " failed");
+                }
+
+                // Show errors if any
+                for (RcloneService.UploadResult r : results) {
+                    if (!r.isSuccess()) {
+                        outputArea.appendText("\n--- ERROR: " + r.getDirectory() + " ---\n");
+                        if (r.getOutput() != null && !r.getOutput().isEmpty()) {
+                            outputArea.appendText(r.getOutput());
+                        }
+                        if (r.getError() != null && !r.getError().isEmpty()) {
+                            outputArea.appendText(r.getError() + "\n");
+                        }
+                    }
+                }
+
+                progressDialog.getDialogPane().getButtonTypes().clear();
+                progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            });
+        });
+
+        uploadTask.setOnFailed(event -> {
+            Throwable e = uploadTask.getException();
+            Platform.runLater(() -> {
+                statusLabel.setText("Error: " + (e != null ? e.getMessage() : "Unknown error"));
+                if (e != null) {
+                    outputArea.appendText("\n" + e.getMessage() + "\n");
+                }
+                progressDialog.getDialogPane().getButtonTypes().clear();
+                progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            });
+        });
+
+        Thread thread = new Thread(uploadTask);
+        thread.setDaemon(true);
+        thread.start();
+
+        progressDialog.showAndWait();
+        cancelled.set(true);
+        rcloneService.cancelUpload();
     }
 
     public void updateStatus(String message) {

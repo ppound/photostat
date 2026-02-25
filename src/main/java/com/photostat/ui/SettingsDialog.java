@@ -5,6 +5,7 @@ import com.photostat.models.ImageMetadata;
 import com.photostat.services.ConfigService;
 import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.RcloneService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -83,6 +84,12 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Slider facesClusterSlider;
     private Label facesPythonStatusLabel;
 
+    // rclone cloud upload settings
+    private TextField rclonePathField;
+    private TextField rcloneRemoteNameField;
+    private TextField rcloneRemotePathField;
+    private ListView<String> rcloneUploadDirsListView;
+
     private Label connectionStatusLabel;
 
     public SettingsDialog() {
@@ -121,7 +128,10 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab facesTab = new Tab("Face Recognition");
         facesTab.setContent(createFacesPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab, facesTab);
+        Tab cloudUploadTab = new Tab("Cloud Upload");
+        cloudUploadTab.setContent(createCloudUploadPane());
+
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab, facesTab, cloudUploadTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -682,6 +692,187 @@ public class SettingsDialog extends Dialog<Boolean> {
         return pane;
     }
 
+    private VBox createCloudUploadPane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+
+        int row = 0;
+
+        // rclone path
+        grid.add(new Label("rclone Path:"), 0, row);
+        rclonePathField = new TextField();
+        rclonePathField.setPromptText("rclone");
+        rclonePathField.setPrefWidth(200);
+        grid.add(rclonePathField, 1, row);
+
+        Button testRcloneButton = new Button("Test");
+        Label rcloneVersionLabel = new Label("");
+        testRcloneButton.setOnAction(e -> {
+            rcloneVersionLabel.setText("Checking...");
+            setStatusStyle(rcloneVersionLabel, "text-muted");
+            new Thread(() -> {
+                // Temporarily set path for the check
+                String original = configService.getRclonePath();
+                String testPath = rclonePathField.getText().trim();
+                if (!testPath.isEmpty()) {
+                    configService.setRclonePath(testPath);
+                }
+                RcloneService rcloneService = RcloneService.getInstance();
+                String version = rcloneService.getVersion();
+                configService.setRclonePath(original);
+                Platform.runLater(() -> {
+                    if (version != null) {
+                        rcloneVersionLabel.setText(version);
+                        setStatusStyle(rcloneVersionLabel, "text-success");
+                    } else {
+                        rcloneVersionLabel.setText("rclone not found");
+                        setStatusStyle(rcloneVersionLabel, "text-error");
+                    }
+                });
+            }).start();
+        });
+        HBox rcloneTestBox = new HBox(10, testRcloneButton, rcloneVersionLabel);
+        grid.add(rcloneTestBox, 2, row++);
+
+        // Remote name
+        grid.add(new Label("Remote Name:"), 0, row);
+        rcloneRemoteNameField = new TextField();
+        rcloneRemoteNameField.setPromptText("gdrive");
+        rcloneRemoteNameField.setPrefWidth(200);
+        grid.add(rcloneRemoteNameField, 1, row);
+
+        Button listRemotesButton = new Button("List Remotes");
+        listRemotesButton.setOnAction(e -> {
+            new Thread(() -> {
+                String original = configService.getRclonePath();
+                String testPath = rclonePathField.getText().trim();
+                if (!testPath.isEmpty()) {
+                    configService.setRclonePath(testPath);
+                }
+                RcloneService rcloneService = RcloneService.getInstance();
+                List<String> remotes = rcloneService.listRemotes();
+                configService.setRclonePath(original);
+                Platform.runLater(() -> {
+                    if (remotes.isEmpty()) {
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setTitle("rclone Remotes");
+                        alert.setHeaderText(null);
+                        alert.setContentText("No remotes configured. Run 'rclone config' to set up a remote.");
+                        alert.show();
+                    } else {
+                        ChoiceDialog<String> dialog = new ChoiceDialog<>(remotes.get(0), remotes);
+                        dialog.setTitle("Select Remote");
+                        dialog.setHeaderText("Available rclone remotes:");
+                        dialog.setContentText("Remote:");
+                        dialog.showAndWait().ifPresent(selected -> rcloneRemoteNameField.setText(selected));
+                    }
+                });
+            }).start();
+        });
+        grid.add(listRemotesButton, 2, row++);
+
+        // Remote path
+        grid.add(new Label("Remote Path:"), 0, row);
+        rcloneRemotePathField = new TextField();
+        rcloneRemotePathField.setPromptText("photos/backup");
+        rcloneRemotePathField.setPrefWidth(200);
+        grid.add(rcloneRemotePathField, 1, row++);
+
+        // Test connection button
+        Button testConnectionButton = new Button("Test Connection");
+        Label connectionTestLabel = new Label("");
+        testConnectionButton.setOnAction(e -> {
+            String remoteName = rcloneRemoteNameField.getText().trim();
+            if (remoteName.isEmpty()) {
+                connectionTestLabel.setText("Please enter a remote name");
+                setStatusStyle(connectionTestLabel, "text-error");
+                return;
+            }
+            connectionTestLabel.setText("Testing...");
+            setStatusStyle(connectionTestLabel, "text-muted");
+            String remotePath = rcloneRemotePathField.getText().trim();
+            new Thread(() -> {
+                String original = configService.getRclonePath();
+                String testPath = rclonePathField.getText().trim();
+                if (!testPath.isEmpty()) {
+                    configService.setRclonePath(testPath);
+                }
+                RcloneService rcloneService = RcloneService.getInstance();
+                String error = rcloneService.testConnection(remoteName, remotePath);
+                configService.setRclonePath(original);
+                Platform.runLater(() -> {
+                    if (error == null) {
+                        connectionTestLabel.setText("Connection successful!");
+                        setStatusStyle(connectionTestLabel, "text-success");
+                    } else {
+                        connectionTestLabel.setText(error.length() > 80 ? error.substring(0, 80) + "..." : error);
+                        setStatusStyle(connectionTestLabel, "text-error");
+                    }
+                });
+            }).start();
+        });
+        HBox connTestBox = new HBox(10, testConnectionButton, connectionTestLabel);
+        connectionTestLabel.setWrapText(true);
+        HBox.setHgrow(connectionTestLabel, Priority.ALWAYS);
+        grid.add(connTestBox, 0, row++, 3, 1);
+
+        // Upload directories
+        Label uploadDirsLabel = new Label("Upload Directories:");
+        uploadDirsLabel.setStyle("-fx-font-weight: bold;");
+
+        rcloneUploadDirsListView = new ListView<>();
+        rcloneUploadDirsListView.setPrefHeight(120);
+        rcloneUploadDirsListView.getItems().addAll(configService.getRcloneUploadDirectories());
+
+        Button addDirButton = new Button("Add...");
+        addDirButton.setOnAction(e -> {
+            javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
+            chooser.setTitle("Select Upload Directory");
+            java.io.File selected = chooser.showDialog(getDialogPane().getScene().getWindow());
+            if (selected != null) {
+                String path = selected.getAbsolutePath();
+                if (!rcloneUploadDirsListView.getItems().contains(path)) {
+                    rcloneUploadDirsListView.getItems().add(path);
+                }
+            }
+        });
+
+        Button removeDirButton = new Button("Remove");
+        removeDirButton.setOnAction(e -> {
+            String selected = rcloneUploadDirsListView.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                rcloneUploadDirsListView.getItems().remove(selected);
+            }
+        });
+
+        HBox dirButtonsBox = new HBox(10, addDirButton, removeDirButton);
+
+        // Info label
+        Label infoLabel = new Label(
+                "rclone must be installed separately. Run 'rclone config' in a terminal to set up a remote.\n" +
+                "Upload directories are separate from indexing directories.\n" +
+                "Download rclone: https://rclone.org/downloads/"
+        );
+        infoLabel.setWrapText(true);
+        infoLabel.getStyleClass().add("info-label");
+
+        pane.getChildren().addAll(grid, new Separator(), uploadDirsLabel, rcloneUploadDirsListView, dirButtonsBox, new Separator(), infoLabel);
+
+        ScrollPane scrollPane = new ScrollPane(pane);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        // Wrap in VBox so Tab can host it properly
+        VBox wrapper = new VBox(scrollPane);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        return wrapper;
+    }
+
     private void checkFacesPython() {
         facesPythonStatusLabel.setText("Checking...");
         setStatusStyle(facesPythonStatusLabel, "text-muted");
@@ -937,6 +1128,13 @@ public class SettingsDialog extends Dialog<Boolean> {
         facesPythonPathField.setText(configService.getFacesPythonPath());
         facesConfidenceSlider.setValue(configService.getFacesConfidenceThreshold());
         facesClusterSlider.setValue(configService.getFacesClusterThreshold());
+
+        // rclone settings
+        rclonePathField.setText(configService.getRclonePath());
+        rcloneRemoteNameField.setText(configService.getRcloneRemoteName());
+        rcloneRemotePathField.setText(configService.getRcloneRemotePath());
+        rcloneUploadDirsListView.getItems().clear();
+        rcloneUploadDirsListView.getItems().addAll(configService.getRcloneUploadDirectories());
     }
 
     private void saveSettings() {
@@ -1017,6 +1215,15 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Analysis prompt
         configService.setClaudeAnalysisPrompt(analysisPromptArea.getText());
+
+        // rclone settings
+        String rclonePath = rclonePathField.getText().trim();
+        if (!rclonePath.isEmpty()) {
+            configService.setRclonePath(rclonePath);
+        }
+        configService.setRcloneRemoteName(rcloneRemoteNameField.getText().trim());
+        configService.setRcloneRemotePath(rcloneRemotePathField.getText().trim());
+        configService.setRcloneUploadDirectories(new ArrayList<>(rcloneUploadDirsListView.getItems()));
 
         // Face recognition settings
         configService.setFacesEnabled(facesEnabledCheckbox.isSelected());

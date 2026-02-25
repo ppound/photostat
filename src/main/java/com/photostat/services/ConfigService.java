@@ -150,6 +150,17 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure rclone section exists
+        if (!config.containsKey("rclone")) {
+            Map<String, Object> rclone = new HashMap<>();
+            rclone.put("rclone_path", "rclone");
+            rclone.put("remote_name", "");
+            rclone.put("remote_path", "");
+            rclone.put("upload_directories", new ArrayList<>());
+            config.put("rclone", rclone);
+            changed = true;
+        }
+
         if (changed) {
             saveConfig();
             System.out.println("Config migrated with new default values");
@@ -239,6 +250,14 @@ public class ConfigService {
         faces.put("confidence_threshold", 0.6);
         faces.put("cluster_threshold", 0.6);
         defaultConfig.put("faces", faces);
+
+        // rclone cloud upload settings
+        Map<String, Object> rclone = new HashMap<>();
+        rclone.put("rclone_path", "rclone");
+        rclone.put("remote_name", "");
+        rclone.put("remote_path", "");
+        rclone.put("upload_directories", new ArrayList<>());
+        defaultConfig.put("rclone", rclone);
 
         return defaultConfig;
     }
@@ -553,6 +572,58 @@ public class ConfigService {
 
     public void setFacesClusterThreshold(double threshold) {
         setNestedValue("faces", "cluster_threshold", threshold);
+    }
+
+    // rclone settings
+    public String getRclonePath() {
+        return getNestedString("rclone", "rclone_path", "rclone");
+    }
+
+    public void setRclonePath(String path) {
+        setNestedValue("rclone", "rclone_path", path);
+    }
+
+    public String getRcloneRemoteName() {
+        return getNestedString("rclone", "remote_name", "");
+    }
+
+    public void setRcloneRemoteName(String remoteName) {
+        setNestedValue("rclone", "remote_name", remoteName);
+    }
+
+    public String getRcloneRemotePath() {
+        return getNestedString("rclone", "remote_path", "");
+    }
+
+    public void setRcloneRemotePath(String remotePath) {
+        setNestedValue("rclone", "remote_path", remotePath);
+    }
+
+    @SuppressWarnings("unchecked")
+    public synchronized List<String> getRcloneUploadDirectories() {
+        Map<String, Object> rclone = (Map<String, Object>) config.get("rclone");
+        if (rclone != null && rclone.containsKey("upload_directories")) {
+            return new ArrayList<>((List<String>) rclone.get("upload_directories"));
+        }
+        return new ArrayList<>();
+    }
+
+    public void setRcloneUploadDirectories(List<String> directories) {
+        setNestedValue("rclone", "upload_directories", new ArrayList<>(directories));
+    }
+
+    public void addRcloneUploadDirectory(String directory) {
+        List<String> directories = getRcloneUploadDirectories();
+        if (!directories.contains(directory)) {
+            directories.add(directory);
+            setRcloneUploadDirectories(directories);
+        }
+    }
+
+    public void removeRcloneUploadDirectory(String directory) {
+        List<String> directories = getRcloneUploadDirectories();
+        directories.remove(directory);
+        setRcloneUploadDirectories(directories);
     }
 
     public static String getDefaultAnalysisPrompt() {
