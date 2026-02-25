@@ -19,6 +19,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Exploring Charts](#exploring-charts)
 - [GPS Map](#gps-map)
 - [Thumbnail Cache](#thumbnail-cache)
+- [Cloud Upload](#cloud-upload)
 - [Sidecar Files](#sidecar-files)
 - [Large Collections](#large-collections)
 - [Dark Theme](#dark-theme)
@@ -698,6 +699,67 @@ java -jar photostat-java-1.9.8-executable.jar --cache-thumbnails -p 2 --quiet
 - Cache key includes file path, modification time, and thumbnail size
 - If source image is modified, a new thumbnail is generated automatically
 - When cache exceeds max size, oldest thumbnails are removed (LRU eviction)
+
+---
+
+## Cloud Upload
+
+PhotoStat can upload your photos to cloud storage via [rclone](https://rclone.org/), which supports 70+ providers including Google Photos, Amazon S3, Dropbox, OneDrive, and more.
+
+### Prerequisites
+
+1. **Install rclone:** Download from [rclone.org/downloads](https://rclone.org/downloads/)
+2. **Configure a remote:** Run `rclone config` in a terminal to set up your cloud provider
+
+### Configuration
+
+1. Open **Settings** and navigate to the **Cloud Upload** tab
+2. Configure the following:
+
+   | Setting | Description | Example |
+   |---------|-------------|---------|
+   | **rclone Path** | Path to rclone executable | `rclone` (if on PATH) |
+   | **Remote Name** | Name of your configured rclone remote | `gphotos` |
+   | **Remote Path** | Destination path on the remote | `upload` or `album/MyAlbum` |
+   | **Upload Directories** | Local directories to upload from | `C:\Pictures\NewImages` |
+
+3. Use the **Test** button to verify rclone is installed
+4. Use **List Remotes** to see available remotes from your rclone config
+5. Use **Test Connection** to verify the remote is accessible
+6. Click **OK** to save
+
+**Important for Google Photos:** The remote path must be `upload` (uploads to main library) or `album/AlbumName` (uploads to a specific album). An empty path will not work.
+
+**Upload directories are separate from indexing directories.** This lets you index your entire photo library but only upload specific folders (e.g., newly processed images).
+
+### Uploading via GUI
+
+1. Click the **Upload to Cloud** button in the toolbar
+2. A progress dialog shows each directory being uploaded with rclone output
+3. Use the **Cancel** button to abort the upload
+4. A summary is shown at completion
+
+### Uploading via CLI
+
+For scripting and scheduling, use the `--rclone-upload` command:
+
+```bash
+# Upload all configured directories
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload
+
+# Preview what would be uploaded
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload --dry-run
+
+# Upload a specific directory (overrides config)
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload --dir /path/to/photos
+
+# Minimal output
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload --quiet
+```
+
+**Incremental uploads:** rclone only transfers new or changed files. Running the upload multiple times is safe and efficient — already-uploaded files are skipped.
+
+**Sidecar exclusion:** `.photostat.json` sidecar files are automatically excluded from uploads.
 
 ---
 

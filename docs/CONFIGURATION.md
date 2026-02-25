@@ -71,6 +71,12 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
   "gemini": {
     "api_key": "",
     "model": "gemini-2.0-flash"
+  },
+  "rclone": {
+    "rclone_path": "rclone",
+    "remote_name": "gphotos",
+    "remote_path": "album/Photostat",
+    "upload_directories": ["/home/user/Pictures/NewImages"]
   }
 }
 ```
@@ -197,6 +203,21 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 - `gemini-2.0-flash` (recommended)
 - `gemini-1.5-flash`
 - `gemini-1.5-pro`
+
+### rclone Settings (Cloud Upload)
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `rclone.rclone_path` | string | `rclone` | Path to rclone executable |
+| `rclone.remote_name` | string | `""` | Name of the configured rclone remote (e.g., `gphotos`) |
+| `rclone.remote_path` | string | `""` | Destination path on the remote (e.g., `upload` or `album/MyAlbum`) |
+| `rclone.upload_directories` | array | `[]` | Local directories to upload |
+
+**Prerequisites:** Install rclone from [rclone.org](https://rclone.org/downloads/) and configure a remote with `rclone config`.
+
+**Google Photos note:** Set `remote_path` to `upload` (main library) or `album/AlbumName` (specific album). An empty path will fail.
+
+**Upload directories are separate from indexing directories.** This allows you to index your entire photo library but only upload specific folders.
 
 ---
 

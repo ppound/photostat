@@ -16,6 +16,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Find Duplicates** - Find and manage duplicate images
 - **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files
 - **Face Recognition** - Automatic face detection and clustering via InsightFace, with person naming and search integration
+- **Cloud Upload** - Upload photos to Google Photos, S3, or 70+ cloud providers via rclone
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
 
@@ -65,6 +66,13 @@ After years of photography and using various software like Lightroom, Capture On
 - **Visual Duplicates** - Perceptual hashing (dHash) finds resized, recompressed, or re-exported copies
 - **Reclaimable Space** - See how much disk space you can recover
 - **Bulk Delete** - Select and remove duplicates with confirmation
+
+### Cloud Upload
+- **rclone Integration** - Upload photos to 70+ cloud providers (Google Photos, S3, Dropbox, etc.)
+- **Separate Upload Directories** - Upload directories are independent from indexing directories
+- **GUI & CLI** - Upload via the toolbar button with progress dialog, or schedule via `--rclone-upload`
+- **Incremental Uploads** - rclone only uploads new/changed files
+- **Sidecar Exclusion** - `.photostat.json` sidecar files are automatically excluded
 
 ### Visualizations
 - **Camera Usage Charts** - See which cameras and lenses you use most
@@ -224,6 +232,12 @@ java -jar photostat-java-1.9.9-executable.jar --detect-faces --parallel 4
 
 # Face detection on a specific directory
 java -jar photostat-java-1.9.9-executable.jar --detect-faces --dir /path/to/photos
+
+# Upload to cloud via rclone
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload
+
+# Preview what would be uploaded
+java -jar photostat-java-1.9.9-executable.jar --rclone-upload --dry-run
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
