@@ -215,7 +215,11 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 
 **Prerequisites:** Install rclone from [rclone.org](https://rclone.org/downloads/) and configure a remote with `rclone config`.
 
-**Google Photos note:** Set `remote_path` to `upload` (main library) or `album/AlbumName` (specific album). An empty path will fail.
+**Google Drive:** Set `remote_path` to a folder path (e.g., `Photos/Processed`). Supports true incremental uploads — only new or modified files are transferred.
+
+**Google Photos:** Set `remote_path` to `upload` (main library) or `album/AlbumName` (specific album). An empty path will fail. Note: Google Photos cannot detect previously uploaded files, so every run re-uploads all files. Use a staging folder to avoid duplicates.
+
+**Google OAuth client ID:** rclone's default client ID is shared across all users and may be rate-limited by Google. If you experience authentication failures, create your own client ID in the [Google Cloud Console](https://console.cloud.google.com/) and enter it during `rclone config`. Enable the Google Drive API or Google Photos Library API as needed.
 
 **Upload directories are separate from indexing directories.** This allows you to index your entire photo library but only upload specific folders.
 

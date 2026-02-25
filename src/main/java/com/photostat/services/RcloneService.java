@@ -15,10 +15,12 @@ public class RcloneService {
 
     private static RcloneService instance;
     private final ConfigService configService;
+    private final LoggingService logger;
     private volatile Process currentProcess;
 
     private RcloneService() {
         this.configService = ConfigService.getInstance();
+        this.logger = LoggingService.getInstance();
     }
 
     public static synchronized RcloneService getInstance() {
@@ -207,11 +209,14 @@ public class RcloneService {
             command.add("--exclude");
             command.add("*.photostat.json");
             command.add("-v");
-            command.add("--stats");
-            command.add("1s");
+            command.add("--stats-log-level");
+            command.add("NOTICE");
             if (dryRun) {
                 command.add("--dry-run");
             }
+
+            // Log the command
+            logger.info("RcloneService", "Running: " + String.join(" ", command));
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -223,9 +228,12 @@ public class RcloneService {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    if (progressCallback != null) {
-                        progressCallback.accept(new UploadProgress(localDir, null, line.trim(), false, null));
+                    line = line.trim();
+                    if (!line.isEmpty()) {
+                        output.append(line).append("\n");
+                        if (progressCallback != null) {
+                            progressCallback.accept(new UploadProgress(localDir, null, line, false, null));
+                        }
                     }
                 }
             }

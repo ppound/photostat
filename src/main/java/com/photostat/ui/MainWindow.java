@@ -381,6 +381,7 @@ public class MainWindow extends BorderPane {
         progressDialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
 
         AtomicBoolean cancelled = new AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicInteger fileCount = new java.util.concurrent.atomic.AtomicInteger(0);
 
         Task<List<RcloneService.UploadResult>> uploadTask = new Task<>() {
             @Override
@@ -395,16 +396,35 @@ public class MainWindow extends BorderPane {
                     int dirIndex = i + 1;
 
                     Platform.runLater(() -> {
-                        progressBar.setProgress((double)(dirIndex - 1) / totalDirs);
                         statusLabel.setText("[" + dirIndex + "/" + totalDirs + "] Uploading: " + dir);
                     });
 
                     RcloneService.UploadResult result = rcloneService.uploadDirectory(
                             dir, remoteName, remotePath, false, progress -> {
                                 if (!cancelled.get() && progress.getStatusLine() != null && !progress.getStatusLine().isEmpty()) {
-                                    Platform.runLater(() -> {
-                                        outputArea.appendText(progress.getStatusLine() + "\n");
-                                    });
+                                    String line = progress.getStatusLine();
+
+                                    // Count copied files from rclone -v output
+                                    // rclone logs "Copied (new)" or "Copied (replaced existing)" for each file
+                                    String lineLower = line.toLowerCase();
+                                    if (lineLower.contains(": copied")) {
+                                        int count = fileCount.incrementAndGet();
+                                        Platform.runLater(() -> {
+                                            statusLabel.setText("[" + dirIndex + "/" + totalDirs + "] Uploading: " + dir + "  (" + count + " files transferred)");
+                                            progressBar.setProgress(-1); // indeterminate
+                                        });
+                                    }
+
+                                    // Filter out noisy stats lines, show transfer and error messages
+                                    boolean isStatsLine = lineLower.startsWith("transferred:") ||
+                                            lineLower.startsWith("elapsed time:") ||
+                                            lineLower.startsWith("checks:") ||
+                                            (lineLower.contains("%") && lineLower.contains("eta"));
+                                    if (!isStatsLine) {
+                                        Platform.runLater(() -> {
+                                            outputArea.appendText(line + "\n");
+                                        });
+                                    }
                                 }
                             });
                     results.add(result);

@@ -728,9 +728,31 @@ PhotoStat can upload your photos to cloud storage via [rclone](https://rclone.or
 5. Use **Test Connection** to verify the remote is accessible
 6. Click **OK** to save
 
-**Important for Google Photos:** The remote path must be `upload` (uploads to main library) or `album/AlbumName` (uploads to a specific album). An empty path will not work.
-
 **Upload directories are separate from indexing directories.** This lets you index your entire photo library but only upload specific folders (e.g., newly processed images).
+
+### Google Drive vs Google Photos
+
+rclone supports both Google Drive and Google Photos as separate remote types. They have different behaviors:
+
+**Google Drive** (`drive` remote type):
+- **Recommended for most users.** Upload to a specific folder and rclone tracks what's already there — re-running the upload skips files that haven't changed.
+- Set **Remote Path** to a folder path (e.g., `Photos/Processed`). The folder is created automatically if it doesn't exist.
+- Supports true incremental uploads — only new or modified files are transferred.
+
+**Google Photos** (`google photos` remote type):
+- Set **Remote Path** to `upload` (main library) or `album/AlbumName` (specific album). An empty path will not work.
+- **Google Photos cannot detect previously uploaded files.** The Google Photos API does not allow rclone to list or compare files in the upload target, so every run will re-upload all files. To avoid duplicates, manage your upload directory so it only contains new files (e.g., move files out after uploading, or use a staging folder).
+- Google Photos may also re-compress or resize images depending on your Google storage plan.
+
+### Creating a Google OAuth Client ID
+
+rclone includes a default Google OAuth client ID, but it is shared across all rclone users and may be rate-limited by Google. If you experience authentication failures or slow uploads, create your own client ID:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or select an existing one)
+3. Enable the **Google Drive API** and/or **Google Photos Library API** (depending on which remote type you use)
+4. Go to **APIs & Services > Credentials** and create an **OAuth 2.0 Client ID** (application type: Desktop app)
+5. When running `rclone config`, enter your client ID and client secret when prompted instead of leaving them blank
 
 ### Uploading via GUI
 
@@ -757,7 +779,7 @@ java -jar photostat-java-1.9.9-executable.jar --rclone-upload --dir /path/to/pho
 java -jar photostat-java-1.9.9-executable.jar --rclone-upload --quiet
 ```
 
-**Incremental uploads:** rclone only transfers new or changed files. Running the upload multiple times is safe and efficient — already-uploaded files are skipped.
+**Incremental uploads:** For most remotes (including Google Drive), rclone only transfers new or changed files. Running the upload multiple times is safe and efficient. **Exception:** Google Photos cannot detect previously uploaded files — see [Google Drive vs Google Photos](#google-drive-vs-google-photos) above.
 
 **Sidecar exclusion:** `.photostat.json` sidecar files are automatically excluded from uploads.
 
