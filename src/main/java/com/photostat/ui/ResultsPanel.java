@@ -109,33 +109,35 @@ public class ResultsPanel extends VBox {
             }
         });
 
+        String multiSelectHint = "\n\nCtrl+Click to select multiple, Shift+Click to select a range.";
+
         // Toolbar for bulk operations
         analyzeSelectedBtn = new Button("Analyze Selected");
         analyzeSelectedBtn.setOnAction(e -> analyzeSelectedImages());
-        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with AI"));
+        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with AI to populate tags, persons, place, and rating." + multiSelectHint));
 
         Button copySelectedBtn = new Button("Copy Selected...");
         copySelectedBtn.setOnAction(e -> copySelectedImages());
+        copySelectedBtn.setTooltip(new Tooltip("Copy selected images to another directory." + multiSelectHint));
 
         Button moveSelectedBtn = new Button("Move Selected...");
         moveSelectedBtn.setOnAction(e -> moveSelectedImages());
+        moveSelectedBtn.setTooltip(new Tooltip("Move selected images to another directory and update the index." + multiSelectHint));
 
         Button deleteSelectedBtn = new Button("Delete Selected");
         deleteSelectedBtn.getStyleClass().add("delete-button");
         deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
+        deleteSelectedBtn.setTooltip(new Tooltip("Permanently delete selected images from disk and remove from index." + multiSelectHint));
 
         Button uploadSelectedBtn = new Button("Upload Selected...");
         uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
-        uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone"));
-
-        Label selectionLabel = new Label("(Use Ctrl+Click or Shift+Click to select multiple)");
-        selectionLabel.getStyleClass().add("info-label-small");
+        uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone. Already-uploaded files can be skipped." + multiSelectHint));
 
         Button slideshowBtn = new Button("Slideshow");
         slideshowBtn.setOnAction(e -> launchSlideshow());
-        slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow (F5)"));
+        slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, uploadSelectedBtn, selectionLabel);
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, uploadSelectedBtn, deleteSelectedBtn);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
