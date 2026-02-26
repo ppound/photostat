@@ -18,7 +18,13 @@ import javafx.stage.Stage;
  */
 public class App extends Application {
 
-    private static final String APP_TITLE = "PhotoStat - Image Metadata Indexer";
+    private static final String APP_TITLE;
+    static {
+        String version = App.class.getPackage().getImplementationVersion();
+        APP_TITLE = version != null
+                ? "PhotoStat " + version + " - Image Metadata Indexer"
+                : "PhotoStat - Image Metadata Indexer";
+    }
     private static Scene mainScene;
 
     @Override
