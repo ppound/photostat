@@ -357,6 +357,7 @@ You can copy, move, or delete images directly from search results:
 |-----------|--------|-------------|
 | **Copy** | Copy Selected... | Copy images to a new directory |
 | **Move** | Move Selected... | Move images to a new directory |
+| **Upload** | Upload Selected... | Upload images to a cloud remote via rclone |
 | **Delete** | Delete Selected | Permanently delete images |
 
 **Copy Images:**
@@ -754,7 +755,28 @@ rclone includes a default Google OAuth client ID, but it is shared across all rc
 4. Go to **APIs & Services > Credentials** and create an **OAuth 2.0 Client ID** (application type: Desktop app)
 5. When running `rclone config`, enter your client ID and client secret when prompted instead of leaving them blank
 
-### Uploading via GUI
+### Uploading Selected Images
+
+You can upload specific images directly from search results:
+
+1. **Select images** in the Search tab results (Ctrl+Click or Shift+Click for multiple)
+2. Click **Upload Selected...** in the toolbar
+3. In the upload dialog:
+
+   | Option | Description |
+   |--------|-------------|
+   | **Remote** | Choose from your configured rclone remotes |
+   | **Remote path** | Destination path on the remote (e.g. `Photos/2024`) |
+   | **Skip already uploaded files** | Checked by default — skips files previously uploaded to the selected remote |
+   | **Dry run** | Preview what would be uploaded without actually transferring |
+
+4. Click **Upload** to start
+5. A progress dialog shows each file being uploaded
+6. The summary shows selected, uploaded, and skipped counts
+
+**Duplicate upload prevention:** Each successful upload is recorded in the image's `.photostat.json` sidecar file. On subsequent uploads, files already sent to the same remote are automatically skipped. Uncheck "Skip already uploaded files" to force re-upload. Uploads to a *different* remote are not skipped — the tracking is per-remote.
+
+### Uploading Directories via GUI
 
 1. Click the **Upload to Cloud** button in the toolbar
 2. A progress dialog shows each directory being uploaded with rclone output
@@ -800,7 +822,8 @@ Sidecar files allow custom metadata (persons, places, tags) to persist even when
   "persons" : [ "John", "Jane" ],
   "place" : "Central Park",
   "tags" : [ "vacation", "family" ],
-  "rating" : "****"
+  "rating" : "****",
+  "cloudUploads" : [ "gphotos", "gdrive" ]
 }
 ```
 

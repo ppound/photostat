@@ -69,6 +69,8 @@ After years of photography and using various software like Lightroom, Capture On
 
 ### Cloud Upload
 - **rclone Integration** - Upload photos to 70+ cloud providers (Google Photos, S3, Dropbox, etc.)
+- **Upload Selected Images** - Select images from search results and upload to any remote with a progress dialog
+- **Duplicate Upload Prevention** - Tracks which remotes each file has been uploaded to; skips already-uploaded files automatically
 - **Separate Upload Directories** - Upload directories are independent from indexing directories
 - **GUI & CLI** - Upload via the toolbar button with progress dialog, or schedule via `--rclone-upload`
 - **Incremental Uploads** - rclone only uploads new/changed files
@@ -159,25 +161,25 @@ Download the latest release from **[GitHub Releases](https://github.com/ppound/p
 
 #### Option A: Windows Installer (.msi)
 
-Download `PhotoStat-1.9.10.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
+Download `PhotoStat-1.9.11.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
 
 #### Option B: macOS Installer (.dmg) — Apple Silicon only
 
-Download `PhotoStat-1.9.10-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+Download `PhotoStat-1.9.11-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
 > **Note:** The macOS installer is unsigned. On first launch, **right-click** the app in Finder and select **Open**, then click **Open** in the dialog. If that doesn't work, go to **System Settings → Privacy & Security** and click **Open Anyway** next to the blocked app message. See [Troubleshooting](docs/TROUBLESHOOTING.md#macos-photostat-is-damaged-or-cannot-be-opened) for details.
 >
-> **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.10-executable-mac-intel.jar`).
+> **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.11-executable-mac-intel.jar`).
 
 #### Option C: Cross-platform JAR
 
-Download `photostat-java-1.9.10-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
+Download `photostat-java-1.9.11-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
 
 ```bash
-java -jar photostat-java-1.9.10-executable.jar
+java -jar photostat-java-1.9.11-executable.jar
 ```
 
-**Intel Mac users:** Download the separate `photostat-java-1.9.10-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
+**Intel Mac users:** Download the separate `photostat-java-1.9.11-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
 
 ### 5. Get Started
 
@@ -207,37 +209,37 @@ PhotoStat includes a CLI for batch image analysis. The CLI requires the cross-pl
 
 ```bash
 # Analyze all configured directories
-java -jar photostat-java-1.9.10-executable.jar --analyze
+java -jar photostat-java-1.9.11-executable.jar --analyze
 
 # Preview what would be analyzed
-java -jar photostat-java-1.9.10-executable.jar --analyze --dry-run
+java -jar photostat-java-1.9.11-executable.jar --analyze --dry-run
 
 # Run with 4 parallel threads
-java -jar photostat-java-1.9.10-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.9.11-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
-java -jar photostat-java-1.9.10-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.9.11-executable.jar --analyze --provider gemini
 
 # Find duplicate images
-java -jar photostat-java-1.9.10-executable.jar --find-duplicates
+java -jar photostat-java-1.9.11-executable.jar --find-duplicates
 
 # Find visually similar images
-java -jar photostat-java-1.9.10-executable.jar --find-duplicates --mode visual
+java -jar photostat-java-1.9.11-executable.jar --find-duplicates --mode visual
 
 # Detect and cluster faces
-java -jar photostat-java-1.9.10-executable.jar --detect-faces
+java -jar photostat-java-1.9.11-executable.jar --detect-faces
 
 # Face detection with 4 parallel workers
-java -jar photostat-java-1.9.10-executable.jar --detect-faces --parallel 4
+java -jar photostat-java-1.9.11-executable.jar --detect-faces --parallel 4
 
 # Face detection on a specific directory
-java -jar photostat-java-1.9.10-executable.jar --detect-faces --dir /path/to/photos
+java -jar photostat-java-1.9.11-executable.jar --detect-faces --dir /path/to/photos
 
 # Upload to cloud via rclone
-java -jar photostat-java-1.9.10-executable.jar --rclone-upload
+java -jar photostat-java-1.9.11-executable.jar --rclone-upload
 
 # Preview what would be uploaded
-java -jar photostat-java-1.9.10-executable.jar --rclone-upload --dry-run
+java -jar photostat-java-1.9.11-executable.jar --rclone-upload --dry-run
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
