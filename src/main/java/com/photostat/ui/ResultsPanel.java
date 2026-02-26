@@ -1040,6 +1040,7 @@ public class ResultsPanel extends VBox {
             filePaths = filteredPaths;
         }
         final int finalSkippedCount = skippedCount;
+        final int totalSelected = images.size();
 
         final List<String> uploadFilePaths = filePaths;
         String dryRunLabel = dryRun ? " (DRY RUN)" : "";
@@ -1122,16 +1123,18 @@ public class ResultsPanel extends VBox {
             Platform.runLater(() -> {
                 progressStage.close();
 
-                String skipMsg = finalSkippedCount > 0
-                        ? "\nSkipped: " + finalSkippedCount + " file(s) already uploaded to " + remoteName
-                        : "";
                 String summary;
                 if (result.isSuccess()) {
-                    summary = dryRun
-                            ? "Dry run complete. " + uploadFilePaths.size() + " file(s) would be uploaded to " + remoteName + ":" + remotePath + skipMsg
-                            : "Upload complete. " + uploadFilePaths.size() + " file(s) uploaded to " + remoteName + ":" + remotePath + skipMsg;
+                    String action = dryRun ? "would be uploaded" : "uploaded";
+                    summary = (dryRun ? "Dry run complete." : "Upload complete.") +
+                            "\nSelected: " + totalSelected + " file(s)" +
+                            (finalSkippedCount > 0 ? "\nSkipped: " + finalSkippedCount + " (already uploaded to " + remoteName + ")" : "") +
+                            "\nUploaded: " + uploadFilePaths.size() + " file(s) " + action + " to " + remoteName + ":" + remotePath;
                 } else {
-                    summary = "Upload finished with errors.\n" + result.getError() + skipMsg;
+                    summary = "Upload finished with errors." +
+                            "\nSelected: " + totalSelected + " file(s)" +
+                            (finalSkippedCount > 0 ? "\nSkipped: " + finalSkippedCount + " (already uploaded to " + remoteName + ")" : "") +
+                            "\n" + result.getError();
                 }
 
                 updateStatus(dryRun ? "Dry run complete" : "Upload complete");
