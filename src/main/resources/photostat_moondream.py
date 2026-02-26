@@ -102,8 +102,9 @@ def worker():
         load_attempts.append(("cuda/bfloat16", {"torch_dtype": torch.bfloat16, "device_map": {"": "cuda"}}))
     elif device == "mps":
         load_attempts.append(("mps/float16", {"torch_dtype": torch.float16, "device_map": {"": "mps"}}))
-    # Always have CPU fallback
-    load_attempts.append(("cpu/float32", {}))
+        load_attempts.append(("mps/float32", {"torch_dtype": torch.float32, "device_map": {"": "mps"}}))
+    # Always have CPU fallback — explicit device_map ensures it doesn't auto-detect MPS/CUDA
+    load_attempts.append(("cpu/float32", {"device_map": {"": "cpu"}}))
 
     for desc, kwargs in load_attempts:
         try:
