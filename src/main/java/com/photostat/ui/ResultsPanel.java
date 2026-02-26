@@ -7,6 +7,7 @@ import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.IndexerService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.RcloneService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
 import javafx.application.Platform;
@@ -48,6 +49,7 @@ public class ResultsPanel extends VBox {
     private final ConfigService configService;
     private final FileOperationsService fileOperationsService;
     private final ImageAnalysisService imageAnalysisService;
+    private final RcloneService rcloneService;
     private final SidecarService sidecarService;
     private final IndexerService indexerService;
     private final LoggingService logger;
@@ -75,6 +77,7 @@ public class ResultsPanel extends VBox {
         this.configService = ConfigService.getInstance();
         this.fileOperationsService = FileOperationsService.getInstance();
         this.imageAnalysisService = ImageAnalysisService.getInstance();
+        this.rcloneService = RcloneService.getInstance();
         this.sidecarService = SidecarService.getInstance();
         this.indexerService = IndexerService.getInstance();
         this.logger = LoggingService.getInstance();
@@ -121,6 +124,10 @@ public class ResultsPanel extends VBox {
         deleteSelectedBtn.getStyleClass().add("delete-button");
         deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
 
+        Button uploadSelectedBtn = new Button("Upload Selected...");
+        uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
+        uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone"));
+
         Label selectionLabel = new Label("(Use Ctrl+Click or Shift+Click to select multiple)");
         selectionLabel.getStyleClass().add("info-label-small");
 
@@ -128,7 +135,7 @@ public class ResultsPanel extends VBox {
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow (F5)"));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, selectionLabel);
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, deleteSelectedBtn, uploadSelectedBtn, selectionLabel);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -906,6 +913,231 @@ public class ResultsPanel extends VBox {
                 logger.error("ResultsPanel", "Failed to save rating for " + metadata.getFilePath(), e);
                 Platform.runLater(() -> updateStatus("Failed to save rating: " + e.getMessage()));
             }
+        });
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Upload selected images to a cloud remote via rclone.
+     */
+    private void uploadSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to upload.");
+            return;
+        }
+
+        if (!rcloneService.isInstalled()) {
+            showAlert(Alert.AlertType.ERROR, "rclone Not Found",
+                    "rclone is not installed or not found on PATH.\nInstall from https://rclone.org/install/");
+            return;
+        }
+
+        showUploadProviderDialog(selected);
+    }
+
+    /**
+     * Show dialog to pick rclone remote and path, then start upload.
+     */
+    private void showUploadProviderDialog(List<ImageMetadata> images) {
+        List<String> remotes = rcloneService.listRemotes();
+        if (remotes.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Remotes Configured",
+                    "No rclone remotes found. Configure one with: rclone config");
+            return;
+        }
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Upload Selected Images");
+        dialog.setHeaderText("Upload " + images.size() + " image(s) to cloud");
+        dialog.initModality(Modality.APPLICATION_MODAL);
+
+        // Remote picker
+        Label remoteLabel = new Label("Remote:");
+        ComboBox<String> remoteCombo = new ComboBox<>();
+        remoteCombo.getItems().addAll(remotes);
+        String defaultRemote = configService.getRcloneRemoteName();
+        if (defaultRemote != null && remotes.contains(defaultRemote)) {
+            remoteCombo.setValue(defaultRemote);
+        } else if (!remotes.isEmpty()) {
+            remoteCombo.setValue(remotes.get(0));
+        }
+        remoteCombo.setPrefWidth(250);
+
+        // Remote path
+        Label pathLabel = new Label("Remote path:");
+        TextField pathField = new TextField();
+        String defaultPath = configService.getRcloneRemotePath();
+        pathField.setText(defaultPath != null ? defaultPath : "");
+        pathField.setPromptText("e.g. Photos/2024");
+        pathField.setPrefWidth(250);
+
+        // Skip already uploaded checkbox
+        CheckBox skipUploadedCheck = new CheckBox("Skip already uploaded files");
+        skipUploadedCheck.setSelected(true);
+        skipUploadedCheck.setTooltip(new Tooltip("Skip files that have already been uploaded to the selected remote"));
+
+        // Dry run checkbox
+        CheckBox dryRunCheck = new CheckBox("Dry run (preview only, don't upload)");
+
+        VBox content = new VBox(10);
+        content.setPadding(new Insets(10));
+        content.getChildren().addAll(remoteLabel, remoteCombo, pathLabel, pathField, skipUploadedCheck, dryRunCheck);
+
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        Button okButton = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okButton.setText("Upload");
+
+        dialog.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                String remoteName = remoteCombo.getValue();
+                String remotePath = pathField.getText().trim();
+                boolean dryRun = dryRunCheck.isSelected();
+                boolean skipUploaded = skipUploadedCheck.isSelected();
+
+                if (remoteName == null || remoteName.isEmpty()) {
+                    showAlert(Alert.AlertType.WARNING, "No Remote", "Please select a remote.");
+                    return;
+                }
+
+                uploadImagesInBackground(images, remoteName, remotePath, dryRun, skipUploaded);
+            }
+        });
+    }
+
+    /**
+     * Upload images in a background thread with progress dialog.
+     */
+    private void uploadImagesInBackground(List<ImageMetadata> images, String remoteName,
+                                           String remotePath, boolean dryRun, boolean skipUploaded) {
+        List<String> filePaths = images.stream()
+                .map(ImageMetadata::getFilePath)
+                .collect(Collectors.toList());
+
+        // Filter out already-uploaded files if requested
+        int skippedCount = 0;
+        if (skipUploaded) {
+            List<String> filteredPaths = new ArrayList<>();
+            for (String path : filePaths) {
+                SidecarService.SidecarData sidecar = sidecarService.readSidecar(path);
+                if (sidecar != null && sidecar.isUploadedTo(remoteName)) {
+                    skippedCount++;
+                } else {
+                    filteredPaths.add(path);
+                }
+            }
+            if (skippedCount > 0) {
+                logger.info("ResultsPanel", "Skipping " + skippedCount + " file(s) already uploaded to " + remoteName);
+            }
+            if (filteredPaths.isEmpty()) {
+                showAlert(Alert.AlertType.INFORMATION, "Nothing to Upload",
+                        "All " + skippedCount + " file(s) have already been uploaded to " + remoteName + ".");
+                return;
+            }
+            filePaths = filteredPaths;
+        }
+        final int finalSkippedCount = skippedCount;
+
+        final List<String> uploadFilePaths = filePaths;
+        String dryRunLabel = dryRun ? " (DRY RUN)" : "";
+        String skipLabel = skippedCount > 0 ? " (" + skippedCount + " skipped)" : "";
+        updateStatus("Uploading " + uploadFilePaths.size() + " file(s) to " + remoteName + dryRunLabel + skipLabel + "...");
+
+        // Create progress dialog
+        Stage progressStage = new Stage();
+        progressStage.initModality(Modality.APPLICATION_MODAL);
+        progressStage.initStyle(StageStyle.UTILITY);
+        progressStage.setTitle("Uploading Images" + dryRunLabel);
+        progressStage.setResizable(true);
+
+        VBox progressContent = new VBox(10);
+        progressContent.setPadding(new Insets(20));
+        progressContent.setAlignment(Pos.CENTER_LEFT);
+        progressContent.setPrefWidth(550);
+        progressContent.setPrefHeight(350);
+
+        Label titleLabel = new Label("Uploading to " + remoteName + ":" + remotePath + dryRunLabel);
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        ProgressBar progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(500);
+        progressBar.setPrefHeight(25);
+
+        Label progressLabel = new Label("0 of " + uploadFilePaths.size() + " files");
+        progressLabel.setStyle("-fx-font-size: 12px;");
+
+        Label currentFileLabel = new Label("Preparing...");
+        currentFileLabel.getStyleClass().add("info-label-small");
+        currentFileLabel.setWrapText(true);
+        currentFileLabel.setMaxWidth(500);
+
+        TextArea outputArea = new TextArea();
+        outputArea.setEditable(false);
+        outputArea.setPrefHeight(150);
+        outputArea.setStyle("-fx-font-family: monospace; -fx-font-size: 11px;");
+        VBox.setVgrow(outputArea, Priority.ALWAYS);
+
+        Button cancelButton = new Button("Cancel");
+        cancelButton.setOnAction(e -> {
+            rcloneService.cancelUpload();
+            cancelButton.setDisable(true);
+            cancelButton.setText("Cancelling...");
+            currentFileLabel.setText("Cancelling...");
+        });
+
+        progressContent.getChildren().addAll(titleLabel, progressBar, progressLabel,
+                currentFileLabel, outputArea, cancelButton);
+
+        javafx.scene.Scene progressScene = new javafx.scene.Scene(progressContent);
+        progressStage.setScene(progressScene);
+        progressStage.show();
+
+        // Center on parent window
+        if (getScene() != null && getScene().getWindow() != null) {
+            progressStage.setX(getScene().getWindow().getX() + (getScene().getWindow().getWidth() - 550) / 2);
+            progressStage.setY(getScene().getWindow().getY() + (getScene().getWindow().getHeight() - 350) / 2);
+        }
+
+        Thread thread = new Thread(() -> {
+            RcloneService.UploadResult result = rcloneService.uploadFiles(
+                    uploadFilePaths, remoteName, remotePath, dryRun,
+                    progress -> Platform.runLater(() -> {
+                        double pct = progress.getTotalFiles() > 0
+                                ? (double) progress.getCurrentFileIndex() / progress.getTotalFiles()
+                                : 0;
+                        progressBar.setProgress(pct);
+                        progressLabel.setText(progress.getCurrentFileIndex() + " of " + progress.getTotalFiles() + " files");
+
+                        if (progress.getCurrentFileName() != null) {
+                            currentFileLabel.setText(progress.getCurrentFileName());
+                        }
+                        if (progress.getStatusLine() != null) {
+                            outputArea.appendText(progress.getStatusLine() + "\n");
+                        }
+                    }));
+
+            Platform.runLater(() -> {
+                progressStage.close();
+
+                String skipMsg = finalSkippedCount > 0
+                        ? "\nSkipped: " + finalSkippedCount + " file(s) already uploaded to " + remoteName
+                        : "";
+                String summary;
+                if (result.isSuccess()) {
+                    summary = dryRun
+                            ? "Dry run complete. " + uploadFilePaths.size() + " file(s) would be uploaded to " + remoteName + ":" + remotePath + skipMsg
+                            : "Upload complete. " + uploadFilePaths.size() + " file(s) uploaded to " + remoteName + ":" + remotePath + skipMsg;
+                } else {
+                    summary = "Upload finished with errors.\n" + result.getError() + skipMsg;
+                }
+
+                updateStatus(dryRun ? "Dry run complete" : "Upload complete");
+                showAlert(result.isSuccess() ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING,
+                        dryRun ? "Dry Run Complete" : "Upload Complete", summary);
+            });
         });
         thread.setDaemon(true);
         thread.start();

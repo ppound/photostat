@@ -3,6 +3,7 @@ package com.photostat.services;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -15,11 +16,13 @@ public class RcloneService {
 
     private static RcloneService instance;
     private final ConfigService configService;
+    private final SidecarService sidecarService;
     private final LoggingService logger;
     private volatile Process currentProcess;
 
     private RcloneService() {
         this.configService = ConfigService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
         this.logger = LoggingService.getInstance();
     }
 
@@ -166,6 +169,35 @@ public class RcloneService {
     }
 
     /**
+     * Progress information for file-based uploads (selected files).
+     */
+    public static class FileUploadProgress {
+        private final int currentFileIndex;
+        private final int totalFiles;
+        private final String currentFileName;
+        private final String statusLine;
+        private final boolean complete;
+        private final String error;
+
+        public FileUploadProgress(int currentFileIndex, int totalFiles, String currentFileName,
+                                  String statusLine, boolean complete, String error) {
+            this.currentFileIndex = currentFileIndex;
+            this.totalFiles = totalFiles;
+            this.currentFileName = currentFileName;
+            this.statusLine = statusLine;
+            this.complete = complete;
+            this.error = error;
+        }
+
+        public int getCurrentFileIndex() { return currentFileIndex; }
+        public int getTotalFiles() { return totalFiles; }
+        public String getCurrentFileName() { return currentFileName; }
+        public String getStatusLine() { return statusLine; }
+        public boolean isComplete() { return complete; }
+        public String getError() { return error; }
+    }
+
+    /**
      * Upload result for a single directory.
      */
     public static class UploadResult {
@@ -279,6 +311,115 @@ public class RcloneService {
         }
 
         return results;
+    }
+
+    /**
+     * Upload specific files to a remote, one at a time for reliable progress tracking.
+     * Uses rclone copyto for each file so we know exactly when each one completes.
+     */
+    public UploadResult uploadFiles(List<String> filePaths, String remoteName, String remotePath,
+                                     boolean dryRun, Consumer<FileUploadProgress> progressCallback) {
+        int totalFiles = filePaths.size();
+        StringBuilder allOutput = new StringBuilder();
+        List<String> errors = new ArrayList<>();
+        int filesCompleted = 0;
+
+        String rclonePath = configService.getRclonePath();
+        String remoteBase = remoteName + ":" + (remotePath != null && !remotePath.isEmpty() ? remotePath : "");
+
+        for (int i = 0; i < filePaths.size(); i++) {
+            String filePath = filePaths.get(i);
+            Path path = Path.of(filePath);
+            String fileName = path.getFileName().toString();
+
+            // Report starting this file
+            if (progressCallback != null) {
+                progressCallback.accept(new FileUploadProgress(
+                        i, totalFiles, fileName,
+                        "Uploading: " + fileName, false, null));
+            }
+
+            try {
+                // Use copyto to upload a single file: rclone copyto <local> <remote>/<filename>
+                String remoteDest = remoteBase.endsWith(":") || remoteBase.endsWith("/")
+                        ? remoteBase + fileName
+                        : remoteBase + "/" + fileName;
+
+                List<String> command = new ArrayList<>();
+                command.add(rclonePath);
+                command.add("copyto");
+                command.add(filePath);
+                command.add(remoteDest);
+                command.add("-v");
+                command.add("--stats-log-level");
+                command.add("NOTICE");
+                if (dryRun) {
+                    command.add("--dry-run");
+                }
+
+                logger.info("RcloneService", "Running: " + String.join(" ", command));
+
+                ProcessBuilder pb = new ProcessBuilder(command);
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
+                currentProcess = process;
+
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (!line.isEmpty()) {
+                            allOutput.append(line).append("\n");
+                            if (progressCallback != null) {
+                                progressCallback.accept(new FileUploadProgress(
+                                        i, totalFiles, fileName,
+                                        line, false, null));
+                            }
+                        }
+                    }
+                }
+
+                int exitCode = process.waitFor();
+                currentProcess = null;
+
+                if (exitCode == 0) {
+                    filesCompleted++;
+                    if (!dryRun) {
+                        sidecarService.addCloudUpload(filePath, remoteName);
+                    }
+                    if (progressCallback != null) {
+                        progressCallback.accept(new FileUploadProgress(
+                                filesCompleted, totalFiles, fileName,
+                                "Uploaded: " + fileName, false, null));
+                    }
+                } else {
+                    String error = fileName + ": rclone exited with code " + exitCode;
+                    errors.add(error);
+                    logger.warn("RcloneService", error);
+                    if (progressCallback != null) {
+                        progressCallback.accept(new FileUploadProgress(
+                                i, totalFiles, fileName,
+                                "Failed: " + fileName, false, error));
+                    }
+                }
+            } catch (Exception e) {
+                currentProcess = null;
+                String error = fileName + ": " + e.getMessage();
+                errors.add(error);
+                logger.error("RcloneService", "Failed to upload " + filePath, e);
+            }
+        }
+
+        boolean success = errors.isEmpty();
+        String errorStr = errors.isEmpty() ? null : String.join("\n", errors);
+
+        if (progressCallback != null) {
+            progressCallback.accept(new FileUploadProgress(
+                    totalFiles, totalFiles, null,
+                    "Complete", true, errorStr));
+        }
+
+        return new UploadResult("selected files", success, allOutput.toString(), errorStr);
     }
 
     /**

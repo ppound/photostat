@@ -7,6 +7,7 @@ import com.photostat.models.ImageMetadata;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +85,11 @@ public class SidecarService {
                 sidecar.setAnalysisHash((String) data.get("analysisHash"));
             }
 
+            // Cloud upload tracking
+            if (data.containsKey("cloudUploads")) {
+                sidecar.setCloudUploads((List<String>) data.get("cloudUploads"));
+            }
+
             logger.debug("SidecarService", "Read sidecar for: " + imagePath);
             return sidecar;
 
@@ -107,19 +113,22 @@ public class SidecarService {
 
         Path sidecarPath = getSidecarPath(imagePath);
 
-        // Read existing sidecar to preserve analysisHash
+        // Read existing sidecar to preserve analysisHash and cloudUploads
         String existingAnalysisHash = null;
+        List<String> existingCloudUploads = null;
         if (Files.exists(sidecarPath)) {
             try {
                 Map<String, Object> existingData = objectMapper.readValue(sidecarPath.toFile(), Map.class);
                 existingAnalysisHash = (String) existingData.get("analysisHash");
+                existingCloudUploads = (List<String>) existingData.get("cloudUploads");
             } catch (IOException e) {
                 logger.warn("SidecarService", "Failed to read existing sidecar for preservation: " + sidecarPath);
             }
         }
 
-        // If no custom metadata and no analysisHash, delete sidecar if it exists
-        if (!hasPersons && !hasPlace && !hasTags && !hasRating && existingAnalysisHash == null) {
+        // If no custom metadata and no preserved fields, delete sidecar if it exists
+        if (!hasPersons && !hasPlace && !hasTags && !hasRating && existingAnalysisHash == null
+                && (existingCloudUploads == null || existingCloudUploads.isEmpty())) {
             try {
                 if (Files.exists(sidecarPath)) {
                     Files.delete(sidecarPath);
@@ -150,6 +159,11 @@ public class SidecarService {
         // Preserve existing analysisHash
         if (existingAnalysisHash != null) {
             data.put("analysisHash", existingAnalysisHash);
+        }
+
+        // Preserve existing cloudUploads
+        if (existingCloudUploads != null && !existingCloudUploads.isEmpty()) {
+            data.put("cloudUploads", existingCloudUploads);
         }
 
         try {
@@ -229,6 +243,49 @@ public class SidecarService {
     }
 
     /**
+     * Add a cloud upload record to a sidecar file.
+     * Records that a file has been uploaded to the given remote name.
+     * Preserves all existing sidecar data.
+     */
+    @SuppressWarnings("unchecked")
+    public boolean addCloudUpload(String imagePath, String remoteName) {
+        Path sidecarPath = getSidecarPath(imagePath);
+        Map<String, Object> data = new HashMap<>();
+
+        // Read existing data if present
+        if (Files.exists(sidecarPath)) {
+            try {
+                data = objectMapper.readValue(sidecarPath.toFile(), Map.class);
+            } catch (IOException e) {
+                logger.warn("SidecarService", "Failed to read existing sidecar, creating new: " + sidecarPath);
+                data = new HashMap<>();
+            }
+        }
+
+        // Get or create cloudUploads list
+        List<String> cloudUploads = (List<String>) data.get("cloudUploads");
+        if (cloudUploads == null) {
+            cloudUploads = new ArrayList<>();
+        }
+
+        // Add remote name if not already present
+        if (!cloudUploads.contains(remoteName)) {
+            cloudUploads.add(remoteName);
+        }
+
+        data.put("cloudUploads", cloudUploads);
+
+        try {
+            objectMapper.writeValue(sidecarPath.toFile(), data);
+            logger.debug("SidecarService", "Recorded cloud upload to '" + remoteName + "' in sidecar: " + sidecarPath);
+            return true;
+        } catch (IOException e) {
+            logger.error("SidecarService", "Failed to record cloud upload in sidecar: " + sidecarPath, e);
+            return false;
+        }
+    }
+
+    /**
      * Get analysis cache data from a sidecar file.
      * Returns null if no cache exists.
      */
@@ -264,6 +321,9 @@ public class SidecarService {
 
         // Analysis cache field - combined hash of model + prompt + image (size + modification time)
         private String analysisHash;
+
+        // Cloud upload tracking - list of remote names this file has been uploaded to
+        private List<String> cloudUploads;
 
         public List<String> getPersons() {
             return persons;
@@ -303,6 +363,18 @@ public class SidecarService {
 
         public void setAnalysisHash(String analysisHash) {
             this.analysisHash = analysisHash;
+        }
+
+        public List<String> getCloudUploads() {
+            return cloudUploads;
+        }
+
+        public void setCloudUploads(List<String> cloudUploads) {
+            this.cloudUploads = cloudUploads;
+        }
+
+        public boolean isUploadedTo(String remoteName) {
+            return cloudUploads != null && cloudUploads.contains(remoteName);
         }
 
         public boolean isEmpty() {
