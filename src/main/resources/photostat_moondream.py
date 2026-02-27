@@ -19,6 +19,15 @@ def check():
     """Verify dependencies and report device info."""
     errors = []
 
+    if sys.version_info < (3, 10):
+        print(json.dumps({
+            "status": "error",
+            "message": f"Python 3.10+ required (found {sys.version.split()[0]}). "
+                       f"Moondream2's model code uses type union syntax (X | Y) that requires Python 3.10+. "
+                       f"Upgrade Python or use a virtualenv with Python 3.10+."
+        }))
+        sys.exit(1)
+
     try:
         from PIL import Image
     except ImportError:
@@ -96,17 +105,20 @@ def worker():
     print(f"Loading Moondream model on {device}...", file=sys.stderr, flush=True)
 
     model = None
-    # Try GPU-optimized loading first, fall back to CPU
+    # Try GPU-optimized loading first, fall back to CPU.
+    # Note: moondream2 uses trust_remote_code with custom __init__ that doesn't support
+    # device_map for MPS/CPU — load without device_map then move with .to() instead.
     load_attempts = []
     if device == "cuda":
-        load_attempts.append(("cuda/bfloat16", {"torch_dtype": torch.bfloat16, "device_map": {"": "cuda"}}))
+        load_attempts.append(("cuda/bfloat16", {"torch_dtype": torch.bfloat16, "device_map": {"": "cuda"}}, None))
     elif device == "mps":
-        load_attempts.append(("mps/float16", {"torch_dtype": torch.float16, "device_map": {"": "mps"}}))
-        load_attempts.append(("mps/float32", {"torch_dtype": torch.float32, "device_map": {"": "mps"}}))
-    # Always have CPU fallback — explicit device_map ensures it doesn't auto-detect MPS/CUDA
-    load_attempts.append(("cpu/float32", {"device_map": {"": "cpu"}}))
+        load_attempts.append(("mps/float16", {"torch_dtype": torch.float16}, "mps"))
+        load_attempts.append(("mps/float32", {}, "mps"))
+    # Always have CPU fallback — load plain, no device_map
+    load_attempts.append(("cpu/float32", {}, None))
 
-    for desc, kwargs in load_attempts:
+    failures = []
+    for desc, kwargs, move_to in load_attempts:
         try:
             print(f"Trying {desc}...", file=sys.stderr, flush=True)
             model = AutoModelForCausalLM.from_pretrained(
@@ -114,17 +126,20 @@ def worker():
                 trust_remote_code=True,
                 **kwargs,
             )
-            if device == "cpu" and not kwargs:
-                # No device_map specified, model is already on CPU
-                pass
+            if move_to:
+                model = model.to(move_to)
             print(f"Model loaded successfully ({desc})", file=sys.stderr, flush=True)
             break
         except Exception as e:
-            print(f"Failed with {desc}: {e}", file=sys.stderr, flush=True)
+            import traceback
+            tb = traceback.format_exc()
+            print(f"Failed with {desc}: {tb}", file=sys.stderr, flush=True)
+            failures.append(f"{desc}: {type(e).__name__}: {e}")
             model = None
 
     if model is None:
-        print(json.dumps({"status": "error", "message": "Failed to load model with all strategies"}),
+        detail = " | ".join(failures)
+        print(json.dumps({"status": "error", "message": f"Failed to load model. Attempts: {detail}"}),
               flush=True)
         sys.exit(1)
 
