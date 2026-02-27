@@ -113,7 +113,7 @@ Moondream is a free, local AI model that runs entirely on your machine. No API k
 
 **Prerequisites:**
 
-- Python 3.8+
+- Python 3.10+ (moondream2's model code uses syntax requiring Python 3.10+)
 - ~2 GB disk space (for model download on first run)
 - ~2 GB RAM (CPU mode) or CUDA-capable GPU for faster processing
 
