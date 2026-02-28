@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -187,8 +188,25 @@ public class IndexerService {
                         return null;
                     }
 
-                    // Phase 2: Process files in parallel
-                    AtomicInteger processedCount = new AtomicInteger(0);
+                    // Pre-fetch indexed files to avoid N+1 queries during Phase 2
+        Set<String> indexedPaths = new HashSet<>();
+        if (!forceReindex) {
+            updateStatus("Checking previously indexed files...");
+            try {
+                boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+                for (String path : openSearchService.searchAllFilePaths(10000)) {
+                    indexedPaths.add(path);
+                    if (isWindows) {
+                        indexedPaths.add(path.toLowerCase());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error fetching indexed paths: " + e.getMessage());
+            }
+        }
+
+        // Phase 2: Process files in parallel
+        AtomicInteger processedCount = new AtomicInteger(0);
                     AtomicLong lastUIUpdate = new AtomicLong(0);
                     ExecutorService executor = Executors.newFixedThreadPool(indexingThreads);
 
@@ -241,11 +259,18 @@ public class IndexerService {
                                 String filePath = file.toAbsolutePath().toString();
 
                                 // Check if already indexed (unless force reindex)
-                                if (!forceReindex && openSearchService.isFileIndexed(filePath)) {
-                                    stats.skippedFiles.incrementAndGet();
-                                    int current = processedCount.incrementAndGet();
-                                    throttledProgressUpdate(lastUIUpdate, current, stats.totalFiles.get());
-                                    return null;
+                                if (!forceReindex) {
+                                    boolean isIndexed = indexedPaths.contains(filePath);
+                                    if (!isIndexed && System.getProperty("os.name").toLowerCase().contains("win")) {
+                                        isIndexed = indexedPaths.contains(filePath.toLowerCase());
+                                    }
+                                    
+                                    if (isIndexed) {
+                                        stats.skippedFiles.incrementAndGet();
+                                        int current = processedCount.incrementAndGet();
+                                        throttledProgressUpdate(lastUIUpdate, current, stats.totalFiles.get());
+                                        return null;
+                                    }
                                 }
 
                                 // Process the file (extract metadata, apply sidecar, compute hashes)

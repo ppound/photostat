@@ -769,8 +769,33 @@ public class ImageAnalysisService {
      */
     private byte[] optimizeImageForApi(File imageFile) {
         try {
-            // Read the original image
-            BufferedImage originalImage = ImageIO.read(imageFile);
+            // Read the image efficiently using subsampling
+            BufferedImage originalImage = null;
+            try (javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(imageFile)) {
+                Iterator<javax.imageio.ImageReader> readers = ImageIO.getImageReaders(iis);
+                if (readers.hasNext()) {
+                    javax.imageio.ImageReader reader = readers.next();
+                    reader.setInput(iis, true, true);
+                    
+                    int origWidth = reader.getWidth(0);
+                    int origHeight = reader.getHeight(0);
+                    
+                    int scale = Math.max(1, Math.min(origWidth / MAX_IMAGE_SIZE, origHeight / MAX_IMAGE_SIZE));
+                    int subsampling = 1;
+                    while (subsampling * 2 <= scale) {
+                        subsampling *= 2;
+                    }
+                    
+                    javax.imageio.ImageReadParam param = reader.getDefaultReadParam();
+                    if (subsampling > 1) {
+                        param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+                    }
+                    
+                    originalImage = reader.read(0, param);
+                    reader.dispose();
+                }
+            }
+
             if (originalImage == null) {
                 logger.error("ImageAnalysisService", "Failed to read image: " + imageFile.getPath());
                 return null;

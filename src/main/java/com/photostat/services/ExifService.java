@@ -258,32 +258,20 @@ public class ExifService {
      * Extract metadata using ExifTool for RAW files.
      */
     private void extractWithExifTool(Path filePath, ImageMetadata metadata) {
-        String exifToolPath = configService.getExifToolPath();
         Map<String, Object> allExif = new HashMap<>();
 
-        Process process = null;
         try {
-            ProcessBuilder pb = new ProcessBuilder(
-                    exifToolPath, "-json", "-all", filePath.toString()
-            );
-            pb.redirectErrorStream(true);
-
-            process = pb.start();
-            StringBuilder output = new StringBuilder();
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line);
-                }
+            ExifToolWorker worker = ExifToolWorker.getInstance();
+            if (worker == null) {
+                throw new IOException("ExifToolWorker is not available");
             }
+            
+            String outputStr = worker.execute("-json", "-all", filePath.toString());
 
-            boolean finished = process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS);
-            int exitCode = finished ? process.exitValue() : -1;
-            if (exitCode == 0 && output.length() > 0) {
+            if (outputStr != null && outputStr.trim().startsWith("[")) {
                 // Parse JSON output
                 List<Map<String, Object>> results = objectMapper.readValue(
-                        output.toString(),
+                        outputStr,
                         objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class)
                 );
 
@@ -346,10 +334,6 @@ public class ExifService {
             // Fall back to metadata-extractor
             extractWithMetadataExtractor(filePath, metadata);
             return;
-        } finally {
-            if (process != null && process.isAlive()) {
-                process.destroyForcibly();
-            }
         }
 
         metadata.setAllExif(allExif);
