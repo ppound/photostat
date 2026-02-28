@@ -132,17 +132,20 @@ public class AnalyzeCli {
                 System.out.println("Force mode: will re-analyze all " + filesToAnalyze.size() + " images.");
             }
         } else {
-            filesToAnalyze = new ArrayList<>();
-            int cachedCount = 0;
-            for (File file : analyzableFiles) {
+            ConcurrentLinkedQueue<File> concurrentFilesToAnalyze = new ConcurrentLinkedQueue<>();
+            AtomicInteger cachedCount = new AtomicInteger(0);
+
+            analyzableFiles.parallelStream().forEach(file -> {
                 if (imageAnalysisService.isAnalysisCached(file.getAbsolutePath())) {
-                    cachedCount++;
+                    cachedCount.incrementAndGet();
                 } else {
-                    filesToAnalyze.add(file);
+                    concurrentFilesToAnalyze.add(file);
                 }
-            }
+            });
+
+            filesToAnalyze = new ArrayList<>(concurrentFilesToAnalyze);
             if (!quiet) {
-                System.out.println("Skipping " + cachedCount + " cached images, " + filesToAnalyze.size() + " to analyze.");
+                System.out.println("Skipping " + cachedCount.get() + " cached images, " + filesToAnalyze.size() + " to analyze.");
             }
         }
 
