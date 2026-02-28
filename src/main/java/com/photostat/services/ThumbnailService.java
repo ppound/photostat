@@ -39,8 +39,9 @@ public class ThumbnailService {
     // Disk cache directory
     private Path diskCacheDir;
 
-    // Counter for throttling disk cache enforcement (run every 50 saves)
+    // Counter for throttling disk cache enforcement
     private final AtomicInteger diskSaveCount = new AtomicInteger(0);
+    private final java.util.concurrent.atomic.AtomicLong diskCacheSize = new java.util.concurrent.atomic.AtomicLong(-1);
 
     // Shared thread pool for async thumbnail/face crop loading
     private final ExecutorService thumbnailExecutor = Executors.newFixedThreadPool(
@@ -203,9 +204,15 @@ public class ThumbnailService {
             g2d.dispose();
 
             ImageIO.write(bufferedImage, "jpg", cachePath.toFile());
+            
+            long newFileSize = Files.size(cachePath);
+            if (diskCacheSize.get() != -1) {
+                diskCacheSize.addAndGet(newFileSize);
+            }
+
             logger.debug("ThumbnailService", "Saved to disk cache: " + cachePath);
 
-            // Enforce disk cache limit periodically rather than on every save
+            // Enforce disk cache limit periodically
             if (diskSaveCount.incrementAndGet() % 50 == 0) {
                 thumbnailExecutor.submit(this::enforceDiskCacheLimit);
             }
@@ -221,27 +228,33 @@ public class ThumbnailService {
     private void enforceDiskCacheLimit() {
         try {
             long maxSizeBytes = configService.getThumbnailCacheMaxSizeMB() * 1024L * 1024L;
-            long currentSize = getDiskCacheSize();
+            long currentSize = getDiskCacheSize(); // triggers initial calculation if needed
 
             if (currentSize > maxSizeBytes) {
                 logger.info("ThumbnailService", "Disk cache size (" + (currentSize / 1024 / 1024) + "MB) exceeds limit (" +
-                        configService.getThumbnailCacheMaxSizeMB() + "MB), evicting old entries");
+                        configService.getThumbnailCacheMaxSizeMB() + "MB), evicting entries");
 
-                // Get all cache files sorted by last modified time (oldest first)
-                File[] cacheFiles = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
-                if (cacheFiles != null && cacheFiles.length > 0) {
-                    Arrays.sort(cacheFiles, Comparator.comparingLong(File::lastModified));
+                // Instead of full sort, collect up to 1000 files via DirectoryStream (effectively a sample)
+                java.util.List<File> sample = new ArrayList<>();
+                try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(diskCacheDir, "*.jpg")) {
+                    for (Path path : stream) {
+                        sample.add(path.toFile());
+                        if (sample.size() >= 1000) break;
+                    }
+                }
+                
+                // Sort the sample by oldest first
+                sample.sort(Comparator.comparingLong(File::lastModified));
 
-                    // Delete oldest files until under limit
-                    for (File file : cacheFiles) {
-                        if (currentSize <= maxSizeBytes * 0.8) {  // Target 80% of max
-                            break;
-                        }
-                        long fileSize = file.length();
-                        if (file.delete()) {
-                            currentSize -= fileSize;
-                            logger.debug("ThumbnailService", "Evicted cache file: " + file.getName());
-                        }
+                // Delete oldest files until under limit
+                for (File file : sample) {
+                    if (currentSize <= maxSizeBytes * 0.9) {  // Target 90% of max
+                        break;
+                    }
+                    long fileSize = file.length();
+                    if (file.delete()) {
+                        currentSize = diskCacheSize.addAndGet(-fileSize);
+                        logger.debug("ThumbnailService", "Evicted cache file: " + file.getName());
                     }
                 }
             }
@@ -254,19 +267,23 @@ public class ThumbnailService {
      * Get the current disk cache size in bytes.
      */
     public long getDiskCacheSize() {
-        try {
-            File[] files = diskCacheDir.toFile().listFiles((dir, name) -> name.endsWith(".jpg"));
-            if (files != null) {
+        if (diskCacheSize.get() == -1) {
+            try {
                 long total = 0;
-                for (File file : files) {
-                    total += file.length();
+                if (diskCacheDir != null && Files.exists(diskCacheDir)) {
+                    try (java.nio.file.DirectoryStream<Path> stream = Files.newDirectoryStream(diskCacheDir, "*.jpg")) {
+                        for (Path entry : stream) {
+                            total += Files.size(entry);
+                        }
+                    }
                 }
-                return total;
+                diskCacheSize.compareAndSet(-1, total);
+            } catch (Exception e) {
+                logger.error("ThumbnailService", "Error calculating cache size", e);
+                return 0;
             }
-        } catch (Exception e) {
-            logger.error("ThumbnailService", "Error calculating cache size", e);
         }
-        return 0;
+        return diskCacheSize.get();
     }
 
     /**
@@ -294,6 +311,7 @@ public class ThumbnailService {
                         count++;
                     }
                 }
+                diskCacheSize.set(0);
                 logger.info("ThumbnailService", "Cleared " + count + " files from disk cache");
             }
         } catch (Exception e) {
@@ -355,9 +373,33 @@ public class ThumbnailService {
             System.err.println("JavaFX image loading failed: " + e.getMessage());
         }
 
-        // Fallback to AWT/ImageIO
-        try {
-            BufferedImage originalImage = ImageIO.read(path.toFile());
+        // Fallback to ImageReader with progressive subsampling to save memory
+        try (javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(path.toFile())) {
+            Iterator<javax.imageio.ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            
+            javax.imageio.ImageReader reader = readers.next();
+            reader.setInput(iis, true, true);
+            
+            int origWidth = reader.getWidth(0);
+            int origHeight = reader.getHeight(0);
+            
+            int scale = Math.min(origWidth / maxSize, origHeight / maxSize);
+            int subsampling = 1;
+            while (subsampling * 2 <= scale) {
+                subsampling *= 2;
+            }
+            
+            javax.imageio.ImageReadParam param = reader.getDefaultReadParam();
+            if (subsampling > 1) {
+                param.setSourceSubsampling(subsampling, subsampling, 0, 0);
+            }
+            
+            BufferedImage originalImage = reader.read(0, param);
+            reader.dispose();
+
             if (originalImage == null) {
                 return null;
             }
@@ -377,16 +419,19 @@ public class ThumbnailService {
      * Generate thumbnail using ExifTool (for RAW files with embedded previews).
      */
     private Image generateThumbnailWithExifTool(Path path, int maxSize) {
-        String exifToolPath = configService.getExifToolPath();
+        byte[] imageData = null;
 
         try {
-            // Try PreviewImage, then JpgFromRaw, then ThumbnailImage
-            byte[] imageData = null;
-            for (String tag : new String[]{"-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"}) {
-                imageData = runExifToolExtract(exifToolPath, tag, path);
-                if (imageData != null && imageData.length >= 100) {
-                    break;
-                }
+            // First try -PreviewImage (most common for modern RAWs)
+            imageData = runExifToolExtract("-PreviewImage", path);
+
+            // If that fails, try -JpgFromRaw (older formats or specific cameras)
+            if (imageData == null || imageData.length == 0) {
+                imageData = runExifToolExtract("-JpgFromRaw", path);
+            }
+            // If that fails, try -ThumbnailImage (smallest, but always present if available)
+            if (imageData == null || imageData.length == 0) {
+                imageData = runExifToolExtract("-ThumbnailImage", path);
             }
 
             if (imageData != null && imageData.length > 100) {
@@ -411,39 +456,36 @@ public class ThumbnailService {
      * Run ExifTool to extract an embedded image tag. Returns the raw bytes,
      * or null if extraction failed. Ensures the process is always cleaned up.
      */
-    private byte[] runExifToolExtract(String exifToolPath, String tag, Path path) {
-        Process process = null;
+    private byte[] runExifToolExtract(String tag, Path path) {
         try {
-            ProcessBuilder pb = new ProcessBuilder(exifToolPath, "-b", tag, path.toString());
-            pb.redirectErrorStream(true);
-            process = pb.start();
-
-            byte[] imageData;
-            try (InputStream is = process.getInputStream();
-                 ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = is.read(buffer)) != -1) {
-                    baos.write(buffer, 0, bytesRead);
+            ExifToolWorker worker = ExifToolWorker.getInstance();
+            if (worker == null) return null;
+            
+            // Execute with JSON format and Binary tags included
+            String outputStr = worker.execute("-j", "-b", tag, path.toString());
+            
+            if (outputStr != null && outputStr.trim().startsWith("[")) {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(outputStr);
+                if (root.isArray() && root.size() > 0) {
+                    com.fasterxml.jackson.databind.JsonNode result = root.get(0);
+                    // Extract tag name without the leading hyphen
+                    String tagName = tag.startsWith("-") ? tag.substring(1) : tag;
+                    com.fasterxml.jackson.databind.JsonNode tagNode = result.get(tagName);
+                    
+                    if (tagNode != null && !tagNode.isNull()) {
+                        String b64 = tagNode.asText();
+                        if (b64.startsWith("base64:")) {
+                            return java.util.Base64.getDecoder().decode(b64.substring(7));
+                        }
+                    }
                 }
-                imageData = baos.toByteArray();
             }
-
-            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                return null;
-            }
-            return (process.exitValue() == 0 && imageData.length >= 100) ? imageData : null;
         } catch (Exception e) {
-            return null;
-        } finally {
-            if (process != null && process.isAlive()) {
-                process.destroyForcibly();
-            }
+            System.err.println("ExifTool worker extraction failed for " + path + ": " + e.getMessage());
         }
+        return null;
     }
-
     /**
      * Scale a BufferedImage to fit within maxSize while preserving aspect ratio.
      */
@@ -515,7 +557,14 @@ public class ThumbnailService {
         // Also remove from disk cache
         try {
             Path cachePath = getDiskCachePath(filePath);
-            Files.deleteIfExists(cachePath);
+            if (Files.exists(cachePath)) {
+                long size = Files.size(cachePath);
+                if (Files.deleteIfExists(cachePath)) {
+                    if (diskCacheSize.get() != -1) {
+                        diskCacheSize.addAndGet(-size);
+                    }
+                }
+            }
         } catch (Exception e) {
             // Ignore
         }
@@ -579,23 +628,39 @@ public class ThumbnailService {
                     g2d.dispose();
                 }
             } else {
-                sourceImage = ImageIO.read(path.toFile());
+                // Use ImageReader with SourceRegion to only decode the necessary face pixels
+                try (javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(path.toFile())) {
+                    Iterator<javax.imageio.ImageReader> readers = ImageIO.getImageReaders(iis);
+                    if (readers.hasNext()) {
+                        javax.imageio.ImageReader reader = readers.next();
+                        reader.setInput(iis, true, true);
+                        
+                        int origWidth = reader.getWidth(0);
+                        int origHeight = reader.getHeight(0);
+                        
+                        // Add 20% padding around face based on original coordinates
+                        int padX = (int) (w * 0.2);
+                        int padY = (int) (h * 0.2);
+                        int cropX = Math.max(0, x - padX);
+                        int cropY = Math.max(0, y - padY);
+                        int cropW = Math.min(w + 2 * padX, origWidth - cropX);
+                        int cropH = Math.min(h + 2 * padY, origHeight - cropY);
+                        
+                        javax.imageio.ImageReadParam param = reader.getDefaultReadParam();
+                        param.setSourceRegion(new Rectangle(cropX, cropY, cropW, cropH));
+                        
+                        sourceImage = reader.read(0, param);
+                        reader.dispose();
+                    }
+                }
             }
 
             if (sourceImage == null) {
                 return null;
             }
 
-            // Add 20% padding around face
-            int padX = (int) (w * 0.2);
-            int padY = (int) (h * 0.2);
-            int cropX = Math.max(0, x - padX);
-            int cropY = Math.max(0, y - padY);
-            int cropW = Math.min(w + 2 * padX, sourceImage.getWidth() - cropX);
-            int cropH = Math.min(h + 2 * padY, sourceImage.getHeight() - cropY);
-
-            BufferedImage cropped = sourceImage.getSubimage(cropX, cropY, cropW, cropH);
-            BufferedImage scaled = scaleImage(cropped, 120);
+            // The image is already cropped tightly to the face + padding
+            BufferedImage scaled = scaleImage(sourceImage, 120);
 
             // Save to disk cache
             try {

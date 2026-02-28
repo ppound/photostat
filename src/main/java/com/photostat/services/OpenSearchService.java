@@ -698,6 +698,7 @@ public class OpenSearchService {
                     .index(indexName)
                     .query(Query.of(q -> q.matchAll(m -> m)))
                     .size(batchSize)
+                    .source(s -> s.filter(f -> f.includes("file_path")))
                     .sort(s -> s.field(f -> f.field("file_path").order(SortOrder.Asc)));
 
             if (searchAfter != null) {
