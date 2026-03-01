@@ -37,6 +37,7 @@ public class MainWindow extends BorderPane {
 
     private Label statusLabel;
     private Label connectionLabel;
+    private Button backButton;
 
     public MainWindow() {
         this.configService = ConfigService.getInstance();
@@ -144,6 +145,12 @@ public class MainWindow extends BorderPane {
             searchPanel.executeSearch();
         });
 
+        // Wire up result chip clicks to apply filters
+        resultsPanel.setChipClickCallback((field, value) -> {
+            searchPanel.addFilter(field, value);
+            searchPanel.executeSearch();
+        });
+
         // Wire up detail panel metadata save to refresh table display
         // (just redraws the table - doesn't reload from OpenSearch since data is already updated in memory)
         detailPanel.setMetadataSavedCallback(() -> {
@@ -158,6 +165,10 @@ public class MainWindow extends BorderPane {
 
         // Wire up keyboard rating changes to sync detail panel
         resultsPanel.setRatingChangedCallback(metadata -> detailPanel.updateRatingDisplay(metadata));
+
+        // Wire up search history to Back button
+        searchPanel.setHistoryChangedCallback(() ->
+                backButton.setDisable(!searchPanel.hasHistory()));
 
         // Layout
         VBox leftSide = new VBox(10);
@@ -199,6 +210,14 @@ public class MainWindow extends BorderPane {
         Button refreshButton = new Button("Refresh");
         refreshButton.setOnAction(e -> refreshCurrentView());
 
+        backButton = new Button("Back");
+        backButton.setDisable(true);
+        backButton.setOnAction(e -> {
+            if (searchPanel != null) {
+                searchPanel.goBack();
+            }
+        });
+
         Button clearFiltersButton = new Button("Clear Filters");
         clearFiltersButton.setOnAction(e -> {
             if (searchPanel != null) {
@@ -213,6 +232,7 @@ public class MainWindow extends BorderPane {
                 settingsButton,
                 new Separator(),
                 refreshButton,
+                backButton,
                 clearFiltersButton,
                 new Separator(),
                 uploadButton

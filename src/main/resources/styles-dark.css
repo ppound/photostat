@@ -723,6 +723,59 @@
     -fx-border-width: 0 0 1 0;
 }
 
+/* Labels popup link */
+.labels-link {
+    -fx-font-size: 10px;
+    -fx-text-fill: #4ca6e8;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* Labels popup container */
+.labels-popup {
+    -fx-background-color: #383838;
+    -fx-border-color: #555555;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.4), 6, 0, 0, 2);
+}
+
+/* Result table metadata chips */
+.result-chip {
+    -fx-font-size: 10px;
+    -fx-background-radius: 8;
+    -fx-padding: 1 6 1 6;
+    -fx-cursor: hand;
+}
+
+.result-chip-person {
+    -fx-background-color: #2c3e50;
+    -fx-text-fill: #aed6f1;
+}
+
+.result-chip-person:hover {
+    -fx-background-color: #34495e;
+}
+
+.result-chip-place {
+    -fx-background-color: #1e3a2f;
+    -fx-text-fill: #abebc6;
+}
+
+.result-chip-place:hover {
+    -fx-background-color: #27503f;
+}
+
+.result-chip-tag {
+    -fx-background-color: #3e2f1e;
+    -fx-text-fill: #fad7a0;
+}
+
+.result-chip-tag:hover {
+    -fx-background-color: #4e3f2e;
+}
+
 /* Password field */
 .password-field {
     -fx-background-color: #383838;

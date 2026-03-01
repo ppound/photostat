@@ -22,10 +22,12 @@ import javafx.scene.input.KeyEvent;
 import javafx.stage.DirectoryChooser;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Modality;
+import javafx.stage.Popup;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
@@ -66,6 +68,7 @@ public class ResultsPanel extends VBox {
     private Consumer<Map<String, Map<String, Long>>> aggregationsCallback;
     private Consumer<String> statusCallback;
     private Consumer<ImageMetadata> ratingChangedCallback;
+    private BiConsumer<String, String> chipClickCallback;
 
     private Button analyzeSelectedBtn;
 
@@ -231,10 +234,92 @@ public class ResultsPanel extends VBox {
             }
         });
 
-        // Filename column
-        TableColumn<ImageMetadata, String> filenameCol = new TableColumn<>("Filename");
+        // Filename column with Labels popup
+        TableColumn<ImageMetadata, ImageMetadata> filenameCol = new TableColumn<>("Filename");
         filenameCol.setPrefWidth(200);
-        filenameCol.setCellValueFactory(new PropertyValueFactory<>("fileName"));
+        filenameCol.setCellValueFactory(cellData ->
+                new SimpleObjectProperty<>(cellData.getValue()));
+        filenameCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(ImageMetadata item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                    setText(null);
+                    return;
+                }
+
+                Label nameLabel = new Label(item.getFileName());
+                nameLabel.setStyle("-fx-font-size: 13px;");
+
+                List<String> persons = item.getPersons();
+                String place = item.getPlace();
+                List<String> tags = item.getTags();
+                boolean hasPersons = persons != null && !persons.isEmpty();
+                boolean hasPlace = place != null && !place.isEmpty();
+                boolean hasTags = tags != null && !tags.isEmpty();
+
+                if (!hasPersons && !hasPlace && !hasTags) {
+                    VBox nameBox = new VBox(nameLabel);
+                    nameBox.setAlignment(Pos.CENTER_LEFT);
+                    setGraphic(nameBox);
+                    setText(null);
+                    return;
+                }
+
+                Hyperlink labelsLink = new Hyperlink("Labels");
+                labelsLink.getStyleClass().add("labels-link");
+                labelsLink.setOnAction(e -> {
+                    Popup popup = new Popup();
+                    popup.setAutoHide(true);
+
+                    FlowPane chipPane = new FlowPane();
+                    chipPane.setHgap(4);
+                    chipPane.setVgap(4);
+                    chipPane.setPadding(new Insets(8));
+                    chipPane.getStyleClass().add("labels-popup");
+                    chipPane.setMaxWidth(300);
+
+                    if (hasPersons) {
+                        for (String person : persons) {
+                            chipPane.getChildren().add(createChip(person, "persons", "result-chip-person", popup));
+                        }
+                    }
+                    if (hasPlace) {
+                        chipPane.getChildren().add(createChip(place, "place", "result-chip-place", popup));
+                    }
+                    if (hasTags) {
+                        for (String tag : tags) {
+                            chipPane.getChildren().add(createChip(tag, "tags", "result-chip-tag", popup));
+                        }
+                    }
+
+                    popup.getContent().add(chipPane);
+                    var bounds = labelsLink.localToScreen(labelsLink.getBoundsInLocal());
+                    if (bounds != null) {
+                        popup.show(labelsLink, bounds.getMinX(), bounds.getMaxY() + 2);
+                    }
+                });
+
+                VBox cellBox = new VBox(2, nameLabel, labelsLink);
+                cellBox.setAlignment(Pos.CENTER_LEFT);
+                setGraphic(cellBox);
+                setText(null);
+            }
+
+            private Label createChip(String text, String field, String styleClass, Popup popup) {
+                Label chip = new Label(text);
+                chip.getStyleClass().addAll("result-chip", styleClass);
+                chip.setOnMouseClicked(event -> {
+                    event.consume();
+                    popup.hide();
+                    if (chipClickCallback != null) {
+                        chipClickCallback.accept(field, text);
+                    }
+                });
+                return chip;
+            }
+        });
 
         // Rating column
         TableColumn<ImageMetadata, String> ratingCol = new TableColumn<>("Rating");
@@ -858,6 +943,14 @@ public class ResultsPanel extends VBox {
      */
     public void setRatingChangedCallback(Consumer<ImageMetadata> callback) {
         this.ratingChangedCallback = callback;
+    }
+
+    /**
+     * Set callback for when a metadata chip is clicked in the results table.
+     * The callback receives (fieldName, value) — e.g. ("persons", "John").
+     */
+    public void setChipClickCallback(BiConsumer<String, String> callback) {
+        this.chipClickCallback = callback;
     }
 
     /**

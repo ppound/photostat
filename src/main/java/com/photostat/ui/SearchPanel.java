@@ -15,7 +15,9 @@ import javafx.scene.layout.Region;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,6 +54,12 @@ public class SearchPanel extends VBox {
     private Map<ComboBox<String>, List<String>> originalItems = new HashMap<>();
 
     private BiConsumer<String, Map<String, Object>> searchCallback;
+
+    // Search history for Back navigation
+    private record SearchState(String query, Map<String, Object> filters) {}
+    private final Deque<SearchState> searchHistory = new ArrayDeque<>();
+    private SearchState lastSearchState;
+    private Runnable historyChangedCallback;
 
     public SearchPanel() {
         initializeUI();
@@ -267,12 +275,38 @@ public class SearchPanel extends VBox {
     }
 
     /**
-     * Execute a search with current filters.
+     * Execute a search with current filters, pushing the previous state onto the history stack.
      */
     public void executeSearch() {
         if (searchCallback != null) {
+            // Push the *previous* executed state so Back returns to it
+            if (lastSearchState != null) {
+                searchHistory.push(lastSearchState);
+                if (historyChangedCallback != null) {
+                    historyChangedCallback.run();
+                }
+            }
+
+            // Capture what we're about to execute as the new "last" state
+            String currentQuery = searchField.getText();
+            Map<String, Object> currentFilters = buildFilters();
+            lastSearchState = new SearchState(
+                    currentQuery != null ? currentQuery : "",
+                    currentFilters);
+
+            searchCallback.accept(currentQuery, currentFilters);
+        }
+    }
+
+    /**
+     * Execute a search without pushing to history (used by goBack).
+     */
+    private void executeSearchNoHistory() {
+        if (searchCallback != null) {
             String query = searchField.getText();
             Map<String, Object> filters = buildFilters();
+            lastSearchState = new SearchState(
+                    query != null ? query : "", filters);
             searchCallback.accept(query, filters);
         }
     }
@@ -378,9 +412,9 @@ public class SearchPanel extends VBox {
     }
 
     /**
-     * Clear all filters.
+     * Clear all filter controls without executing a search.
      */
-    public void clearFilters() {
+    private void clearFiltersQuiet() {
         searchField.clear();
         cameraMakeCombo.getEditor().clear();
         cameraMakeCombo.setValue(null);
@@ -409,7 +443,13 @@ public class SearchPanel extends VBox {
         for (ComboBox<String> combo : originalItems.keySet()) {
             combo.getItems().setAll(originalItems.get(combo));
         }
+    }
 
+    /**
+     * Clear all filters and execute a search.
+     */
+    public void clearFilters() {
+        clearFiltersQuiet();
         executeSearch();
     }
 
@@ -481,6 +521,76 @@ public class SearchPanel extends VBox {
                 ratingCombo.getEditor().setText(value);
                 break;
         }
+    }
+
+    /**
+     * Go back to the previous search state.
+     */
+    @SuppressWarnings("unchecked")
+    public void goBack() {
+        if (searchHistory.isEmpty()) return;
+
+        SearchState state = searchHistory.pop();
+        if (historyChangedCallback != null) {
+            historyChangedCallback.run();
+        }
+
+        clearFiltersQuiet();
+
+        // Restore query text
+        if (state.query() != null && !state.query().isEmpty()) {
+            searchField.setText(state.query());
+        }
+
+        // Restore filters
+        if (state.filters() != null) {
+            for (Map.Entry<String, Object> entry : state.filters().entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+                if (value instanceof List) {
+                    List<String> listVal = (List<String>) value;
+                    for (String item : listVal) {
+                        addFilter(key, item);
+                    }
+                } else if (value instanceof String) {
+                    addFilter(key, (String) value);
+                } else if (value instanceof LocalDateTime) {
+                    if ("date_from".equals(key)) {
+                        dateFromPicker.setValue(((LocalDateTime) value).toLocalDate());
+                    } else if ("date_to".equals(key)) {
+                        dateToPicker.setValue(((LocalDateTime) value).toLocalDate());
+                    }
+                } else if (value instanceof Integer) {
+                    switch (key) {
+                        case "iso_min" -> isoMinSpinner.getValueFactory().setValue((Integer) value);
+                        case "iso_max" -> isoMaxSpinner.getValueFactory().setValue((Integer) value);
+                        case "focal_length_min" -> focalLengthMinSpinner.getValueFactory().setValue((Integer) value);
+                        case "focal_length_max" -> focalLengthMaxSpinner.getValueFactory().setValue((Integer) value);
+                    }
+                } else if (value instanceof Double) {
+                    switch (key) {
+                        case "aperture_min" -> apertureMinSpinner.getValueFactory().setValue((Double) value);
+                        case "aperture_max" -> apertureMaxSpinner.getValueFactory().setValue((Double) value);
+                    }
+                }
+            }
+        }
+
+        executeSearchNoHistory();
+    }
+
+    /**
+     * Returns true if there is search history to go back to.
+     */
+    public boolean hasHistory() {
+        return !searchHistory.isEmpty();
+    }
+
+    /**
+     * Set callback invoked when search history changes (for enabling/disabling Back button).
+     */
+    public void setHistoryChangedCallback(Runnable callback) {
+        this.historyChangedCallback = callback;
     }
 
     /**

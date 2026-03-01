@@ -509,3 +509,56 @@
     -fx-border-color: #eee;
     -fx-border-width: 0 0 1 0;
 }
+
+/* Labels popup link */
+.labels-link {
+    -fx-font-size: 10px;
+    -fx-text-fill: #0078d4;
+    -fx-padding: 0;
+    -fx-cursor: hand;
+}
+
+/* Labels popup container */
+.labels-popup {
+    -fx-background-color: white;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 6, 0, 0, 2);
+}
+
+/* Result table metadata chips */
+.result-chip {
+    -fx-font-size: 10px;
+    -fx-background-radius: 8;
+    -fx-padding: 1 6 1 6;
+    -fx-cursor: hand;
+}
+
+.result-chip-person {
+    -fx-background-color: #d4e6f1;
+    -fx-text-fill: #1a5276;
+}
+
+.result-chip-person:hover {
+    -fx-background-color: #aed6f1;
+}
+
+.result-chip-place {
+    -fx-background-color: #d5f5e3;
+    -fx-text-fill: #196f3d;
+}
+
+.result-chip-place:hover {
+    -fx-background-color: #abebc6;
+}
+
+.result-chip-tag {
+    -fx-background-color: #fdebd0;
+    -fx-text-fill: #7e5109;
+}
+
+.result-chip-tag:hover {
+    -fx-background-color: #fad7a0;
+}
