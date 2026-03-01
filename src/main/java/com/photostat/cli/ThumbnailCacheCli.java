@@ -159,8 +159,9 @@ public class ThumbnailCacheCli {
                         return null;
                     }
 
-                    // Check if already cached
-                    if (isThumbnailCached(filePath)) {
+                    // Check if already cached (delegate to ThumbnailService to avoid duplicating hash logic)
+                    Path cachePath = thumbnailService.getDiskCachePath(filePath);
+                    if (cachePath != null && Files.exists(cachePath)) {
                         skipped.incrementAndGet();
                         updateProgress(currentProcessed, totalDocs, filePath, "Skipped",
                                 lastProgressUpdate, cached.get(), skipped.get(), failed.get());
@@ -246,13 +247,18 @@ public class ThumbnailCacheCli {
                                  AtomicLong lastUpdate, int cached, int skipped, int failed) {
         if (quiet) return;
 
-        // Throttle progress updates to avoid console spam
+        // Throttle progress updates to avoid console spam and fix thread-safety:
+        // use compareAndSet so only one thread wins the update slot per 100ms window.
         long now = System.currentTimeMillis();
-        if (now - lastUpdate.get() < 100) return; // Update at most every 100ms
-        lastUpdate.set(now);
+        long last = lastUpdate.get();
+        if (now - last < 100) return;
+        if (!lastUpdate.compareAndSet(last, now)) return; // another thread updated first
 
-        System.out.print("\r[" + current + "/" + total + "] " + action + ": " +
-                truncateFilename(filePath) + " (C:" + cached + " S:" + skipped + " F:" + failed + ")          ");
+        synchronized (System.out) {
+            System.out.print("\r[" + current + "/" + total + "] " + action + ": " +
+                    truncateFilename(filePath) + " (C:" + cached + " S:" + skipped + " F:" + failed + ")          ");
+            System.out.flush();
+        }
     }
 
     private void parseArgs(String[] args) {
@@ -311,40 +317,6 @@ public class ThumbnailCacheCli {
         System.out.println();
         System.out.println("Configuration:");
         System.out.println("  Cache size can be set in Settings > Cache > Max Cache Size");
-    }
-
-    private boolean isThumbnailCached(String filePath) {
-        try {
-            Path cachePath = getCachePath(filePath);
-            return cachePath != null && Files.exists(cachePath);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private Path getCachePath(String filePath) {
-        // Replicate the cache key logic from ThumbnailService
-        try {
-            Path path = Path.of(filePath);
-            java.nio.file.attribute.BasicFileAttributes attrs =
-                    Files.readAttributes(path, java.nio.file.attribute.BasicFileAttributes.class);
-            long modTime = attrs.lastModifiedTime().toMillis();
-            int thumbSize = configService.getThumbnailSize();
-
-            String input = filePath + "|" + modTime + "|" + thumbSize;
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(input.getBytes());
-
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < 16; i++) {
-                sb.append(String.format("%02x", hash[i]));
-            }
-            String cacheKey = sb.toString();
-
-            return thumbnailService.getDiskCacheDir().resolve(cacheKey + ".jpg");
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private String getFileExtension(String filename) {
