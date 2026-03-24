@@ -21,6 +21,7 @@ PhotoStat can automatically analyze your images using AI vision capabilities to 
   - [Examples](#examples)
   - [Running in Background](#running-in-background)
   - [Token Usage and Cost Tracking](#token-usage-and-cost-tracking)
+- [AI Image Generation (Luma)](#ai-image-generation-luma)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -280,16 +281,16 @@ PhotoStat includes a CLI mode for batch image analysis that can run in the backg
 
 ```bash
 # Show help
-java -jar photostat-java-1.9.13-executable.jar --help
+java -jar photostat-java-1.9.14-executable.jar --help
 
 # Show CLI analysis help
-java -jar photostat-java-1.9.13-executable.jar --analyze --help
+java -jar photostat-java-1.9.14-executable.jar --analyze --help
 
 # Run analysis on configured directories
-java -jar photostat-java-1.9.13-executable.jar --analyze
+java -jar photostat-java-1.9.14-executable.jar --analyze
 
 # Preview what would be analyzed (no API calls)
-java -jar photostat-java-1.9.13-executable.jar --analyze --dry-run
+java -jar photostat-java-1.9.14-executable.jar --analyze --dry-run
 ```
 
 ### CLI Options
@@ -310,22 +311,22 @@ java -jar photostat-java-1.9.13-executable.jar --analyze --dry-run
 
 ```bash
 # Analyze with Gemini instead of configured provider
-java -jar photostat-java-1.9.13-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.9.14-executable.jar --analyze --provider gemini
 
 # Analyze with Moondream (free, local)
-java -jar photostat-java-1.9.13-executable.jar --analyze --provider moondream
+java -jar photostat-java-1.9.14-executable.jar --analyze --provider moondream
 
 # Analyze a specific directory
-java -jar photostat-java-1.9.13-executable.jar --analyze --dir /path/to/photos
+java -jar photostat-java-1.9.14-executable.jar --analyze --dir /path/to/photos
 
 # Re-analyze everything (ignore cache)
-java -jar photostat-java-1.9.13-executable.jar --analyze --force
+java -jar photostat-java-1.9.14-executable.jar --analyze --force
 
 # Quiet mode for scripts
-java -jar photostat-java-1.9.13-executable.jar --analyze --quiet
+java -jar photostat-java-1.9.14-executable.jar --analyze --quiet
 
 # Run with 4 parallel threads for faster processing
-java -jar photostat-java-1.9.13-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.9.14-executable.jar --analyze --parallel 4
 ```
 
 ### Running in Background
@@ -333,13 +334,13 @@ java -jar photostat-java-1.9.13-executable.jar --analyze --parallel 4
 **Windows PowerShell:**
 
 ```powershell
-Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.9.13-executable.jar", "--analyze"
+Start-Process -NoNewWindow -FilePath java -ArgumentList "-jar", "photostat-java-1.9.14-executable.jar", "--analyze"
 ```
 
 **Linux/macOS:**
 
 ```bash
-nohup java -jar photostat-java-1.9.13-executable.jar --analyze > analysis.log 2>&1 &
+nohup java -jar photostat-java-1.9.14-executable.jar --analyze > analysis.log 2>&1 &
 ```
 
 ### What the CLI Does
@@ -401,6 +402,75 @@ Note: Claude API does not provide token usage in responses, so cost tracking is 
 
 ---
 
+## AI Image Generation (Luma)
+
+PhotoStat can generate new images from your photos using Luma AI's Photon model. Select one or more images as references, provide a text prompt, and Luma creates a new image.
+
+### Prerequisites
+
+You need two API keys:
+
+1. **Luma API key** — for image generation
+2. **ImgBB API key** (free) — for temporary image hosting (Luma requires publicly accessible URLs)
+
+### Getting API Keys
+
+**Luma AI:**
+1. Visit [Luma AI API](https://lumalabs.ai/dream-machine/api)
+2. Create an account or sign in
+3. Generate an API key from the dashboard
+
+**ImgBB (free):**
+1. Visit [ImgBB API](https://api.imgbb.com/)
+2. Sign up for a free account
+3. Copy your API key from the dashboard
+
+> **Privacy note:** Reference images are temporarily uploaded to ImgBB with a 10-minute expiration. They are automatically deleted after expiration. Only optimized thumbnails (max 1024px, compressed JPEG) are uploaded, not your original files.
+
+### Setup in PhotoStat
+
+1. Open **File > Settings**
+2. Navigate to the **Image Generation** tab
+3. Enter your **Luma API Key**
+4. Enter your **ImgBB API Key**
+5. Click **Test** to verify the Luma connection
+6. Optionally configure defaults (output directory, aspect ratio, reference type, weight)
+7. Click **OK** to save
+
+### Generating Images
+
+1. **Select images** in the search results (Ctrl+Click or Shift+Click for multiple)
+2. Click **Generate Image** in the toolbar, or right-click and select **Generate Image with Luma**
+3. In the generation dialog:
+
+   | Option | Description |
+   |--------|-------------|
+   | **Prompt** | Text description of the image to generate |
+   | **Reference Type** | How source images influence generation (see below) |
+   | **Aspect Ratio** | Output image dimensions (1:1, 16:9, 9:16, 4:3, 3:4, 21:9, 9:21) |
+   | **Reference Weight** | How much influence source images have (0.0 to 1.0) |
+   | **Save to** | Output directory for generated images |
+   | **Filename** | Auto-generated with timestamp, editable |
+   | **Index in OpenSearch** | Optionally add the generated image to your search index |
+
+4. Click **Generate** and wait for completion (typically 10-30 seconds)
+5. A preview of the generated image is shown when complete
+6. Click **Open File** to view the full-size result, or **Generate Another** to create more
+
+### Reference Types
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| **Image Reference** | Uses images as content and composition guidance | Creating variations inspired by your photos |
+| **Style Reference** | Transfers the visual style from your images | Applying a photo's look/feel to a new scene |
+| **Modify Image** | Edits or transforms the source image (single image only) | Making creative modifications to a specific photo |
+
+### Costs
+
+Luma AI charges per generation. Check current pricing at [lumalabs.ai](https://lumalabs.ai/dream-machine/api). ImgBB is free.
+
+---
+
 ## Troubleshooting
 
 | Error | Solution |
@@ -413,3 +483,7 @@ Note: Claude API does not provide token usage in responses, so cost tracking is 
 | "Moondream Python dependencies not found" | Run `pip install "transformers>=4.51,<5" torch Pillow accelerate` |
 | "Moondream worker closed before sending ready signal" | Check Python path in settings; ensure moondream is installed for that Python |
 | Moondream is very slow | GPU is required for usable performance. Install PyTorch with CUDA: `pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124`. Verify with Test button — should report `cuda` not `cpu` |
+| "Configuration Required" (Luma) | Configure both Luma API key and ImgBB API key in Settings > Image Generation |
+| "ImgBB upload failed" | Check your ImgBB API key is correct; verify internet connection |
+| "Generation request failed: 400" | Check that the Luma API key is valid and your prompt is not empty |
+| "Generation timed out" | Luma may be under heavy load; try again later |

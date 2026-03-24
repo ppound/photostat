@@ -7,6 +7,7 @@ import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.IndexerService;
 import com.photostat.services.LoggingService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.LumaService;
 import com.photostat.services.RcloneService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
@@ -136,11 +137,15 @@ public class ResultsPanel extends VBox {
         uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
         uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone. Already-uploaded files can be skipped." + multiSelectHint));
 
+        Button generateImageBtn = new Button("Generate Image");
+        generateImageBtn.setOnAction(e -> generateFromSelectedImages());
+        generateImageBtn.setTooltip(new Tooltip("Generate a new image with Luma AI using selected images as reference." + multiSelectHint));
+
         Button slideshowBtn = new Button("Slideshow");
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, copySelectedBtn, moveSelectedBtn, uploadSelectedBtn, deleteSelectedBtn);
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, uploadSelectedBtn, deleteSelectedBtn);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -152,6 +157,24 @@ public class ResultsPanel extends VBox {
                 }
             }
         });
+
+        // Context menu
+        ContextMenu contextMenu = new ContextMenu();
+        MenuItem analyzeMenuItem = new MenuItem("Analyze Selected");
+        analyzeMenuItem.setOnAction(e -> analyzeSelectedImages());
+        MenuItem generateMenuItem = new MenuItem("Generate Image with Luma");
+        generateMenuItem.setOnAction(e -> generateFromSelectedImages());
+        MenuItem copyMenuItem = new MenuItem("Copy Selected...");
+        copyMenuItem.setOnAction(e -> copySelectedImages());
+        MenuItem moveMenuItem = new MenuItem("Move Selected...");
+        moveMenuItem.setOnAction(e -> moveSelectedImages());
+        MenuItem uploadMenuItem = new MenuItem("Upload Selected...");
+        uploadMenuItem.setOnAction(e -> uploadSelectedImages());
+        MenuItem deleteMenuItem = new MenuItem("Delete Selected");
+        deleteMenuItem.setOnAction(e -> deleteSelectedImages());
+        contextMenu.getItems().addAll(analyzeMenuItem, generateMenuItem, new SeparatorMenuItem(),
+                copyMenuItem, moveMenuItem, uploadMenuItem, new SeparatorMenuItem(), deleteMenuItem);
+        resultsTable.setContextMenu(contextMenu);
 
         // Keyboard shortcuts
         resultsTable.addEventHandler(KeyEvent.KEY_PRESSED, event -> {
@@ -676,6 +699,31 @@ public class ResultsPanel extends VBox {
                 }
             }
         });
+    }
+
+    /**
+     * Generate a new image from selected images using Luma AI.
+     */
+    private void generateFromSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to use as reference.");
+            return;
+        }
+
+        LumaService lumaService = LumaService.getInstance();
+        if (!lumaService.isConfigured()) {
+            showAlert(Alert.AlertType.ERROR, "Configuration Required",
+                    "Please configure your Luma API key and ImgBB API key in Settings (Image Generation tab).\n\n" +
+                    "Luma key: https://lumalabs.ai/dream-machine/api\n" +
+                    "ImgBB key (free): https://api.imgbb.com/");
+            return;
+        }
+
+        // Open generation dialog
+        Stage ownerStage = (Stage) getScene().getWindow();
+        LumaGenerationDialog dialog = new LumaGenerationDialog(ownerStage, selected);
+        dialog.showAndWait();
     }
 
     /**

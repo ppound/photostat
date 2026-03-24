@@ -150,6 +150,25 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure luma section exists
+        if (!config.containsKey("luma")) {
+            Map<String, Object> luma = new HashMap<>();
+            luma.put("api_key", "");
+            luma.put("imgbb_api_key", "");
+            luma.put("default_output_directory", "");
+            luma.put("default_aspect_ratio", "1:1");
+            luma.put("default_ref_type", "image_ref");
+            luma.put("default_ref_weight", 0.85);
+            config.put("luma", luma);
+            changed = true;
+        } else {
+            Map<String, Object> luma = (Map<String, Object>) config.get("luma");
+            if (!luma.containsKey("imgbb_api_key")) {
+                luma.put("imgbb_api_key", "");
+                changed = true;
+            }
+        }
+
         // Ensure rclone section exists
         if (!config.containsKey("rclone")) {
             Map<String, Object> rclone = new HashMap<>();
@@ -250,6 +269,16 @@ public class ConfigService {
         faces.put("confidence_threshold", 0.6);
         faces.put("cluster_threshold", 0.6);
         defaultConfig.put("faces", faces);
+
+        // Luma AI image generation settings
+        Map<String, Object> luma = new HashMap<>();
+        luma.put("api_key", "");
+        luma.put("imgbb_api_key", "");
+        luma.put("default_output_directory", "");
+        luma.put("default_aspect_ratio", "1:1");
+        luma.put("default_ref_type", "image_ref");
+        luma.put("default_ref_weight", 0.85);
+        defaultConfig.put("luma", luma);
 
         // rclone cloud upload settings
         Map<String, Object> rclone = new HashMap<>();
@@ -572,6 +601,55 @@ public class ConfigService {
 
     public void setFacesClusterThreshold(double threshold) {
         setNestedValue("faces", "cluster_threshold", threshold);
+    }
+
+    // Luma AI settings
+    public String getLumaApiKey() {
+        return getNestedString("luma", "api_key", "");
+    }
+
+    public void setLumaApiKey(String apiKey) {
+        setNestedValue("luma", "api_key", apiKey);
+    }
+
+    public String getImgbbApiKey() {
+        return getNestedString("luma", "imgbb_api_key", "");
+    }
+
+    public void setImgbbApiKey(String apiKey) {
+        setNestedValue("luma", "imgbb_api_key", apiKey);
+    }
+
+    public String getLumaDefaultOutputDirectory() {
+        return getNestedString("luma", "default_output_directory", "");
+    }
+
+    public void setLumaDefaultOutputDirectory(String directory) {
+        setNestedValue("luma", "default_output_directory", directory);
+    }
+
+    public String getLumaDefaultAspectRatio() {
+        return getNestedString("luma", "default_aspect_ratio", "1:1");
+    }
+
+    public void setLumaDefaultAspectRatio(String aspectRatio) {
+        setNestedValue("luma", "default_aspect_ratio", aspectRatio);
+    }
+
+    public String getLumaDefaultRefType() {
+        return getNestedString("luma", "default_ref_type", "image_ref");
+    }
+
+    public void setLumaDefaultRefType(String refType) {
+        setNestedValue("luma", "default_ref_type", refType);
+    }
+
+    public double getLumaDefaultRefWeight() {
+        return getNestedDouble("luma", "default_ref_weight", 0.85);
+    }
+
+    public void setLumaDefaultRefWeight(double weight) {
+        setNestedValue("luma", "default_ref_weight", weight);
     }
 
     // rclone settings

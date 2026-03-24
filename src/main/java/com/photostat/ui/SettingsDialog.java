@@ -84,6 +84,14 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Slider facesClusterSlider;
     private Label facesPythonStatusLabel;
 
+    // Luma AI image generation settings
+    private PasswordField lumaApiKeyField;
+    private PasswordField imgbbApiKeyField;
+    private TextField lumaOutputDirField;
+    private ComboBox<String> lumaAspectRatioCombo;
+    private ComboBox<String> lumaRefTypeCombo;
+    private Slider lumaRefWeightSlider;
+
     // rclone cloud upload settings
     private TextField rclonePathField;
     private TextField rcloneRemoteNameField;
@@ -128,10 +136,13 @@ public class SettingsDialog extends Dialog<Boolean> {
         Tab facesTab = new Tab("Face Recognition");
         facesTab.setContent(createFacesPane());
 
+        Tab imageGenTab = new Tab("Image Generation");
+        imageGenTab.setContent(createImageGenerationPane());
+
         Tab cloudUploadTab = new Tab("Cloud Upload");
         cloudUploadTab.setContent(createCloudUploadPane());
 
-        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab, facesTab, cloudUploadTab);
+        tabPane.getTabs().addAll(openSearchTab, indexingTab, uiTab, loggingTab, cacheTab, aiTab, imageGenTab, facesTab, cloudUploadTab);
 
         VBox content = new VBox(10);
         content.setPadding(new Insets(10));
@@ -615,6 +626,182 @@ public class SettingsDialog extends Dialog<Boolean> {
         scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
 
         return scrollPane;
+    }
+
+    private ScrollPane createImageGenerationPane() {
+        VBox pane = new VBox(15);
+        pane.setPadding(new Insets(15));
+
+        // Luma AI settings
+        TitledPane lumaSection = new TitledPane();
+        lumaSection.setText("Luma AI Settings");
+        lumaSection.setCollapsible(false);
+
+        GridPane lumaGrid = new GridPane();
+        lumaGrid.setHgap(10);
+        lumaGrid.setVgap(10);
+        lumaGrid.setPadding(new Insets(10));
+
+        int row = 0;
+
+        lumaGrid.add(new Label("API Key:"), 0, row);
+        lumaApiKeyField = new PasswordField();
+        lumaApiKeyField.setPromptText("luma-...");
+        lumaApiKeyField.setPrefWidth(250);
+        lumaGrid.add(lumaApiKeyField, 1, row++);
+
+        // Test button
+        Button testLumaButton = new Button("Test");
+        Label lumaStatusLabel = new Label("");
+        testLumaButton.setOnAction(e -> testLumaApi(lumaStatusLabel, testLumaButton));
+        HBox lumaTestBox = new HBox(10, testLumaButton, lumaStatusLabel);
+        lumaGrid.add(lumaTestBox, 1, row++);
+
+        Label lumaInfoLabel = new Label("Get API key: https://lumalabs.ai/dream-machine/api");
+        lumaInfoLabel.getStyleClass().add("info-label-small");
+        lumaGrid.add(lumaInfoLabel, 1, row++);
+
+        // ImgBB API key (needed to host images for Luma)
+        lumaGrid.add(new Separator(), 0, row, 2, 1);
+        row++;
+
+        Label imgbbHeader = new Label("Image Hosting (ImgBB)");
+        imgbbHeader.setStyle("-fx-font-weight: bold;");
+        lumaGrid.add(imgbbHeader, 0, row++, 2, 1);
+
+        lumaGrid.add(new Label("ImgBB API Key:"), 0, row);
+        imgbbApiKeyField = new PasswordField();
+        imgbbApiKeyField.setPromptText("ImgBB API key");
+        imgbbApiKeyField.setPrefWidth(250);
+        lumaGrid.add(imgbbApiKeyField, 1, row++);
+
+        Label imgbbInfoLabel = new Label(
+            "Required: Luma needs publicly hosted images.\n" +
+            "ImgBB provides free image hosting.\n" +
+            "Get a free API key: https://api.imgbb.com/"
+        );
+        imgbbInfoLabel.setWrapText(true);
+        imgbbInfoLabel.getStyleClass().add("info-label-small");
+        lumaGrid.add(imgbbInfoLabel, 1, row++);
+
+        lumaSection.setContent(lumaGrid);
+
+        // Default settings
+        TitledPane defaultsSection = new TitledPane();
+        defaultsSection.setText("Default Generation Settings");
+        defaultsSection.setCollapsible(false);
+
+        GridPane defaultsGrid = new GridPane();
+        defaultsGrid.setHgap(10);
+        defaultsGrid.setVgap(10);
+        defaultsGrid.setPadding(new Insets(10));
+
+        int dRow = 0;
+
+        // Default output directory
+        defaultsGrid.add(new Label("Output Directory:"), 0, dRow);
+        lumaOutputDirField = new TextField();
+        lumaOutputDirField.setPromptText("(default: home directory)");
+        lumaOutputDirField.setPrefWidth(200);
+        Button browseDirButton = new Button("Browse...");
+        browseDirButton.setOnAction(e -> {
+            javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
+            chooser.setTitle("Select Default Output Directory");
+            String currentDir = lumaOutputDirField.getText().trim();
+            if (!currentDir.isEmpty()) {
+                java.io.File dir = new java.io.File(currentDir);
+                if (dir.isDirectory()) {
+                    chooser.setInitialDirectory(dir);
+                }
+            }
+            java.io.File selected = chooser.showDialog(getDialogPane().getScene().getWindow());
+            if (selected != null) {
+                lumaOutputDirField.setText(selected.getAbsolutePath());
+            }
+        });
+        HBox dirBox = new HBox(10, lumaOutputDirField, browseDirButton);
+        HBox.setHgrow(lumaOutputDirField, Priority.ALWAYS);
+        defaultsGrid.add(dirBox, 1, dRow++);
+
+        // Default aspect ratio
+        defaultsGrid.add(new Label("Aspect Ratio:"), 0, dRow);
+        lumaAspectRatioCombo = new ComboBox<>();
+        lumaAspectRatioCombo.getItems().addAll("1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21");
+        lumaAspectRatioCombo.setPrefWidth(150);
+        defaultsGrid.add(lumaAspectRatioCombo, 1, dRow++);
+
+        // Default reference type
+        defaultsGrid.add(new Label("Reference Type:"), 0, dRow);
+        lumaRefTypeCombo = new ComboBox<>();
+        lumaRefTypeCombo.getItems().addAll("Image Reference", "Style Reference", "Modify Image");
+        lumaRefTypeCombo.setPrefWidth(150);
+        defaultsGrid.add(lumaRefTypeCombo, 1, dRow++);
+
+        // Default reference weight
+        defaultsGrid.add(new Label("Reference Weight:"), 0, dRow);
+        lumaRefWeightSlider = new Slider(0.0, 1.0, 0.85);
+        lumaRefWeightSlider.setPrefWidth(150);
+        lumaRefWeightSlider.setMajorTickUnit(0.25);
+        lumaRefWeightSlider.setShowTickLabels(true);
+        Label weightLabel = new Label(String.format("%.2f", lumaRefWeightSlider.getValue()));
+        lumaRefWeightSlider.valueProperty().addListener((obs, oldVal, newVal) ->
+            weightLabel.setText(String.format("%.2f", newVal.doubleValue()))
+        );
+        HBox weightBox = new HBox(10, lumaRefWeightSlider, weightLabel);
+        defaultsGrid.add(weightBox, 1, dRow++);
+
+        defaultsSection.setContent(defaultsGrid);
+
+        // Info
+        Label infoLabel = new Label(
+            "Luma AI generates new images from text prompts and reference images.\n" +
+            "Select images in the search results and click 'Generate Image' to start.\n" +
+            "Generation typically takes 10-30 seconds. API usage incurs costs."
+        );
+        infoLabel.setWrapText(true);
+        infoLabel.getStyleClass().add("info-label");
+
+        pane.getChildren().addAll(lumaSection, defaultsSection, new Separator(), infoLabel);
+
+        ScrollPane scrollPane = new ScrollPane(pane);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        return scrollPane;
+    }
+
+    private void testLumaApi(Label statusLabel, Button testButton) {
+        // Temporarily apply the current field value
+        String apiKey = lumaApiKeyField.getText().trim();
+        if (apiKey.isEmpty()) {
+            statusLabel.setText("Please enter an API key");
+            setStatusStyle(statusLabel, "text-error");
+            return;
+        }
+
+        statusLabel.setText("Testing...");
+        setStatusStyle(statusLabel, "text-muted");
+        testButton.setDisable(true);
+
+        new Thread(() -> {
+            String original = configService.getLumaApiKey();
+            configService.setLumaApiKey(apiKey);
+            com.photostat.services.LumaService lumaService = com.photostat.services.LumaService.getInstance();
+            String error = lumaService.testConnection();
+            configService.setLumaApiKey(original);
+
+            Platform.runLater(() -> {
+                testButton.setDisable(false);
+                if (error == null) {
+                    statusLabel.setText("Connection successful!");
+                    setStatusStyle(statusLabel, "text-success");
+                } else {
+                    statusLabel.setText(error.length() > 80 ? error.substring(0, 80) + "..." : error);
+                    setStatusStyle(statusLabel, "text-error");
+                }
+            });
+        }).start();
     }
 
     private VBox createFacesPane() {
@@ -1123,6 +1310,19 @@ public class SettingsDialog extends Dialog<Boolean> {
         moondreamPythonPathField.setText(configService.getMoondreamPythonPath());
         moondreamModelCombo.setValue(configService.getMoondreamModel());
 
+        // Luma AI settings
+        lumaApiKeyField.setText(configService.getLumaApiKey());
+        imgbbApiKeyField.setText(configService.getImgbbApiKey());
+        lumaOutputDirField.setText(configService.getLumaDefaultOutputDirectory());
+        lumaAspectRatioCombo.setValue(configService.getLumaDefaultAspectRatio());
+        String lumaRefType = configService.getLumaDefaultRefType();
+        switch (lumaRefType) {
+            case "style_ref": lumaRefTypeCombo.setValue("Style Reference"); break;
+            case "modify_image_ref": lumaRefTypeCombo.setValue("Modify Image"); break;
+            default: lumaRefTypeCombo.setValue("Image Reference"); break;
+        }
+        lumaRefWeightSlider.setValue(configService.getLumaDefaultRefWeight());
+
         // Face recognition settings
         facesEnabledCheckbox.setSelected(configService.isFacesEnabled());
         facesPythonPathField.setText(configService.getFacesPythonPath());
@@ -1224,6 +1424,24 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setRcloneRemoteName(rcloneRemoteNameField.getText().trim());
         configService.setRcloneRemotePath(rcloneRemotePathField.getText().trim());
         configService.setRcloneUploadDirectories(new ArrayList<>(rcloneUploadDirsListView.getItems()));
+
+        // Luma AI settings
+        configService.setLumaApiKey(lumaApiKeyField.getText().trim());
+        configService.setImgbbApiKey(imgbbApiKeyField.getText().trim());
+        String lumaOutputDir = lumaOutputDirField.getText().trim();
+        configService.setLumaDefaultOutputDirectory(lumaOutputDir);
+        if (lumaAspectRatioCombo.getValue() != null) {
+            configService.setLumaDefaultAspectRatio(lumaAspectRatioCombo.getValue());
+        }
+        String selectedRefType = lumaRefTypeCombo.getValue();
+        if (selectedRefType != null) {
+            switch (selectedRefType) {
+                case "Style Reference": configService.setLumaDefaultRefType("style_ref"); break;
+                case "Modify Image": configService.setLumaDefaultRefType("modify_image_ref"); break;
+                default: configService.setLumaDefaultRefType("image_ref"); break;
+            }
+        }
+        configService.setLumaDefaultRefWeight(lumaRefWeightSlider.getValue());
 
         // Face recognition settings
         configService.setFacesEnabled(facesEnabledCheckbox.isSelected());

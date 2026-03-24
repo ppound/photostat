@@ -19,6 +19,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Cloud Upload** - Upload photos to Google Photos, S3, or 70+ cloud providers via rclone
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
+- **AI Image Generation** - Generate new images from your photos using Luma AI with text prompts and reference images
 
 ---
 
@@ -49,6 +50,14 @@ After years of photography and using various software like Lightroom, Capture On
 - **Cost Tracking** - Monitor token usage and estimated costs
 
 > See [docs/AI_ANALYSIS.md](docs/AI_ANALYSIS.md) for API key setup, CLI usage, cost tracking, and provider configuration.
+
+### AI Image Generation
+- **Luma AI Integration** - Generate new images using Luma's Photon model with text prompts
+- **Reference Images** - Use your photos as image references, style references, or source images for modification
+- **Configurable Options** - Aspect ratio, reference weight, and reference type controls
+- **Save & Index** - Save generated images to any folder with optional OpenSearch indexing
+
+> See [docs/AI_ANALYSIS.md](docs/AI_ANALYSIS.md#ai-image-generation-luma) for setup instructions.
 
 ### Face Recognition
 - **Automatic Detection** - Detect faces in your photo collection using InsightFace (Python)
@@ -161,25 +170,25 @@ Download the latest release from **[GitHub Releases](https://github.com/ppound/p
 
 #### Option A: Windows Installer (.msi)
 
-Download `PhotoStat-1.9.13.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
+Download `PhotoStat-1.9.14.msi`, double-click to install, and launch from the Start Menu. No Java installation required.
 
 #### Option B: macOS Installer (.dmg) — Apple Silicon only
 
-Download `PhotoStat-1.9.13-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
+Download `PhotoStat-1.9.14-apple-silicon.dmg`, open it, and drag PhotoStat to your Applications folder. No Java installation required.
 
 > **Note:** The macOS installer is unsigned. On first launch, **right-click** the app in Finder and select **Open**, then click **Open** in the dialog. If that doesn't work, go to **System Settings → Privacy & Security** and click **Open Anyway** next to the blocked app message. See [Troubleshooting](docs/TROUBLESHOOTING.md#macos-photostat-is-damaged-or-cannot-be-opened) for details.
 >
-> **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.13-executable-mac-intel.jar`).
+> **Intel Mac users:** A DMG installer is not available for Intel Macs. Use the cross-platform JAR below (`photostat-java-1.9.14-executable-mac-intel.jar`).
 
 #### Option C: Cross-platform JAR
 
-Download `photostat-java-1.9.13-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
+Download `photostat-java-1.9.14-executable.jar`. Requires Java 21+. This JAR includes native libraries for **Windows**, **Linux**, and **macOS Apple Silicon** (M1/M2/M3/M4).
 
 ```bash
-java -jar photostat-java-1.9.13-executable.jar
+java -jar photostat-java-1.9.14-executable.jar
 ```
 
-**Intel Mac users:** Download the separate `photostat-java-1.9.13-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
+**Intel Mac users:** Download the separate `photostat-java-1.9.14-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
 
 ### 5. Get Started
 
@@ -209,37 +218,37 @@ PhotoStat includes a CLI for batch image analysis. The CLI requires the cross-pl
 
 ```bash
 # Analyze all configured directories
-java -jar photostat-java-1.9.13-executable.jar --analyze
+java -jar photostat-java-1.9.14-executable.jar --analyze
 
 # Preview what would be analyzed
-java -jar photostat-java-1.9.13-executable.jar --analyze --dry-run
+java -jar photostat-java-1.9.14-executable.jar --analyze --dry-run
 
 # Run with 4 parallel threads
-java -jar photostat-java-1.9.13-executable.jar --analyze --parallel 4
+java -jar photostat-java-1.9.14-executable.jar --analyze --parallel 4
 
 # Use Gemini instead of Claude
-java -jar photostat-java-1.9.13-executable.jar --analyze --provider gemini
+java -jar photostat-java-1.9.14-executable.jar --analyze --provider gemini
 
 # Find duplicate images
-java -jar photostat-java-1.9.13-executable.jar --find-duplicates
+java -jar photostat-java-1.9.14-executable.jar --find-duplicates
 
 # Find visually similar images
-java -jar photostat-java-1.9.13-executable.jar --find-duplicates --mode visual
+java -jar photostat-java-1.9.14-executable.jar --find-duplicates --mode visual
 
 # Detect and cluster faces
-java -jar photostat-java-1.9.13-executable.jar --detect-faces
+java -jar photostat-java-1.9.14-executable.jar --detect-faces
 
 # Face detection with 4 parallel workers
-java -jar photostat-java-1.9.13-executable.jar --detect-faces --parallel 4
+java -jar photostat-java-1.9.14-executable.jar --detect-faces --parallel 4
 
 # Face detection on a specific directory
-java -jar photostat-java-1.9.13-executable.jar --detect-faces --dir /path/to/photos
+java -jar photostat-java-1.9.14-executable.jar --detect-faces --dir /path/to/photos
 
 # Upload to cloud via rclone
-java -jar photostat-java-1.9.13-executable.jar --rclone-upload
+java -jar photostat-java-1.9.14-executable.jar --rclone-upload
 
 # Preview what would be uploaded
-java -jar photostat-java-1.9.13-executable.jar --rclone-upload --dry-run
+java -jar photostat-java-1.9.14-executable.jar --rclone-upload --dry-run
 ```
 
 See [AI Analysis - CLI](docs/AI_ANALYSIS.md#command-line-interface-cli) for full documentation.
@@ -267,7 +276,7 @@ Install ExifTool:
 |-----------|------------|
 | GUI | JavaFX 21 |
 | Search | OpenSearch 2.x |
-| AI | Claude API, Gemini API |
+| AI | Claude API, Gemini API, Luma AI |
 | Face Recognition | InsightFace (Python sidecar) |
 | EXIF | metadata-extractor, ExifTool |
 | Build | Maven |
