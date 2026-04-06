@@ -69,6 +69,11 @@ public class SettingsDialog extends Dialog<Boolean> {
     private PasswordField geminiApiKeyField;
     private ComboBox<String> geminiModelCombo;
 
+    // Ollama / OpenAI-compatible local API settings
+    private TextField ollamaBaseUrlField;
+    private PasswordField ollamaApiKeyField;
+    private ComboBox<String> ollamaModelCombo;
+
     // Moondream settings
     private TextField moondreamPythonPathField;
     private ComboBox<String> moondreamModelCombo;
@@ -460,7 +465,7 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         providerGrid.add(new Label("AI Provider:"), 0, 0);
         aiProviderCombo = new ComboBox<>();
-        aiProviderCombo.getItems().addAll("Claude", "Gemini", "Moondream");
+        aiProviderCombo.getItems().addAll("Claude", "Gemini", "Ollama", "Moondream");
         aiProviderCombo.setPrefWidth(150);
         providerGrid.add(aiProviderCombo, 1, 0);
 
@@ -545,6 +550,52 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         geminiSection.setContent(geminiGrid);
 
+        // Ollama settings section
+        TitledPane ollamaSection = new TitledPane();
+        ollamaSection.setText("Ollama Settings (OpenAI-Compatible)");
+        ollamaSection.setCollapsible(false);
+
+        GridPane ollamaGrid = new GridPane();
+        ollamaGrid.setHgap(10);
+        ollamaGrid.setVgap(10);
+        ollamaGrid.setPadding(new Insets(10));
+
+        ollamaGrid.add(new Label("Base URL:"), 0, 0);
+        ollamaBaseUrlField = new TextField();
+        ollamaBaseUrlField.setPromptText("http://localhost:11434/v1");
+        ollamaBaseUrlField.setPrefWidth(250);
+        ollamaGrid.add(ollamaBaseUrlField, 1, 0);
+
+        ollamaGrid.add(new Label("API Key:"), 0, 1);
+        ollamaApiKeyField = new PasswordField();
+        ollamaApiKeyField.setPromptText("(optional)");
+        ollamaApiKeyField.setPrefWidth(250);
+        ollamaGrid.add(ollamaApiKeyField, 1, 1);
+
+        ollamaGrid.add(new Label("Model:"), 0, 2);
+        ollamaModelCombo = new ComboBox<>();
+        ollamaModelCombo.getItems().addAll("llava", "llama3.2-vision", "minicpm-v");
+        ollamaModelCombo.setEditable(true);
+        ollamaModelCombo.setPrefWidth(250);
+        ollamaGrid.add(ollamaModelCombo, 1, 2);
+
+        Button testOllamaButton = new Button("Test");
+        Label ollamaStatusLabel = new Label("");
+        testOllamaButton.setOnAction(e -> testOllamaApi(ollamaStatusLabel));
+        HBox ollamaTestBox = new HBox(10, testOllamaButton, ollamaStatusLabel);
+        ollamaGrid.add(ollamaTestBox, 1, 3);
+
+        Label ollamaInfoLabel = new Label(
+                "Use a local Ollama or other OpenAI-compatible endpoint.\n" +
+                "Typical local URL: http://localhost:11434/v1\n" +
+                "Model must support vision for image analysis."
+        );
+        ollamaInfoLabel.setWrapText(true);
+        ollamaInfoLabel.getStyleClass().add("info-label-small");
+        ollamaGrid.add(ollamaInfoLabel, 1, 4);
+
+        ollamaSection.setContent(ollamaGrid);
+
         // Moondream settings section
         TitledPane moondreamSection = new TitledPane();
         moondreamSection.setText("Moondream Settings (Local AI)");
@@ -617,7 +668,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         promptContent.getChildren().addAll(analysisPromptArea, resetPromptButton);
         promptSection.setContent(promptContent);
 
-        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, moondreamSection, new Separator(), costInfoLabel, promptSection);
+        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, ollamaSection, moondreamSection, new Separator(), costInfoLabel, promptSection);
 
         // Wrap in ScrollPane for vertical scrolling
         ScrollPane scrollPane = new ScrollPane(pane);
@@ -1240,6 +1291,55 @@ public class SettingsDialog extends Dialog<Boolean> {
         }).start();
     }
 
+    private void testOllamaApi(Label statusLabel) {
+        statusLabel.setText("Testing...");
+        setStatusStyle(statusLabel, "text-muted");
+
+        String baseUrl = ollamaBaseUrlField.getText().trim();
+        String model = ollamaModelCombo.getValue() != null ? ollamaModelCombo.getValue().trim() : "";
+        String apiKey = ollamaApiKeyField.getText().trim();
+
+        if (baseUrl.isEmpty() || model.isEmpty()) {
+            statusLabel.setText("Enter base URL and model");
+            setStatusStyle(statusLabel, "text-error");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                String endpoint = baseUrl.replaceAll("/+$", "") + "/chat/completions";
+                java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder()
+                        .uri(java.net.URI.create(endpoint))
+                        .header("Content-Type", "application/json")
+                        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                                "{\"model\":\"" + model.replace("\"", "\\\"") + "\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word ok.\"}],\"temperature\":0}"
+                        ));
+                if (!apiKey.isEmpty()) {
+                    builder.header("Authorization", "Bearer " + apiKey);
+                }
+
+                java.net.http.HttpResponse<String> response = client.send(builder.build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString());
+
+                Platform.runLater(() -> {
+                    if (response.statusCode() < 400) {
+                        statusLabel.setText("Connection works");
+                        setStatusStyle(statusLabel, "text-success");
+                    } else {
+                        statusLabel.setText("Error: " + response.statusCode());
+                        setStatusStyle(statusLabel, "text-error");
+                    }
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    statusLabel.setText("Error: " + e.getMessage());
+                    setStatusStyle(statusLabel, "text-error");
+                });
+            }
+        }).start();
+    }
+
     private void updateCacheStats() {
         ThumbnailService thumbnailService = ThumbnailService.getInstance();
         int fileCount = thumbnailService.getDiskCacheFileCount();
@@ -1292,6 +1392,8 @@ public class SettingsDialog extends Dialog<Boolean> {
         String provider = configService.getAiProvider();
         if ("gemini".equalsIgnoreCase(provider)) {
             aiProviderCombo.setValue("Gemini");
+        } else if ("ollama".equalsIgnoreCase(provider)) {
+            aiProviderCombo.setValue("Ollama");
         } else if ("moondream".equalsIgnoreCase(provider)) {
             aiProviderCombo.setValue("Moondream");
         } else {
@@ -1305,6 +1407,11 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Gemini API settings
         geminiApiKeyField.setText(configService.getGeminiApiKey());
         geminiModelCombo.setValue(configService.getGeminiModel());
+
+        // Ollama settings
+        ollamaBaseUrlField.setText(configService.getOllamaBaseUrl());
+        ollamaApiKeyField.setText(configService.getOllamaApiKey());
+        ollamaModelCombo.setValue(configService.getOllamaModel());
 
         // Moondream settings
         moondreamPythonPathField.setText(configService.getMoondreamPythonPath());
@@ -1386,6 +1493,8 @@ public class SettingsDialog extends Dialog<Boolean> {
         String selectedProvider = aiProviderCombo.getValue();
         if ("Gemini".equals(selectedProvider)) {
             configService.setAiProvider("gemini");
+        } else if ("Ollama".equals(selectedProvider)) {
+            configService.setAiProvider("ollama");
         } else if ("Moondream".equals(selectedProvider)) {
             configService.setAiProvider("moondream");
         } else {
@@ -1402,6 +1511,13 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setGeminiApiKey(geminiApiKeyField.getText().trim());
         if (geminiModelCombo.getValue() != null) {
             configService.setGeminiModel(geminiModelCombo.getValue());
+        }
+
+        // Ollama settings
+        configService.setOllamaBaseUrl(ollamaBaseUrlField.getText().trim());
+        configService.setOllamaApiKey(ollamaApiKeyField.getText().trim());
+        if (ollamaModelCombo.getValue() != null && !ollamaModelCombo.getValue().trim().isEmpty()) {
+            configService.setOllamaModel(ollamaModelCombo.getValue().trim());
         }
 
         // Moondream settings

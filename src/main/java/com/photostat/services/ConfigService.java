@@ -130,6 +130,16 @@ public class ConfigService {
             changed = true;
         }
 
+        // Ensure ollama section exists
+        if (!config.containsKey("ollama")) {
+            Map<String, Object> ollama = new HashMap<>();
+            ollama.put("base_url", "http://localhost:11434/v1");
+            ollama.put("api_key", "");
+            ollama.put("model", "llava");
+            config.put("ollama", ollama);
+            changed = true;
+        }
+
         // Ensure moondream section exists
         if (!config.containsKey("moondream")) {
             Map<String, Object> moondream = new HashMap<>();
@@ -255,6 +265,13 @@ public class ConfigService {
         gemini.put("api_key", "");
         gemini.put("model", "gemini-2.0-flash");
         defaultConfig.put("gemini", gemini);
+
+        // Ollama / OpenAI-compatible local API settings
+        Map<String, Object> ollama = new HashMap<>();
+        ollama.put("base_url", "http://localhost:11434/v1");
+        ollama.put("api_key", "");
+        ollama.put("model", "llava");
+        defaultConfig.put("ollama", ollama);
 
         // Moondream (local AI) settings
         Map<String, Object> moondream = new HashMap<>();
@@ -548,6 +565,31 @@ public class ConfigService {
 
     public void setGeminiModel(String model) {
         setNestedValue("gemini", "model", model);
+    }
+
+    // Ollama / OpenAI-compatible local API settings
+    public String getOllamaBaseUrl() {
+        return getNestedString("ollama", "base_url", "http://localhost:11434/v1");
+    }
+
+    public void setOllamaBaseUrl(String baseUrl) {
+        setNestedValue("ollama", "base_url", baseUrl);
+    }
+
+    public String getOllamaApiKey() {
+        return getNestedString("ollama", "api_key", "");
+    }
+
+    public void setOllamaApiKey(String apiKey) {
+        setNestedValue("ollama", "api_key", apiKey);
+    }
+
+    public String getOllamaModel() {
+        return getNestedString("ollama", "model", "llava");
+    }
+
+    public void setOllamaModel(String model) {
+        setNestedValue("ollama", "model", model);
     }
 
     // Moondream settings

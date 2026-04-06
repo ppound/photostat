@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Service for analyzing images using Claude, Gemini, or Moondream (local) vision APIs.
+ * Service for analyzing images using Claude, Gemini, Ollama-compatible APIs, or Moondream (local).
  */
 public class ImageAnalysisService {
 
@@ -117,6 +117,8 @@ public class ImageAnalysisService {
         String provider = configService.getAiProvider();
         if ("gemini".equalsIgnoreCase(provider)) {
             return analyzeImageWithGemini(imagePath);
+        } else if ("ollama".equalsIgnoreCase(provider)) {
+            return analyzeImageWithOllama(imagePath);
         } else if ("moondream".equalsIgnoreCase(provider)) {
             return analyzeImageWithMoondream(imagePath);
         } else {
@@ -287,6 +289,68 @@ public class ImageAnalysisService {
         } catch (Exception e) {
             logger.error("ImageAnalysisService", "Failed to analyze image with Gemini", e);
             result.setError("Gemini analysis failed: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Analyze an image using an OpenAI-compatible chat endpoint such as local Ollama.
+     */
+    private AnalysisResult analyzeImageWithOllama(String imagePath) {
+        AnalysisResult result = new AnalysisResult();
+
+        String baseUrl = configService.getOllamaBaseUrl();
+        String model = configService.getOllamaModel();
+        if (baseUrl == null || baseUrl.trim().isEmpty() || model == null || model.trim().isEmpty()) {
+            result.setError("Ollama base URL or model not configured. Please set them in Settings.");
+            return result;
+        }
+
+        try {
+            Path path = Path.of(imagePath);
+            if (!Files.exists(path)) {
+                result.setError("Image file not found: " + imagePath);
+                return result;
+            }
+
+            byte[] optimizedBytes = optimizeImageForApi(path.toFile());
+            if (optimizedBytes == null) {
+                result.setError("Failed to process image");
+                return result;
+            }
+
+            String dataUrl = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(optimizedBytes);
+            String requestBody = buildOpenAiCompatibleVisionRequest(model, dataUrl);
+            String endpoint = normalizeOpenAiBaseUrl(baseUrl) + "/chat/completions";
+
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+                    .uri(URI.create(endpoint))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(120))
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody));
+
+            String apiKey = configService.getOllamaApiKey();
+            if (apiKey != null && !apiKey.trim().isEmpty()) {
+                requestBuilder.header("Authorization", "Bearer " + apiKey.trim());
+            }
+
+            logger.info("ImageAnalysisService", "Sending image to Ollama-compatible API (" + model + "): " + imagePath);
+
+            HttpResponse<String> response = httpClient.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 400) {
+                logger.error("ImageAnalysisService", "Ollama API error: " + response.statusCode() + " - " + response.body());
+                result.setError("API error: " + response.statusCode());
+                return result;
+            }
+
+            parseOpenAiCompatibleResponse(response.body(), result);
+            if (!result.hasError()) {
+                saveAnalysisCache(imagePath);
+            }
+        } catch (IOException | InterruptedException e) {
+            logger.error("ImageAnalysisService", "Failed to analyze image with Ollama-compatible API", e);
+            result.setError("Analysis failed: " + e.getMessage());
         }
 
         return result;
@@ -905,6 +969,36 @@ public class ImageAnalysisService {
         return configService.getClaudeAnalysisPrompt();
     }
 
+    private String buildOpenAiCompatibleVisionRequest(String model, String imageDataUrl) throws IOException {
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("model", model);
+        root.put("temperature", 0.2);
+
+        ArrayNode messages = objectMapper.createArrayNode();
+        ObjectNode message = objectMapper.createObjectNode();
+        message.put("role", "user");
+
+        ArrayNode content = objectMapper.createArrayNode();
+
+        ObjectNode textContent = objectMapper.createObjectNode();
+        textContent.put("type", "text");
+        textContent.put("text", getAnalysisPrompt());
+        content.add(textContent);
+
+        ObjectNode imageContent = objectMapper.createObjectNode();
+        imageContent.put("type", "image_url");
+        ObjectNode imageUrl = objectMapper.createObjectNode();
+        imageUrl.put("url", imageDataUrl);
+        imageContent.set("image_url", imageUrl);
+        content.add(imageContent);
+
+        message.set("content", content);
+        messages.add(message);
+        root.set("messages", messages);
+
+        return objectMapper.writeValueAsString(root);
+    }
+
     private void parseResponse(String responseBody, AnalysisResult result) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
@@ -965,6 +1059,86 @@ public class ImageAnalysisService {
         }
     }
 
+    private void parseOpenAiCompatibleResponse(String responseBody, AnalysisResult result) {
+        try {
+            JsonNode root = objectMapper.readTree(responseBody);
+            JsonNode choice = root.path("choices").path(0);
+            JsonNode contentNode = choice.path("message").path("content");
+            String text;
+            if (contentNode.isArray()) {
+                List<String> parts = new ArrayList<>();
+                for (JsonNode node : contentNode) {
+                    String part = node.path("text").asText("");
+                    if (!part.isBlank()) {
+                        parts.add(part);
+                    }
+                }
+                text = String.join("\n", parts);
+            } else {
+                text = contentNode.asText("");
+            }
+
+            JsonNode usage = root.path("usage");
+            if (usage.isObject()) {
+                result.setInputTokens(usage.path("prompt_tokens").asInt(0));
+                result.setOutputTokens(usage.path("completion_tokens").asInt(0));
+            }
+
+            String json = extractJson(text);
+            if (json == null) {
+                result.setError("Could not parse JSON from response");
+                return;
+            }
+
+            JsonNode analysis = objectMapper.readTree(json);
+            applyParsedAnalysis(analysis, result);
+        } catch (Exception e) {
+            logger.error("ImageAnalysisService", "Failed to parse Ollama-compatible response", e);
+            result.setError("Failed to parse response: " + e.getMessage());
+        }
+    }
+
+    private void applyParsedAnalysis(JsonNode analysis, AnalysisResult result) {
+        JsonNode tags = analysis.path("tags");
+        if (tags.isArray()) {
+            List<String> tagList = new ArrayList<>();
+            for (JsonNode tag : tags) {
+                tagList.add(tag.asText());
+            }
+            result.setTags(tagList);
+        }
+
+        JsonNode persons = analysis.path("persons");
+        if (persons.isArray()) {
+            List<String> personList = new ArrayList<>();
+            for (JsonNode person : persons) {
+                personList.add(person.asText());
+            }
+            result.setPersons(personList);
+        }
+
+        JsonNode place = analysis.path("place");
+        if (!place.isNull() && !place.isMissingNode()) {
+            String placeText = place.asText();
+            if (!"null".equalsIgnoreCase(placeText) && !placeText.isEmpty()) {
+                result.setPlace(placeText);
+            }
+        }
+
+        JsonNode rating = analysis.path("rating");
+        if (!rating.isNull() && !rating.isMissingNode()) {
+            result.setRating(rating.asText());
+        }
+    }
+
+    private String normalizeOpenAiBaseUrl(String baseUrl) {
+        String normalized = baseUrl.trim();
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
     String extractJson(String text) {
         // Try to find JSON in the text (may be wrapped in markdown code blocks)
         String trimmed = text.trim();
@@ -1005,6 +1179,10 @@ public class ImageAnalysisService {
         if ("moondream".equalsIgnoreCase(provider)) {
             return isMoondreamAvailable();
         }
+        if ("ollama".equalsIgnoreCase(provider)) {
+            return !configService.getOllamaBaseUrl().trim().isEmpty() &&
+                    !configService.getOllamaModel().trim().isEmpty();
+        }
         String apiKey;
         if ("gemini".equalsIgnoreCase(provider)) {
             apiKey = configService.getGeminiApiKey();
@@ -1021,6 +1199,8 @@ public class ImageAnalysisService {
         String provider = configService.getAiProvider();
         if ("gemini".equalsIgnoreCase(provider)) {
             return "Gemini";
+        } else if ("ollama".equalsIgnoreCase(provider)) {
+            return "Ollama";
         } else if ("moondream".equalsIgnoreCase(provider)) {
             return "Moondream (Local)";
         } else {
@@ -1042,6 +1222,8 @@ public class ImageAnalysisService {
             String model;
             if ("gemini".equalsIgnoreCase(provider)) {
                 model = configService.getGeminiModel();
+            } else if ("ollama".equalsIgnoreCase(provider)) {
+                model = configService.getOllamaModel();
             } else if ("moondream".equalsIgnoreCase(provider)) {
                 model = configService.getMoondreamModel();
             } else {
