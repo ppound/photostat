@@ -197,8 +197,8 @@ public class AnalyzeCli {
                 case "--provider":
                     if (i + 1 < args.length) {
                         providerOverride = args[++i].toLowerCase();
-                        if (!providerOverride.equals("claude") && !providerOverride.equals("gemini") && !providerOverride.equals("moondream")) {
-                            System.err.println("Error: --provider must be 'claude', 'gemini', or 'moondream'");
+                        if (!providerOverride.equals("claude") && !providerOverride.equals("gemini") && !providerOverride.equals("ollama") && !providerOverride.equals("moondream")) {
+                            System.err.println("Error: --provider must be 'claude', 'gemini', 'ollama', or 'moondream'");
                             return false;
                         }
                         // Override the provider in config
@@ -209,7 +209,7 @@ public class AnalyzeCli {
                             parallelThreads = 1;
                         }
                     } else {
-                        System.err.println("Error: --provider requires 'claude', 'gemini', or 'moondream'");
+                        System.err.println("Error: --provider requires 'claude', 'gemini', 'ollama', or 'moondream'");
                         printUsage();
                         return false;
                     }
@@ -274,7 +274,7 @@ public class AnalyzeCli {
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --dir <path>           Analyze specific directory (overrides config)");
-        System.out.println("  --provider <name>      Use 'claude', 'gemini', or 'moondream' (overrides config)");
+        System.out.println("  --provider <name>      Use 'claude', 'gemini', 'ollama', or 'moondream' (overrides config)");
         System.out.println("  --parallel <n>         Run n parallel analyses (1-8, default: 1)");
         System.out.println("  --dry-run              Show what would be analyzed without calling API");
         System.out.println("  --force                Re-analyze even if cached");
@@ -287,6 +287,7 @@ public class AnalyzeCli {
         System.out.println("Examples:");
         System.out.println("  java -jar photostat.jar --analyze");
         System.out.println("  java -jar photostat.jar --analyze --provider gemini");
+        System.out.println("  java -jar photostat.jar --analyze --provider ollama");
         System.out.println("  java -jar photostat.jar --analyze --provider moondream");
         System.out.println("  java -jar photostat.jar --analyze --dir /path/to/photos --force");
         System.out.println("  java -jar photostat.jar --analyze --dry-run");
