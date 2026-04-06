@@ -6,7 +6,7 @@
 
     <groupId>com.photostat</groupId>
     <artifactId>photostat-java</artifactId>
-    <version>1.9.14</version>
+    <version>1.9.15</version>
     <packaging>jar</packaging>
 
     <name>PhotoStat Java</name>

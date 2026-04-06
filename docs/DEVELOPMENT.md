@@ -43,8 +43,8 @@ mvn clean package -Pmac-intel
 
 | Build command | Output JAR | Platforms |
 |---------------|------------|-----------|
-| `mvn package` | `target/photostat-java-1.9.14-executable.jar` | Windows, Linux, macOS Apple Silicon |
-| `mvn package -Pmac-intel` | `target/photostat-java-1.9.14-executable-mac-intel.jar` | Windows, Linux, macOS Intel |
+| `mvn package` | `target/photostat-java-1.9.15-executable.jar` | Windows, Linux, macOS Apple Silicon |
+| `mvn package -Pmac-intel` | `target/photostat-java-1.9.15-executable-mac-intel.jar` | Windows, Linux, macOS Intel |
 
 The default build includes Apple Silicon (M1/M2/M3/M4) macOS natives. The `mac-intel` profile swaps these for Intel (x86_64) macOS natives and produces a JAR with a distinct filename.
 
