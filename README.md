@@ -18,7 +18,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Face Recognition** - Automatic face detection and clustering via InsightFace, with person naming and search integration
 - **Cloud Upload** - Upload photos to Google Photos, S3, or 70+ cloud providers via rclone
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
-- **AI-Powered Organization** - Leverage Claude or Gemini AI to automatically tag and categorize your photos
+- **AI-Powered Organization** - Leverage Claude, Gemini, or Ollama-compatible local AI to automatically tag and categorize your photos
 - **AI Image Generation** - Generate new images from your photos using Luma AI with text prompts and reference images
 
 ---
@@ -43,7 +43,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Copy & Paste Metadata** - Quickly apply tags across multiple images
 
 ### AI Analysis
-- **Multiple Providers** - Claude (Anthropic) or Gemini (Google)
+- **Multiple Providers** - Claude (Anthropic), Gemini (Google), Ollama (local), or Moondream (local)
 - **Smart Tagging** - Automatic subject, style, and mood detection
 - **Quality Rating** - AI-generated ratings based on composition
 - **Batch Processing** - Analyze via GUI or command-line
@@ -229,6 +229,9 @@ java -jar photostat-java-1.9.14-executable.jar --analyze --parallel 4
 # Use Gemini instead of Claude
 java -jar photostat-java-1.9.14-executable.jar --analyze --provider gemini
 
+# Use Ollama (local)
+java -jar photostat-java-1.9.14-executable.jar --analyze --provider ollama
+
 # Find duplicate images
 java -jar photostat-java-1.9.14-executable.jar --find-duplicates
 
@@ -276,7 +279,7 @@ Install ExifTool:
 |-----------|------------|
 | GUI | JavaFX 21 |
 | Search | OpenSearch 2.x |
-| AI | Claude API, Gemini API, Luma AI |
+| AI | Claude API, Gemini API, Ollama (local), Luma AI |
 | Face Recognition | InsightFace (Python sidecar) |
 | EXIF | metadata-extractor, ExifTool |
 | Build | Maven |

@@ -9,6 +9,7 @@ PhotoStat can automatically analyze your images using AI vision capabilities to 
   - [Choosing a Provider](#choosing-a-provider)
   - [Configuring Claude (Anthropic)](#configuring-claude-anthropic)
   - [Configuring Gemini (Google)](#configuring-gemini-google)
+  - [Configuring Ollama (Local)](#configuring-ollama-local)
   - [Configuring Moondream (Local)](#configuring-moondream-local)
   - [API Costs](#api-costs)
 - [Using AI Analysis in the GUI](#using-ai-analysis-in-the-gui)
@@ -28,10 +29,11 @@ PhotoStat can automatically analyze your images using AI vision capabilities to 
 
 ## Overview
 
-Three AI providers are supported:
+Four AI providers are supported:
 
 - **Claude** (Anthropic) - High-quality analysis with excellent scene understanding
 - **Gemini** (Google) - Cost-effective alternative with fast processing
+- **Ollama** (Local) - Free, offline analysis using locally-hosted vision models via OpenAI-compatible API
 - **Moondream** (Local) - Free, offline analysis using a local 2B-parameter vision model
 
 **What the AI Analyzes:**
@@ -53,6 +55,7 @@ Three AI providers are supported:
 |----------|------|------|
 | **Claude** | Excellent scene understanding, detailed descriptions | Higher cost, requires API key |
 | **Gemini** | Very cost-effective, fast processing | May be less detailed, requires API key |
+| **Ollama** | Free, no API key, works offline, many model choices | Requires GPU for usable speed, quality varies by model |
 | **Moondream** | Free, no API key, works offline, private | Slower (~5-15s/image on CPU), less detailed than cloud models |
 
 ### Configuring Claude (Anthropic)
@@ -107,6 +110,107 @@ Three AI providers are supported:
 
 6. Click **Test API Key** to verify
 7. Click **OK** to save
+
+### Configuring Ollama (Local)
+
+Ollama lets you run open-source vision models locally on your machine. PhotoStat connects to Ollama's OpenAI-compatible API endpoint, so it also works with other services that expose the same API (e.g., LM Studio, LocalAI, vLLM).
+
+**Prerequisites:**
+
+- A machine with a GPU (NVIDIA, AMD, or Apple Silicon) is strongly recommended
+- ~4-8 GB disk space depending on the model
+
+**Installing Ollama:**
+
+1. Download and install Ollama from [ollama.com](https://ollama.com/)
+
+   | Platform | Installation |
+   |----------|-------------|
+   | **Windows** | Download the installer from [ollama.com/download](https://ollama.com/download) |
+   | **macOS** | Download from [ollama.com/download](https://ollama.com/download) or `brew install ollama` |
+   | **Linux** | `curl -fsSL https://ollama.com/install.sh \| sh` |
+
+2. Verify Ollama is running:
+   ```bash
+   ollama --version
+   ```
+
+**Pulling a Vision Model:**
+
+You need a model that supports image/vision input. Pull one of the recommended models:
+
+```bash
+# LLaVA — good general-purpose vision model (~4.7 GB)
+ollama pull llava
+
+# Llama 3.2 Vision — newer, strong performance (~6 GB)
+ollama pull llama3.2-vision
+
+# MiniCPM-V — lightweight alternative (~3 GB)
+ollama pull minicpm-v
+```
+
+| Model | Size | Description |
+|-------|------|-------------|
+| `llava` | ~4.7 GB | Good general-purpose vision model, reliable JSON output |
+| `llama3.2-vision` | ~6 GB | Meta's latest vision model, strong scene understanding |
+| `minicpm-v` | ~3 GB | Lightweight, faster on lower-end hardware |
+
+> **Note:** You can use any Ollama model that supports vision. Browse available models at [ollama.com/search](https://ollama.com/search) and filter by "Vision".
+
+**Verify the Model Works:**
+
+```bash
+# Start Ollama if not already running
+ollama serve
+
+# Test with a simple prompt
+ollama run llava "Describe this image" </path/to/test-image.jpg
+```
+
+**Setup in PhotoStat:**
+
+1. Open **File > Settings**
+2. Navigate to the **AI Analysis** tab
+3. Select **Ollama** as the provider
+4. Configure the settings:
+
+   | Setting | Default | Description |
+   |---------|---------|-------------|
+   | **Base URL** | `http://localhost:11434/v1` | Ollama's OpenAI-compatible endpoint. Change the host/port if Ollama runs on a different machine |
+   | **API Key** | (empty) | Optional. Not needed for local Ollama, but required for some remote OpenAI-compatible services |
+   | **Model** | `llava` | The vision model to use. Must already be pulled via `ollama pull` |
+
+5. Click **Test** to verify the connection
+6. Click **OK** to save
+
+**Using with Other OpenAI-Compatible Services:**
+
+PhotoStat's Ollama provider works with any service that exposes the OpenAI `/v1/chat/completions` endpoint with vision support. Examples:
+
+| Service | Base URL | API Key |
+|---------|----------|---------|
+| **Ollama** (local) | `http://localhost:11434/v1` | Not required |
+| **LM Studio** (local) | `http://localhost:1234/v1` | Not required |
+| **LocalAI** (local) | `http://localhost:8080/v1` | Not required |
+| **vLLM** (local/remote) | `http://localhost:8000/v1` | Depends on config |
+| **OpenRouter** (cloud) | `https://openrouter.ai/api/v1` | Required |
+
+**Performance:**
+
+| Hardware | Speed (per image) |
+|----------|-------------------|
+| CPU only | Minutes (not recommended) |
+| NVIDIA GPU (8+ GB VRAM) | ~3-10 seconds |
+| Apple Silicon (M1/M2/M3/M4) | ~3-10 seconds |
+
+**Limitations:**
+
+- Analysis quality depends heavily on the model — local models are generally less accurate than Claude or Gemini at structured JSON output
+- Models must support vision/image input — text-only models will not work
+- First run for a model requires downloading it (several GB)
+- GPU with sufficient VRAM is strongly recommended for usable performance
+- Some models may occasionally return malformed JSON, causing analysis failures
 
 ### Configuring Moondream (Local)
 
@@ -167,6 +271,7 @@ To verify GPU is detected, click **Test** in the Moondream settings — it shoul
 
 | Provider | Cost Level | Best For |
 |----------|------------|----------|
+| Ollama | Free | Privacy-sensitive, offline, flexible model choices |
 | Moondream | Free | Privacy-sensitive, offline, no budget |
 | Claude Haiku | Low | Large batches, basic tagging |
 | Gemini Flash | Very Low | Cost-sensitive batch processing |
@@ -177,6 +282,7 @@ To verify GPU is detected, click **Test** in the Moondream settings — it shoul
 Monitor usage:
 - Claude: [console.anthropic.com](https://console.anthropic.com/)
 - Gemini: [aistudio.google.com](https://aistudio.google.com/)
+- Ollama: Free, no usage tracking needed
 - Moondream: Free, no usage tracking needed
 
 ---
@@ -221,7 +327,7 @@ PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
 - When re-analyzing, images with matching hashes are skipped
 - The progress dialog shows "Cached (skipped)" count for unchanged images
 - Cache is invalidated when you:
-  - Switch AI providers (Claude / Gemini / Moondream)
+  - Switch AI providers (Claude / Gemini / Ollama / Moondream)
   - Change the model in settings
   - Modify the analysis prompt in config.json
   - Edit or replace the image file
@@ -299,7 +405,7 @@ java -jar photostat-java-1.9.14-executable.jar --analyze --dry-run
 |--------|-------------|
 | `--analyze` | Run batch analysis mode |
 | `--dir <path>` | Analyze specific directory (overrides config) |
-| `--provider <name>` | Use 'claude', 'gemini', or 'moondream' (overrides config) |
+| `--provider <name>` | Use 'claude', 'gemini', 'ollama', or 'moondream' (overrides config) |
 | `--parallel <n>` | Run n parallel analyses (1-8, default: 1) |
 | `--dry-run` | Show what would be analyzed without making API calls |
 | `--force` | Re-analyze all images, ignoring cache |
@@ -312,6 +418,9 @@ java -jar photostat-java-1.9.14-executable.jar --analyze --dry-run
 ```bash
 # Analyze with Gemini instead of configured provider
 java -jar photostat-java-1.9.14-executable.jar --analyze --provider gemini
+
+# Analyze with Ollama (free, local)
+java -jar photostat-java-1.9.14-executable.jar --analyze --provider ollama
 
 # Analyze with Moondream (free, local)
 java -jar photostat-java-1.9.14-executable.jar --analyze --provider moondream
@@ -480,6 +589,10 @@ Luma AI charges per generation. Check current pricing at [lumalabs.ai](https://l
 | "API error: 429" | Rate limited - wait and try again with fewer images, or use `--parallel` with lower thread count |
 | "Analysis failed" | Check internet connection; verify image format is supported |
 | "Retrying after rate limit" | The CLI automatically retries with exponential backoff |
+| "Ollama base URL or model not configured" | Set the Base URL and Model in Settings > AI Analysis > Ollama Settings |
+| Ollama "Connection refused" | Ollama is not running. Start it with `ollama serve` or launch the Ollama app |
+| Ollama "Could not parse JSON from response" | The model returned malformed JSON. Try a different model (e.g., `llava` or `llama3.2-vision`) or retry |
+| Ollama analysis is very slow | GPU is required for usable performance. Ensure Ollama detects your GPU — check with `ollama ps` |
 | "Moondream Python dependencies not found" | Run `pip install "transformers>=4.51,<5" torch Pillow accelerate` |
 | "Moondream worker closed before sending ready signal" | Check Python path in settings; ensure moondream is installed for that Python |
 | Moondream is very slow | GPU is required for usable performance. Install PyTorch with CUDA: `pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124`. Verify with Test button — should report `cuda` not `cpu` |
