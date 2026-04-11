@@ -196,9 +196,14 @@ public class IndexPanel extends BorderPane {
 
         Label optionsLabel = new Label("Options:");
 
-        Button deleteAllButton = new Button("Delete All Documents");
+        Button deleteAllButton = new Button("Clear Index");
         deleteAllButton.getStyleClass().add("delete-button");
         deleteAllButton.setOnAction(e -> deleteAllDocuments());
+        deleteAllButton.setTooltip(new Tooltip(
+                "Removes all entries from the OpenSearch index for every\n" +
+                "configured directory. Image files and sidecars\n" +
+                "(.photostat.json / .xmp) are not touched.\n" +
+                "You can re-populate the index at any time with \"Start Indexing\"."));
 
         // ExifTool status
         Label exifToolLabel = new Label("ExifTool Status:");
@@ -467,10 +472,12 @@ public class IndexPanel extends BorderPane {
 
     private void deleteAllDocuments() {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Delete All Documents");
-        confirm.setHeaderText("Delete all indexed documents?");
-        confirm.setContentText("This will remove ALL documents from the OpenSearch index. " +
-                "This action cannot be undone.");
+        confirm.setTitle("Clear Index");
+        confirm.setHeaderText("Clear the entire OpenSearch index?");
+        confirm.setContentText("This removes every entry from the OpenSearch index for all " +
+                "configured directories. Your image files and sidecar files (.photostat.json / " +
+                ".xmp) are not affected, and you can re-populate the index at any time with " +
+                "Start Indexing. This action cannot be undone.");
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {

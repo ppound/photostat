@@ -40,6 +40,10 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "path": "exiftool",
     "use_for_raw": true
   },
+  "sidecar": {
+    "format": "json",
+    "read_both": true
+  },
   "logging": {
     "enabled": false,
     "level": "INFO",
@@ -125,6 +129,29 @@ File extensions can be configured in **Settings > Indexing** using checkboxes, o
 |---------|------|---------|-------------|
 | `exiftool.path` | string | `exiftool` | Path to ExifTool executable |
 | `exiftool.use_for_raw` | boolean | `true` | Use ExifTool for RAW files |
+
+### Sidecar Settings
+
+PhotoStat stores custom metadata (persons, place, tags, rating, AI analysis cache, cloud upload tracking) in sidecar files that live next to the original image. Two formats are supported.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `sidecar.format` | string | `json` | Primary sidecar format: `json`, `xmp`, or `both` |
+| `sidecar.read_both` | boolean | `true` | Fall back to the other format on read if the primary is missing |
+
+**Format options:**
+
+- **`json`** — writes `IMG_1234.jpg.photostat.json`, a compact JSON format. Default, and best if you don't use other photo tools alongside PhotoStat.
+- **`xmp`** — writes `IMG_1234.jpg.xmp`, a standard XMP/RDF sidecar readable by Adobe Lightroom, Adobe Bridge, digiKam, ExifTool, and any tool that supports the XMP standard. Use this if you want your ratings/tags/persons to show up in external software.
+- **`both`** — writes both files on every save. Useful during a migration period.
+
+**XMP field mapping:** `rating` → `xmp:Rating`; `tags` → `dc:subject`; `persons` → `Iptc4xmpExt:PersonInImage`. PhotoStat-specific fields (`place`, `analysisHash`, `cloudUploads`) live in a custom namespace `http://photostat.app/xmp/1.0/` (prefix `photostat`) so they don't collide with other tools' fields. The `place` field uses the custom namespace because PhotoStat's place is free-form (values like "Restaurant" or "Beach") and would not be valid in a standard IPTC city field.
+
+**Read-both fallback:** When `sidecar.read_both` is `true` (default), PhotoStat reads whichever format exists, regardless of the configured primary. This makes switching formats safe — you can flip `format` from `json` to `xmp` and old JSON sidecars will still be loaded until you rewrite them.
+
+**Bulk conversion:** Use the **"Convert JSON sidecars to XMP…"** button on the Index tab to migrate an entire collection at once (available when `format` is `xmp` or `both`). See [User Guide — Sidecar Files](USER_GUIDE.md#sidecar-files) for the full workflow.
+
+These settings can be configured via **Settings > Indexing > Sidecar Format** in the GUI, or edited directly in `config.json`.
 
 ### Logging Settings
 
