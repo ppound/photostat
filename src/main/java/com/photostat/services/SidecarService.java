@@ -258,6 +258,72 @@ public class SidecarService {
     }
 
     /**
+     * Outcome of a single {@link #convertJsonToXmp} call.
+     */
+    public enum ConversionResult {
+        /** JSON sidecar was read and successfully written to XMP. */
+        CONVERTED,
+        /** No JSON sidecar exists for this image — nothing to convert. */
+        SKIPPED_NO_JSON,
+        /** JSON sidecar existed but held no usable data — nothing worth migrating. */
+        SKIPPED_EMPTY,
+        /** Read or write failed. See the log for details. */
+        FAILED
+    }
+
+    /**
+     * Convert a single image's {@code .photostat.json} sidecar to an {@code .xmp}
+     * sidecar, preserving all fields (persons, place, tags, rating, analysisHash,
+     * cloudUploads). If {@code deleteJsonAfter} is true, the original JSON
+     * sidecar is deleted on success.
+     *
+     * <p>This method bypasses the configured primary format and always reads
+     * from JSON / writes to XMP — it is intended for one-shot migration, not
+     * general persistence. Use {@link #writeSidecar} for normal writes.
+     *
+     * @return the {@link ConversionResult} describing what happened.
+     */
+    public ConversionResult convertJsonToXmp(String imagePath, boolean deleteJsonAfter) {
+        if (!jsonBackend.exists(imagePath)) {
+            return ConversionResult.SKIPPED_NO_JSON;
+        }
+
+        SidecarData data = jsonBackend.read(imagePath);
+        if (data == null) {
+            // File exists but is unreadable — treat as failure so the user sees it.
+            logger.warn("SidecarService", "Failed to parse JSON sidecar during conversion: " + imagePath);
+            return ConversionResult.FAILED;
+        }
+
+        boolean hasAnything = !data.isEmpty()
+                || data.hasAnalysisCache()
+                || (data.getCloudUploads() != null && !data.getCloudUploads().isEmpty());
+        if (!hasAnything) {
+            // Empty sidecar — nothing to carry over. Still offer to delete it
+            // since it's just noise on disk.
+            if (deleteJsonAfter) {
+                jsonBackend.delete(imagePath);
+            }
+            return ConversionResult.SKIPPED_EMPTY;
+        }
+
+        if (!xmpBackend.write(imagePath, data)) {
+            return ConversionResult.FAILED;
+        }
+
+        if (deleteJsonAfter) {
+            if (!jsonBackend.delete(imagePath)) {
+                // XMP is already written, so treat delete-failure as a soft
+                // problem: conversion succeeded, cleanup didn't.
+                logger.warn("SidecarService",
+                        "XMP written but failed to delete original JSON sidecar: " + imagePath);
+            }
+        }
+
+        return ConversionResult.CONVERTED;
+    }
+
+    /**
      * Data class for sidecar content.
      */
     public static class SidecarData {

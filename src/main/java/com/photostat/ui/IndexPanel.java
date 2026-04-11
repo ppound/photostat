@@ -4,7 +4,9 @@ import com.photostat.services.ConfigService;
 import com.photostat.services.ExifService;
 import com.photostat.services.IndexerService;
 import com.photostat.services.OpenSearchService;
+import com.photostat.services.SidecarService;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -15,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Panel for managing directories and indexing operations.
@@ -25,6 +28,7 @@ public class IndexPanel extends BorderPane {
     private final IndexerService indexerService;
     private final ExifService exifService;
     private final OpenSearchService openSearchService;
+    private final SidecarService sidecarService;
 
     private ListView<String> directoryList;
     private ProgressBar progressBar;
@@ -33,12 +37,14 @@ public class IndexPanel extends BorderPane {
     private Button startButton;
     private Button stopButton;
     private Button reindexButton;
+    private Button convertSidecarsButton;
 
     public IndexPanel() {
         this.configService = ConfigService.getInstance();
         this.indexerService = IndexerService.getInstance();
         this.exifService = ExifService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
 
         initializeUI();
         setupCallbacks();
@@ -178,6 +184,10 @@ public class IndexPanel extends BorderPane {
         reindexButton.setOnAction(e -> reindexAll());
         reindexButton.setPrefWidth(150);
 
+        convertSidecarsButton = new Button("Convert JSON sidecars to XMP…");
+        convertSidecarsButton.setOnAction(e -> convertJsonSidecarsToXmp());
+        convertSidecarsButton.setPrefWidth(260);
+
         HBox mainButtons = new HBox(10, startButton, stopButton);
         mainButtons.setAlignment(Pos.CENTER_LEFT);
 
@@ -221,6 +231,7 @@ public class IndexPanel extends BorderPane {
                 statsLabel,
                 mainButtons,
                 reindexButton,
+                convertSidecarsButton,
                 sep,
                 optionsLabel,
                 deleteAllButton,
@@ -229,7 +240,31 @@ public class IndexPanel extends BorderPane {
                 formatsPane
         );
 
+        refreshSidecarConversionState();
+
         return section;
+    }
+
+    /**
+     * Re-evaluate whether the "Convert JSON sidecars to XMP" button should be
+     * enabled. Only meaningful when the user has chosen the XMP or Both sidecar
+     * format in Settings.
+     */
+    public void refreshSidecarConversionState() {
+        if (convertSidecarsButton == null) {
+            return;
+        }
+        String format = configService.getSidecarFormat();
+        boolean enabled = "xmp".equalsIgnoreCase(format) || "both".equalsIgnoreCase(format);
+        convertSidecarsButton.setDisable(!enabled);
+        if (enabled) {
+            convertSidecarsButton.setTooltip(new Tooltip(
+                    "Scan configured directories and rewrite every .photostat.json\n" +
+                    "sidecar as a .xmp sidecar. Optionally deletes the JSON files."));
+        } else {
+            convertSidecarsButton.setTooltip(new Tooltip(
+                    "Set Sidecar Format to XMP or Both in Settings → Indexing to enable."));
+        }
     }
 
     private void setupCallbacks() {
@@ -244,6 +279,7 @@ public class IndexPanel extends BorderPane {
                     startButton.setDisable(false);
                     stopButton.setDisable(true);
                     reindexButton.setDisable(false);
+                    refreshSidecarConversionState();
                     updateStats();
                 })
         );
@@ -391,6 +427,7 @@ public class IndexPanel extends BorderPane {
             startButton.setDisable(true);
             stopButton.setDisable(false);
             reindexButton.setDisable(true);
+            convertSidecarsButton.setDisable(true);
             progressBar.setProgress(0);
             statusLabel.setText("Indexing " + selectedDirs.size() + " director" +
                     (selectedDirs.size() == 1 ? "y" : "ies") + " with " +
@@ -405,6 +442,7 @@ public class IndexPanel extends BorderPane {
         startButton.setDisable(false);
         stopButton.setDisable(true);
         reindexButton.setDisable(false);
+        refreshSidecarConversionState();
     }
 
     private void reindexAll() {
@@ -419,6 +457,7 @@ public class IndexPanel extends BorderPane {
                 startButton.setDisable(true);
                 stopButton.setDisable(false);
                 reindexButton.setDisable(true);
+                convertSidecarsButton.setDisable(true);
                 progressBar.setProgress(0);
 
                 indexerService.reindexAll();
@@ -448,6 +487,151 @@ public class IndexPanel extends BorderPane {
                 updateStats();
             }
         });
+    }
+
+    /**
+     * Scan configured directories for {@code .photostat.json} sidecars and
+     * rewrite each one as an {@code .xmp} sidecar, optionally deleting the
+     * JSON file on success. Runs in a background {@link Task} so the UI stays
+     * responsive.
+     */
+    private void convertJsonSidecarsToXmp() {
+        List<String> directories = configService.getDirectories();
+        if (directories.isEmpty()) {
+            Alert info = new Alert(Alert.AlertType.INFORMATION);
+            info.setTitle("Convert JSON sidecars to XMP");
+            info.setHeaderText("No directories configured");
+            info.setContentText("Add at least one directory to the indexing list first.");
+            info.showAndWait();
+            return;
+        }
+
+        // Scan synchronously — cheap compared to the conversion, and we want
+        // an accurate count for the confirmation dialog.
+        List<Path> jsonSidecars = findJsonSidecars(directories);
+        if (jsonSidecars.isEmpty()) {
+            Alert info = new Alert(Alert.AlertType.INFORMATION);
+            info.setTitle("Convert JSON sidecars to XMP");
+            info.setHeaderText("No JSON sidecars found");
+            info.setContentText("None of your configured directories contain .photostat.json files.");
+            info.showAndWait();
+            return;
+        }
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Convert JSON sidecars to XMP");
+        confirm.setHeaderText("Convert " + jsonSidecars.size() + " sidecar file" +
+                (jsonSidecars.size() == 1 ? "" : "s") + "?");
+        confirm.setContentText("Each .photostat.json file will be rewritten as a .xmp sidecar " +
+                "preserving all fields (rating, tags, persons, place, analysis cache, cloud uploads).");
+
+        CheckBox deleteJsonCb = new CheckBox("Delete .photostat.json files after successful conversion");
+        deleteJsonCb.setSelected(false);
+        VBox extraContent = new VBox(10, new Label(confirm.getContentText()), deleteJsonCb);
+        extraContent.setPadding(new Insets(5, 0, 0, 0));
+        confirm.getDialogPane().setContent(extraContent);
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                runConversionTask(jsonSidecars, deleteJsonCb.isSelected());
+            }
+        });
+    }
+
+    /**
+     * Walk the configured directories and collect every {@code .photostat.json}
+     * file. Runs on the calling thread; cheap for typical collection sizes.
+     */
+    private List<Path> findJsonSidecars(List<String> directories) {
+        List<Path> found = new ArrayList<>();
+        for (String dir : directories) {
+            Path dirPath = Path.of(dir);
+            if (!Files.isDirectory(dirPath)) {
+                continue;
+            }
+            try (Stream<Path> walk = Files.walk(dirPath)) {
+                walk.filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().endsWith(".photostat.json"))
+                        .forEach(found::add);
+            } catch (Exception e) {
+                statusLabel.setText("Failed to scan " + dir + ": " + e.getMessage());
+            }
+        }
+        return found;
+    }
+
+    private void runConversionTask(List<Path> jsonSidecars, boolean deleteJsonAfter) {
+        startButton.setDisable(true);
+        reindexButton.setDisable(true);
+        convertSidecarsButton.setDisable(true);
+        progressBar.setProgress(0);
+
+        Task<int[]> task = new Task<>() {
+            @Override
+            protected int[] call() {
+                int converted = 0;
+                int skippedEmpty = 0;
+                int skippedNoJson = 0;
+                int failed = 0;
+                int total = jsonSidecars.size();
+
+                for (int i = 0; i < total; i++) {
+                    if (isCancelled()) break;
+                    Path jsonPath = jsonSidecars.get(i);
+
+                    // Derive image path by stripping ".photostat.json"
+                    String fullName = jsonPath.toString();
+                    String imagePath = fullName.substring(0,
+                            fullName.length() - ".photostat.json".length());
+
+                    updateMessage("Converting " + (i + 1) + " / " + total + ": " +
+                            jsonPath.getFileName());
+                    updateProgress(i, total);
+
+                    SidecarService.ConversionResult result =
+                            sidecarService.convertJsonToXmp(imagePath, deleteJsonAfter);
+                    switch (result) {
+                        case CONVERTED -> converted++;
+                        case SKIPPED_EMPTY -> skippedEmpty++;
+                        case SKIPPED_NO_JSON -> skippedNoJson++;
+                        case FAILED -> failed++;
+                    }
+                }
+
+                updateProgress(total, total);
+                return new int[]{converted, skippedEmpty, skippedNoJson, failed};
+            }
+        };
+
+        task.messageProperty().addListener((obs, oldMsg, newMsg) ->
+                Platform.runLater(() -> statusLabel.setText(newMsg)));
+        task.progressProperty().addListener((obs, oldVal, newVal) ->
+                Platform.runLater(() -> progressBar.setProgress(newVal.doubleValue())));
+
+        task.setOnSucceeded(e -> Platform.runLater(() -> {
+            int[] stats = task.getValue();
+            String summary = String.format(
+                    "Converted %d · Skipped %d empty · Skipped %d missing · Failed %d%s",
+                    stats[0], stats[1], stats[2], stats[3],
+                    deleteJsonAfter ? " (JSON files deleted)" : "");
+            statusLabel.setText(summary);
+            startButton.setDisable(false);
+            reindexButton.setDisable(false);
+            refreshSidecarConversionState();
+        }));
+
+        task.setOnFailed(e -> Platform.runLater(() -> {
+            Throwable ex = task.getException();
+            statusLabel.setText("Conversion failed: " +
+                    (ex != null ? ex.getMessage() : "unknown error"));
+            startButton.setDisable(false);
+            reindexButton.setDisable(false);
+            refreshSidecarConversionState();
+        }));
+
+        Thread thread = new Thread(task, "sidecar-conversion");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     private void updateStats() {

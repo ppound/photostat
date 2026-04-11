@@ -184,6 +184,78 @@ public class SidecarServiceFacadeTest {
         assertEquals("2", data.getRating());
     }
 
+    // --- JSON → XMP conversion -------------------------------------------
+
+    @Test
+    void convertJsonToXmpFullFieldRoundTrip(@TempDir Path tmp) throws Exception {
+        ConfigService.getInstance().setSidecarFormat("json");
+        ConfigService.getInstance().setSidecarReadBoth(false);
+
+        Path image = tmp.resolve("photo.jpg");
+        Files.createFile(image);
+
+        // Seed a rich JSON sidecar covering every field, including analysisHash
+        // and a cloud upload record.
+        service.writeSidecar(image.toString(),
+                List.of("alice", "bob"),
+                "Restaurant",
+                List.of("Food", "Evening"),
+                "5");
+        service.updateAnalysisCache(image.toString(), "hash-xyz");
+        service.addCloudUpload(image.toString(), "s3-backup");
+
+        // Convert without deleting the JSON
+        SidecarService.ConversionResult result =
+                service.convertJsonToXmp(image.toString(), false);
+        assertEquals(SidecarService.ConversionResult.CONVERTED, result);
+
+        // JSON should still be there
+        Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
+        Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);
+        assertTrue(Files.exists(jsonPath));
+        assertTrue(Files.exists(xmpPath));
+
+        // Read back through the XMP backend directly to verify every field migrated
+        XmpSidecarBackend xmp = new XmpSidecarBackend();
+        SidecarService.SidecarData data = xmp.read(image.toString());
+        assertNotNull(data);
+        assertEquals(List.of("alice", "bob"), data.getPersons());
+        assertEquals("Restaurant", data.getPlace());
+        assertEquals(List.of("Food", "Evening"), data.getTags());
+        assertEquals("5", data.getRating());
+        assertEquals("hash-xyz", data.getAnalysisHash());
+        assertEquals(List.of("s3-backup"), data.getCloudUploads());
+    }
+
+    @Test
+    void convertJsonToXmpDeletesJsonWhenFlagSet(@TempDir Path tmp) throws Exception {
+        ConfigService.getInstance().setSidecarFormat("json");
+        ConfigService.getInstance().setSidecarReadBoth(false);
+
+        Path image = tmp.resolve("photo.jpg");
+        Files.createFile(image);
+        service.writeSidecar(image.toString(), null, null, List.of("tag"), "3");
+
+        SidecarService.ConversionResult result =
+                service.convertJsonToXmp(image.toString(), true);
+        assertEquals(SidecarService.ConversionResult.CONVERTED, result);
+
+        Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
+        Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);
+        assertFalse(Files.exists(jsonPath), "JSON should be deleted after conversion");
+        assertTrue(Files.exists(xmpPath));
+    }
+
+    @Test
+    void convertJsonToXmpReturnsSkippedWhenNoJson(@TempDir Path tmp) throws Exception {
+        Path image = tmp.resolve("photo.jpg");
+        Files.createFile(image);
+
+        SidecarService.ConversionResult result =
+                service.convertJsonToXmp(image.toString(), true);
+        assertEquals(SidecarService.ConversionResult.SKIPPED_NO_JSON, result);
+    }
+
     @Test
     void writeEmptyMetadataDeletesBothSidecars(@TempDir Path tmp) throws Exception {
         ConfigService.getInstance().setSidecarFormat("both");
