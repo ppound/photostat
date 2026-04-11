@@ -47,7 +47,7 @@ public class SidecarServiceFacadeTest {
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
 
-        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("Tag1"), "4"));
+        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("Tag1"), "****"));
 
         Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
         Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);
@@ -63,7 +63,7 @@ public class SidecarServiceFacadeTest {
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
 
-        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("Tag1"), "4"));
+        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("Tag1"), "****"));
 
         Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
         Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);
@@ -80,7 +80,7 @@ public class SidecarServiceFacadeTest {
         Files.createFile(image);
 
         assertTrue(service.writeSidecar(image.toString(), List.of("alice"), "NYC",
-                List.of("Tag1", "Tag2"), "5"));
+                List.of("Tag1", "Tag2"), "*****"));
 
         Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
         Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);
@@ -98,7 +98,7 @@ public class SidecarServiceFacadeTest {
 
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
-        service.writeSidecar(image.toString(), null, "Tokyo", List.of("travel"), "5");
+        service.writeSidecar(image.toString(), null, "Tokyo", List.of("travel"), "*****");
 
         // Now switch primary to JSON with read-both enabled → should still read XMP
         ConfigService.getInstance().setSidecarFormat("json");
@@ -106,7 +106,7 @@ public class SidecarServiceFacadeTest {
 
         SidecarService.SidecarData data = service.readSidecar(image.toString());
         assertNotNull(data, "should fall back to XMP sidecar");
-        assertEquals("5", data.getRating());
+        assertEquals("*****", data.getRating());
         assertEquals("Tokyo", data.getPlace());
         assertEquals(List.of("travel"), data.getTags());
     }
@@ -118,14 +118,14 @@ public class SidecarServiceFacadeTest {
 
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
-        service.writeSidecar(image.toString(), List.of("bob"), null, null, "3");
+        service.writeSidecar(image.toString(), List.of("bob"), null, null, "***");
 
         ConfigService.getInstance().setSidecarFormat("xmp");
         ConfigService.getInstance().setSidecarReadBoth(true);
 
         SidecarService.SidecarData data = service.readSidecar(image.toString());
         assertNotNull(data, "should fall back to JSON sidecar");
-        assertEquals("3", data.getRating());
+        assertEquals("***", data.getRating());
         assertEquals(List.of("bob"), data.getPersons());
     }
 
@@ -136,7 +136,7 @@ public class SidecarServiceFacadeTest {
 
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
-        service.writeSidecar(image.toString(), null, null, List.of("a"), "5");
+        service.writeSidecar(image.toString(), null, null, List.of("a"), "*****");
 
         ConfigService.getInstance().setSidecarFormat("json");
         ConfigService.getInstance().setSidecarReadBoth(false);
@@ -159,12 +159,12 @@ public class SidecarServiceFacadeTest {
         assertTrue(service.updateAnalysisCache(image.toString(), "hash-abc"));
 
         // Now write user metadata — hash must survive
-        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("x"), "4"));
+        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("x"), "****"));
 
         SidecarService.SidecarData data = service.readSidecar(image.toString());
         assertNotNull(data);
         assertEquals("hash-abc", data.getAnalysisHash());
-        assertEquals("4", data.getRating());
+        assertEquals("****", data.getRating());
     }
 
     @Test
@@ -176,12 +176,12 @@ public class SidecarServiceFacadeTest {
         Files.createFile(image);
 
         assertTrue(service.addCloudUpload(image.toString(), "s3-backup"));
-        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("y"), "2"));
+        assertTrue(service.writeSidecar(image.toString(), null, null, List.of("y"), "**"));
 
         SidecarService.SidecarData data = service.readSidecar(image.toString());
         assertNotNull(data);
         assertEquals(List.of("s3-backup"), data.getCloudUploads());
-        assertEquals("2", data.getRating());
+        assertEquals("**", data.getRating());
     }
 
     // --- JSON → XMP conversion -------------------------------------------
@@ -200,7 +200,7 @@ public class SidecarServiceFacadeTest {
                 List.of("alice", "bob"),
                 "Restaurant",
                 List.of("Food", "Evening"),
-                "5");
+                "*****");
         service.updateAnalysisCache(image.toString(), "hash-xyz");
         service.addCloudUpload(image.toString(), "s3-backup");
 
@@ -222,7 +222,7 @@ public class SidecarServiceFacadeTest {
         assertEquals(List.of("alice", "bob"), data.getPersons());
         assertEquals("Restaurant", data.getPlace());
         assertEquals(List.of("Food", "Evening"), data.getTags());
-        assertEquals("5", data.getRating());
+        assertEquals("*****", data.getRating());
         assertEquals("hash-xyz", data.getAnalysisHash());
         assertEquals(List.of("s3-backup"), data.getCloudUploads());
     }
@@ -234,7 +234,7 @@ public class SidecarServiceFacadeTest {
 
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
-        service.writeSidecar(image.toString(), null, null, List.of("tag"), "3");
+        service.writeSidecar(image.toString(), null, null, List.of("tag"), "***");
 
         SidecarService.ConversionResult result =
                 service.convertJsonToXmp(image.toString(), true);
@@ -263,7 +263,7 @@ public class SidecarServiceFacadeTest {
 
         Path image = tmp.resolve("photo.jpg");
         Files.createFile(image);
-        service.writeSidecar(image.toString(), null, null, List.of("a"), "5");
+        service.writeSidecar(image.toString(), null, null, List.of("a"), "*****");
 
         Path jsonPath = Path.of(image.toString() + JsonSidecarBackend.SIDECAR_EXTENSION);
         Path xmpPath = Path.of(image.toString() + XmpSidecarBackend.SIDECAR_EXTENSION);

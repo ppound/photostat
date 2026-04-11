@@ -22,7 +22,13 @@ import java.util.List;
  *
  * <p>Field mapping:
  * <ul>
- *   <li>{@code rating} → {@code xmp:Rating} (integer)</li>
+ *   <li>{@code rating} → {@code xmp:Rating}. PhotoStat stores ratings internally
+ *       as asterisk strings ({@code ""}, {@code "*"}, ..., {@code "*****"}), but
+ *       the XMP spec defines {@code xmp:Rating} as a Real in {@code [-1..5]}
+ *       ({@code 0} = unrated, {@code -1} = rejected). We convert at this boundary
+ *       so Lightroom, Bridge, digiKam, and ExifTool see a proper numeric rating.
+ *       On read we accept both integer and float forms (Lightroom often writes
+ *       {@code 3.0}) and map {@code 0}/{@code -1}/out-of-range to unrated.</li>
  *   <li>{@code tags} → {@code dc:subject} (Bag of strings)</li>
  *   <li>{@code persons} → {@code Iptc4xmpExt:PersonInImage} (Bag of strings)</li>
  *   <li>{@code place} → {@code photostat:place} (free-form; PhotoStat's place
@@ -77,10 +83,13 @@ class XmpSidecarBackend implements SidecarBackend {
 
             SidecarService.SidecarData data = new SidecarService.SidecarData();
 
-            // Rating → xmp:Rating
+            // Rating → xmp:Rating (numeric 0..5, converted to asterisks)
             XMPProperty ratingProp = meta.getProperty(XMPConst.NS_XMP, "Rating");
             if (ratingProp != null && ratingProp.getValue() != null && !ratingProp.getValue().isEmpty()) {
-                data.setRating(ratingProp.getValue());
+                String asterisks = numberToAsterisks(ratingProp.getValue());
+                if (asterisks != null) {
+                    data.setRating(asterisks);
+                }
             }
 
             // Tags → dc:subject
@@ -129,10 +138,13 @@ class XmpSidecarBackend implements SidecarBackend {
         try {
             XMPMeta meta = XMPMetaFactory.create();
 
-            // Rating → xmp:Rating (stored as string — Lightroom/Bridge write it as int
-            // but xmp:Rating's XMP type is "Real" and all tools accept a numeric string).
+            // Rating → xmp:Rating. Convert PhotoStat's asterisk form to the numeric
+            // form defined by the XMP spec so external tools can read it.
             if (data.getRating() != null && !data.getRating().trim().isEmpty()) {
-                meta.setProperty(XMPConst.NS_XMP, "Rating", data.getRating().trim());
+                String numeric = asterisksToNumber(data.getRating());
+                if (numeric != null) {
+                    meta.setProperty(XMPConst.NS_XMP, "Rating", numeric);
+                }
             }
 
             // Tags → dc:subject (unordered bag)
@@ -214,5 +226,76 @@ class XmpSidecarBackend implements SidecarBackend {
             }
         }
         return result;
+    }
+
+    /**
+     * Convert PhotoStat's internal rating format (asterisks, or a bare numeric
+     * string from test fixtures / legacy data) into the numeric form required by
+     * {@code xmp:Rating}.
+     *
+     * @return a numeric string {@code "1".."5"}, or {@code null} if the input
+     *         represents "unrated" and no property should be written.
+     */
+    static String asterisksToNumber(String rating) {
+        if (rating == null) {
+            return null;
+        }
+        String trimmed = rating.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        // Pure asterisk form (PhotoStat's canonical GUI/AI format)
+        if (trimmed.chars().allMatch(c -> c == '*')) {
+            int count = trimmed.length();
+            if (count < 1 || count > 5) {
+                return null;
+            }
+            return Integer.toString(count);
+        }
+        // Numeric form (legacy data, some tests, some code paths)
+        try {
+            double val = Double.parseDouble(trimmed);
+            int rounded = (int) Math.round(val);
+            if (rounded >= 1 && rounded <= 5) {
+                return Integer.toString(rounded);
+            }
+            return null; // 0, -1 (rejected), or out-of-range → unrated
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Convert an {@code xmp:Rating} value (numeric, possibly a float like
+     * {@code "3.0"} as Lightroom writes) into PhotoStat's asterisk form.
+     *
+     * @return an asterisk string {@code "*".."*****"}, or {@code null} if the
+     *         XMP value represents unrated / rejected / out-of-range.
+     */
+    static String numberToAsterisks(String xmpRating) {
+        if (xmpRating == null) {
+            return null;
+        }
+        String trimmed = xmpRating.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            double val = Double.parseDouble(trimmed);
+            int rounded = (int) Math.round(val);
+            if (rounded >= 1 && rounded <= 5) {
+                return "*".repeat(rounded);
+            }
+            // 0 = unrated, -1 = rejected (PhotoStat has no rejected state),
+            // anything else = out of range — all become unrated
+            return null;
+        } catch (NumberFormatException e) {
+            // Already in asterisk form? Some tolerance for files PhotoStat
+            // wrote during development before this conversion existed.
+            if (trimmed.chars().allMatch(c -> c == '*') && trimmed.length() <= 5) {
+                return trimmed;
+            }
+            return null;
+        }
     }
 }
