@@ -567,9 +567,12 @@ public class AnalyzeCli {
                     metadata.addTag(tag);
                 }
             }
+            // AI-generated "persons" are descriptive appearance strings (e.g., "elderly man"),
+            // not real named people. Route them into tags so that the persons field and
+            // Iptc4xmpExt:PersonInImage remain reserved for face recognition / manual names.
             if (result.getPersons() != null && !result.getPersons().isEmpty()) {
                 for (String person : result.getPersons()) {
-                    metadata.addPerson(person);
+                    metadata.addTag(person);
                 }
             }
             if (result.getPlace() != null && !result.getPlace().isEmpty()) {

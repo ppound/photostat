@@ -14,7 +14,7 @@ After years of photography and using various software like Lightroom, Capture On
 
 - **Unified Search Across All Your Photos** - Index images from multiple directories and drives into a single searchable database
 - **Find Duplicates** - Find and manage duplicate images
-- **No Vendor Lock-In** - Your metadata stays with your photos via portable JSON sidecar files
+- **No Vendor Lock-In** - Your metadata stays with your photos via portable sidecar files (JSON or industry-standard XMP, readable by Lightroom, Bridge, digiKam, and ExifTool)
 - **Face Recognition** - Automatic face detection and clustering via InsightFace, with person naming and search integration
 - **Cloud Upload** - Upload photos to Google Photos, S3, or 70+ cloud providers via rclone
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
@@ -39,7 +39,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Keyboard Rating** - Press 1-5 to rate, 0 to clear — instant save for fast culling
 - **Slideshow Mode** - Full-screen browsing with keyboard navigation, quick rating, and image deletion
 - **Dark Theme** - Switch between light and dark themes in Settings for comfortable low-light use
-- **Sidecar Files** - Metadata persists with your images
+- **Sidecar Files** - Metadata persists with your images in JSON or XMP format (XMP is readable by Lightroom, Bridge, digiKam, ExifTool, and other standard photo tools)
 - **Copy & Paste Metadata** - Quickly apply tags across multiple images
 
 ### AI Analysis

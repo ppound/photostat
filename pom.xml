@@ -181,6 +181,13 @@
             <version>1.5.0</version>
         </dependency>
 
+        <!-- Adobe XMP Core - for reading/writing XMP sidecar files -->
+        <dependency>
+            <groupId>com.adobe.xmp</groupId>
+            <artifactId>xmpcore</artifactId>
+            <version>6.1.11</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

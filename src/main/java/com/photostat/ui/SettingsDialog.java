@@ -42,6 +42,8 @@ public class SettingsDialog extends Dialog<Boolean> {
     private TextField indexNameField;
     private TextField exifToolPathField;
     private Spinner<Integer> batchSizeSpinner;
+    private ComboBox<String> sidecarFormatCombo;
+    private CheckBox sidecarReadBothCheckbox;
     private ComboBox<String> themeCombo;
     private Spinner<Integer> thumbnailSizeSpinner;
     private Spinner<Integer> resultsPerPageSpinner;
@@ -261,6 +263,27 @@ public class SettingsDialog extends Dialog<Boolean> {
         Button browseExifTool = new Button("...");
         browseExifTool.setOnAction(e -> browseForExifTool());
         grid.add(browseExifTool, 2, row++);
+
+        // Sidecar format
+        grid.add(new Label("Sidecar Format:"), 0, row);
+        sidecarFormatCombo = new ComboBox<>();
+        sidecarFormatCombo.getItems().addAll("JSON", "XMP", "Both");
+        sidecarFormatCombo.setPrefWidth(120);
+        sidecarFormatCombo.setTooltip(new Tooltip(
+                "JSON (.photostat.json): PhotoStat's native format — simple, compact.\n" +
+                "XMP (.xmp): industry standard readable by Lightroom, Bridge, digiKam,\n" +
+                "ExifTool, and Windows/Mac tooling.\n" +
+                "Both: write both formats during migration."));
+        grid.add(sidecarFormatCombo, 1, row);
+        grid.add(new Label("(custom metadata storage)"), 2, row++);
+
+        // Read-both fallback
+        grid.add(new Label(""), 0, row);
+        sidecarReadBothCheckbox = new CheckBox("Read from either format if primary is missing");
+        sidecarReadBothCheckbox.setTooltip(new Tooltip(
+                "When enabled, PhotoStat reads whichever sidecar exists, making\n" +
+                "migration between formats seamless."));
+        grid.add(sidecarReadBothCheckbox, 1, row++, 2, 1);
 
         // File types to index
         Label fileTypesLabel = new Label("File Types to Index:");
@@ -1376,6 +1399,15 @@ public class SettingsDialog extends Dialog<Boolean> {
         indexNameField.setText(configService.getIndexName());
         exifToolPathField.setText(configService.getExifToolPath());
         batchSizeSpinner.getValueFactory().setValue(configService.getBatchSize());
+        String format = configService.getSidecarFormat();
+        if ("xmp".equalsIgnoreCase(format)) {
+            sidecarFormatCombo.setValue("XMP");
+        } else if ("both".equalsIgnoreCase(format)) {
+            sidecarFormatCombo.setValue("Both");
+        } else {
+            sidecarFormatCombo.setValue("JSON");
+        }
+        sidecarReadBothCheckbox.setSelected(configService.isSidecarReadBoth());
         themeCombo.setValue("dark".equalsIgnoreCase(configService.getTheme()) ? "Dark" : "Light");
         thumbnailSizeSpinner.getValueFactory().setValue(configService.getThumbnailSize());
         resultsPerPageSpinner.getValueFactory().setValue(configService.getResultsPerPage());
@@ -1459,6 +1491,15 @@ public class SettingsDialog extends Dialog<Boolean> {
         configService.setIndexName(indexNameField.getText().trim());
         configService.setExifToolPath(exifToolPathField.getText().trim());
         configService.setBatchSize(batchSizeSpinner.getValue());
+        String formatChoice = sidecarFormatCombo.getValue();
+        if ("XMP".equals(formatChoice)) {
+            configService.setSidecarFormat("xmp");
+        } else if ("Both".equals(formatChoice)) {
+            configService.setSidecarFormat("both");
+        } else {
+            configService.setSidecarFormat("json");
+        }
+        configService.setSidecarReadBoth(sidecarReadBothCheckbox.isSelected());
         // Theme
         String selectedTheme = "Dark".equals(themeCombo.getValue()) ? "dark" : "light";
         configService.setTheme(selectedTheme);

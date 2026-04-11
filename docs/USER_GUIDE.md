@@ -253,7 +253,7 @@ You can add your own metadata to photos for better organization:
 
    | Field | Description | Example |
    |-------|-------------|---------|
-   | **Persons** | Names of people in the photo (comma-separated) | "John, Jane, Bob" |
+   | **Persons** | Names of people in the photo (comma-separated). Reserved for *actual names* — face recognition and manual entry only. AI analysis does not populate this field; descriptions like "elderly man" or "child" are added to Tags instead. | "John, Jane, Bob" |
    | **Place** | Location name | "Central Park, NYC" |
    | **Tags** | Custom tags (comma-separated) | "vacation, family, summer" |
    | **Rating** | Quality rating using asterisks | "***" (3 stars) |
@@ -801,7 +801,7 @@ You can upload specific images directly from search results:
 5. A progress dialog shows each file being uploaded
 6. The summary shows selected, uploaded, and skipped counts
 
-**Duplicate upload prevention:** Each successful upload is recorded in the image's `.photostat.json` sidecar file. On subsequent uploads, files already sent to the same remote are automatically skipped. Uncheck "Skip already uploaded files" to force re-upload. Uploads to a *different* remote are not skipped — the tracking is per-remote.
+**Duplicate upload prevention:** Each successful upload is recorded in the image's sidecar file (`.photostat.json` or `.xmp`, depending on your configured format). On subsequent uploads, files already sent to the same remote are automatically skipped. Uncheck "Skip already uploaded files" to force re-upload. Uploads to a *different* remote are not skipped — the tracking is per-remote.
 
 ### Uploading Directories via GUI
 
@@ -830,35 +830,78 @@ java -jar photostat-java-1.9.15-executable.jar --rclone-upload --quiet
 
 **Incremental uploads:** For most remotes (including Google Drive), rclone only transfers new or changed files. Running the upload multiple times is safe and efficient. **Exception:** Google Photos cannot detect previously uploaded files — see [Google Drive vs Google Photos](#google-drive-vs-google-photos) above.
 
-**Sidecar exclusion:** `.photostat.json` sidecar files are automatically excluded from uploads.
+**Sidecar exclusion:** PhotoStat sidecar files (`.photostat.json` and `.xmp`) are automatically excluded from uploads.
 
 ---
 
 ## Sidecar Files
 
-Sidecar files allow custom metadata (persons, places, tags) to persist even when rebuilding the search index.
+Sidecar files allow custom metadata (persons, places, tags, rating) to persist even when rebuilding the search index. PhotoStat supports two sidecar formats — choose the one that best fits your workflow, or write both side-by-side during a migration.
 
-**How It Works:**
-- When you save custom metadata, a `.photostat.json` file is created alongside the image
-- Example: `IMG_1234.jpg` → `IMG_1234.jpg.photostat.json`
-- When re-indexing, PhotoStat reads the sidecar and restores your custom metadata
+### Format Options
 
-**Example Sidecar File:**
+PhotoStat can write sidecars in two formats, selectable in **Settings > Indexing > Sidecar Format**:
+
+| Option | File Created | Best For |
+|--------|--------------|----------|
+| **JSON** | `IMG_1234.jpg.photostat.json` | PhotoStat-only workflows. Compact, human-readable, default. |
+| **XMP** | `IMG_1234.jpg.xmp` | Interop with Adobe Lightroom, Bridge, digiKam, ExifTool, and other tools that recognize the XMP standard. |
+| **Both** | Both files above | Migration period — write both so PhotoStat and external tools stay in sync while you decide. |
+
+**Read-both fallback:** The setting **"Read from either format if primary is missing"** (enabled by default) lets PhotoStat load whichever sidecar exists, even if it doesn't match the configured primary format. This means you can switch formats without losing existing data.
+
+### How It Works
+
+- When you save custom metadata, PhotoStat writes a sidecar file alongside the image in the configured format
+- When re-indexing or re-opening an image, PhotoStat reads the sidecar and restores your custom metadata
+- Sidecars are named by *appending* the extension to the full image filename (so `IMG_1234.CR2` and `IMG_1234.JPG` each get their own sidecar)
+
+**Example JSON sidecar (`IMG_1234.jpg.photostat.json`):**
 ```json
 {
   "persons" : [ "John", "Jane" ],
   "place" : "Central Park",
   "tags" : [ "vacation", "family" ],
-  "rating" : "****",
+  "rating" : "4",
   "cloudUploads" : [ "gphotos", "gdrive" ]
 }
 ```
 
-**Benefits:**
-- Custom metadata survives index rebuilds
-- Metadata travels with images if files are moved/copied
-- Can be backed up alongside photos
-- Human-readable JSON format
+**Example XMP sidecar (`IMG_1234.jpg.xmp`):** a standard XMP/RDF packet containing:
+
+| PhotoStat field | XMP property |
+|-----------------|--------------|
+| `rating` | `xmp:Rating` |
+| `tags` | `dc:subject` (bag) |
+| `persons` | `Iptc4xmpExt:PersonInImage` (bag) |
+| `place` | `photostat:place` (custom namespace — PhotoStat's place is free-form and may not be a geographic name) |
+| `analysisHash` | `photostat:analysisHash` |
+| `cloudUploads` | `photostat:cloudUploads` (bag) |
+
+The rating, tags, and persons fields use standard XMP properties, so external tools like **Adobe Lightroom**, **Adobe Bridge**, **digiKam**, and **ExifTool** can read and display them. PhotoStat-specific fields live in a custom `photostat` namespace (`http://photostat.app/xmp/1.0/`) so they don't conflict with other software.
+
+### Converting Existing JSON Sidecars to XMP
+
+If you've been using PhotoStat with JSON sidecars and want to switch to XMP (for example to start using Lightroom alongside PhotoStat), you don't have to rewrite them one image at a time. The **Index** tab has a bulk converter:
+
+1. Open **Settings > Indexing** and change **Sidecar Format** to **XMP** or **Both**, then click OK
+2. Go to the **Index** tab
+3. Click **"Convert JSON sidecars to XMP…"** (located below the indexing buttons)
+4. Review the confirmation dialog, which reports how many `.photostat.json` files were found across all configured indexing directories
+5. Optionally check **"Delete .photostat.json files after successful conversion"** to clean up the originals (unchecked by default — safer to keep the JSON files until you've verified the XMP output)
+6. Click OK to start
+
+The conversion runs in the background with progress shown in the Index tab's status bar. Every field is preserved, including `analysisHash` (the AI analysis cache key) and `cloudUploads` (the per-remote upload tracking), so you won't lose AI results or accidentally re-upload files.
+
+> **Note:** The button is disabled when Sidecar Format is set to JSON — there would be nothing to convert to.
+
+### Benefits
+
+- **Custom metadata survives index rebuilds** — nothing is stored only in OpenSearch
+- **Metadata travels with images** when files are moved or copied
+- **Can be backed up alongside photos**
+- **XMP format is interoperable** with Lightroom, Bridge, digiKam, ExifTool, and other standard photo tools
+- **JSON format is compact and human-readable** for scripting and diffs
 
 ---
 

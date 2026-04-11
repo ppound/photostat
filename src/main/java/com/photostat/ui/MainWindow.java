@@ -306,6 +306,10 @@ public class MainWindow extends BorderPane {
             if (result) {
                 // Settings were saved, reconnect
                 connectToOpenSearch();
+                // Sidecar format may have changed — refresh the Convert button
+                if (indexPanel != null) {
+                    indexPanel.refreshSidecarConversionState();
+                }
             }
         });
     }

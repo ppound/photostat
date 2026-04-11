@@ -179,6 +179,15 @@ public class ConfigService {
             }
         }
 
+        // Ensure sidecar section exists
+        if (!config.containsKey("sidecar")) {
+            Map<String, Object> sidecar = new HashMap<>();
+            sidecar.put("format", "json");
+            sidecar.put("read_both", true);
+            config.put("sidecar", sidecar);
+            changed = true;
+        }
+
         // Ensure rclone section exists
         if (!config.containsKey("rclone")) {
             Map<String, Object> rclone = new HashMap<>();
@@ -304,6 +313,12 @@ public class ConfigService {
         rclone.put("remote_path", "");
         rclone.put("upload_directories", new ArrayList<>());
         defaultConfig.put("rclone", rclone);
+
+        // Sidecar file format settings
+        Map<String, Object> sidecar = new HashMap<>();
+        sidecar.put("format", "json");      // "json" | "xmp" | "both"
+        sidecar.put("read_both", true);     // fall back to other format on read
+        defaultConfig.put("sidecar", sidecar);
 
         return defaultConfig;
     }
@@ -746,6 +761,23 @@ public class ConfigService {
         setRcloneUploadDirectories(directories);
     }
 
+    // Sidecar format settings
+    public String getSidecarFormat() {
+        return getNestedString("sidecar", "format", "json");
+    }
+
+    public void setSidecarFormat(String format) {
+        setNestedValue("sidecar", "format", format);
+    }
+
+    public boolean isSidecarReadBoth() {
+        return getNestedBoolean("sidecar", "read_both", true);
+    }
+
+    public void setSidecarReadBoth(boolean readBoth) {
+        setNestedValue("sidecar", "read_both", readBoth);
+    }
+
     public static String getDefaultAnalysisPrompt() {
         return """
             Analyze this photograph and provide metadata in JSON format. Include:
@@ -757,12 +789,11 @@ public class ConfigService {
                - Technical aspects if notable (e.g., "Black and White", "Bokeh", "Long Exposure", "HDR")
                - Season/weather if visible (e.g., "Winter", "Snow", "Sunset", "Rainy")
                - Setting (e.g., "Indoor", "Outdoor", "Urban", "Rural", "Beach")
+               - People descriptions if any are visible: describe people by appearance (e.g., "elderly man", "woman in red dress", "child", "group of friends"). Do NOT attempt to name people — names are reserved for face recognition and manual entry.
 
-            2. **persons**: Array of descriptive identifiers for people visible in the image. If no people are visible, use an empty array. Don't use names unless they are clearly identifiable public figures. Instead use descriptions like "woman in red dress", "elderly man", "child", etc.
+            2. **place**: A single string describing the location if identifiable. This could be a specific place name, city, type of venue (e.g., "Restaurant", "Park", "Beach"), or null if not determinable.
 
-            3. **place**: A single string describing the location if identifiable. This could be a specific place name, city, type of venue (e.g., "Restaurant", "Park", "Beach"), or null if not determinable.
-
-            4. **rating**: Rate the overall quality of the photograph from * to ***** (1 to 5 stars) based on:
+            3. **rating**: Rate the overall quality of the photograph from * to ***** (1 to 5 stars) based on:
                - Composition and framing
                - Technical quality (sharpness, exposure, focus)
                - Artistic value and creativity
@@ -779,7 +810,6 @@ public class ConfigService {
             Respond with ONLY valid JSON in this exact format:
             {
                 "tags": ["tag1", "tag2", "tag3"],
-                "persons": [],
                 "place": "Location or null",
                 "rating": "***"
             }
