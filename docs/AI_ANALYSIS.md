@@ -40,10 +40,11 @@ Four AI providers are supported:
 
 | Field | Description | Examples |
 |-------|-------------|----------|
-| **Tags** | Photography style, subjects, mood, technical aspects | "Portrait", "Landscape", "Black and White", "Bokeh" |
-| **Persons** | Descriptions of people in the image | "woman in red dress", "elderly man", "child" |
+| **Tags** | Photography style, subjects, mood, technical aspects, **and descriptions of any people visible** | "Portrait", "Landscape", "Black and White", "Bokeh", "elderly man", "woman in red dress" |
 | **Place** | Location if identifiable | "Beach", "Restaurant", "Central Park" |
 | **Rating** | Quality rating from * to ***** | Based on composition, sharpness, artistic value |
+
+> **Note on people:** AI analysis does **not** populate the `persons` field directly. Descriptive phrases like "elderly man" or "woman in red dress" are written to `tags` instead, so the `persons` field (which maps to the standard `Iptc4xmpExt:PersonInImage` in XMP sidecars) stays reserved for actual *named* people from face recognition or manual entry. This keeps PhotoStat's XMP output semantically compatible with Lightroom, Bridge, digiKam, and other tools that read PersonInImage.
 
 ---
 
@@ -362,6 +363,20 @@ Edit the prompt directly in `~/.photostat/config.json`:
 ```
 
 Changing the prompt will invalidate the cache, causing all images to be re-analyzed on next run.
+
+### Picking Up an Updated Default Prompt
+
+> **Important:** When you first run PhotoStat, the current default prompt is copied into your `config.json` as a literal string. From that point on, PhotoStat reads your stored prompt — *not* the latest built-in default. This means that when a new release ships with an improved default prompt (for example, to change how people are described), existing installations keep using the old copy until you explicitly refresh it.
+>
+> To pick up a new default prompt after upgrading:
+>
+> 1. Open **File > Settings > AI Analysis**
+> 2. Click **Reset to Default** in the **Analysis Prompt** section
+> 3. Click **OK** to save
+>
+> **Trade-off:** Doing this will change the prompt string used in the cache hash, so every previously analyzed image will be re-processed on the next `--analyze` run. On paid providers (Claude, Gemini) that's a real API cost, so only reset when you're ready to re-analyze — or when you specifically want the new default's behavior.
+>
+> If you're happy with your current results and not specifically chasing the new default, you can safely leave your stored prompt alone. New images added after an upgrade will still be analyzed with your (possibly older) prompt, which is fine.
 
 ---
 

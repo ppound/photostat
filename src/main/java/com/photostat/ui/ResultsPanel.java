@@ -896,9 +896,11 @@ public class ResultsPanel extends VBox {
                                 metadata.addTag(tag);
                             }
                         }
+                        // AI-generated "persons" are descriptive appearance strings; merge
+                        // into tags so the persons field stays reserved for named people.
                         if (result.getPersons() != null && !result.getPersons().isEmpty()) {
                             for (String person : result.getPersons()) {
-                                metadata.addPerson(person);
+                                metadata.addTag(person);
                             }
                         }
                         if (result.getPlace() != null && !result.getPlace().isEmpty()) {

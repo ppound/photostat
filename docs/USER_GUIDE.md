@@ -253,7 +253,7 @@ You can add your own metadata to photos for better organization:
 
    | Field | Description | Example |
    |-------|-------------|---------|
-   | **Persons** | Names of people in the photo (comma-separated) | "John, Jane, Bob" |
+   | **Persons** | Names of people in the photo (comma-separated). Reserved for *actual names* — face recognition and manual entry only. AI analysis does not populate this field; descriptions like "elderly man" or "child" are added to Tags instead. | "John, Jane, Bob" |
    | **Place** | Location name | "Central Park, NYC" |
    | **Tags** | Custom tags (comma-separated) | "vacation, family, summer" |
    | **Rating** | Quality rating using asterisks | "***" (3 stars) |
