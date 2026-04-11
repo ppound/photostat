@@ -179,6 +179,15 @@ public class ConfigService {
             }
         }
 
+        // Ensure sidecar section exists
+        if (!config.containsKey("sidecar")) {
+            Map<String, Object> sidecar = new HashMap<>();
+            sidecar.put("format", "json");
+            sidecar.put("read_both", true);
+            config.put("sidecar", sidecar);
+            changed = true;
+        }
+
         // Ensure rclone section exists
         if (!config.containsKey("rclone")) {
             Map<String, Object> rclone = new HashMap<>();
@@ -304,6 +313,12 @@ public class ConfigService {
         rclone.put("remote_path", "");
         rclone.put("upload_directories", new ArrayList<>());
         defaultConfig.put("rclone", rclone);
+
+        // Sidecar file format settings
+        Map<String, Object> sidecar = new HashMap<>();
+        sidecar.put("format", "json");      // "json" | "xmp" | "both"
+        sidecar.put("read_both", true);     // fall back to other format on read
+        defaultConfig.put("sidecar", sidecar);
 
         return defaultConfig;
     }
@@ -744,6 +759,23 @@ public class ConfigService {
         List<String> directories = getRcloneUploadDirectories();
         directories.remove(directory);
         setRcloneUploadDirectories(directories);
+    }
+
+    // Sidecar format settings
+    public String getSidecarFormat() {
+        return getNestedString("sidecar", "format", "json");
+    }
+
+    public void setSidecarFormat(String format) {
+        setNestedValue("sidecar", "format", format);
+    }
+
+    public boolean isSidecarReadBoth() {
+        return getNestedBoolean("sidecar", "read_both", true);
+    }
+
+    public void setSidecarReadBoth(boolean readBoth) {
+        setNestedValue("sidecar", "read_both", readBoth);
     }
 
     public static String getDefaultAnalysisPrompt() {
