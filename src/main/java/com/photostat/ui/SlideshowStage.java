@@ -43,14 +43,14 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Full-screen slideshow for browsing search results with keyboard navigation and rating.
+ * Full-screen slideshow for browsing search results with keyboard navigation
+ * and rating.
  */
 public class SlideshowStage extends Stage {
 
     private static final Set<String> RAW_EXTENSIONS = Set.of(
             ".cr2", ".cr3", ".nef", ".arw", ".orf", ".rw2", ".dng", ".raf",
-            ".pef", ".srw", ".x3f", ".raw", ".rwl"
-    );
+            ".pef", ".srw", ".x3f", ".raw", ".rwl");
 
     private final List<ImageMetadata> images;
     private final BiConsumer<ImageMetadata, String> ratingCallback;
@@ -82,7 +82,7 @@ public class SlideshowStage extends Stage {
     private int preloadedPrevIndex = -1;
 
     public SlideshowStage(List<ImageMetadata> images, int startIndex,
-                          BiConsumer<ImageMetadata, String> ratingCallback) {
+            BiConsumer<ImageMetadata, String> ratingCallback) {
         this.images = images;
         this.currentIndex = Math.max(0, Math.min(startIndex, images.size() - 1));
         this.ratingCallback = ratingCallback;
@@ -241,12 +241,18 @@ public class SlideshowStage extends Stage {
     }
 
     private String ratingFromKeyCode(KeyCode code) {
-        if (code == KeyCode.DIGIT1 || code == KeyCode.NUMPAD1) return "*";
-        if (code == KeyCode.DIGIT2 || code == KeyCode.NUMPAD2) return "**";
-        if (code == KeyCode.DIGIT3 || code == KeyCode.NUMPAD3) return "***";
-        if (code == KeyCode.DIGIT4 || code == KeyCode.NUMPAD4) return "****";
-        if (code == KeyCode.DIGIT5 || code == KeyCode.NUMPAD5) return "*****";
-        if (code == KeyCode.DIGIT0 || code == KeyCode.NUMPAD0) return "";
+        if (code == KeyCode.DIGIT1 || code == KeyCode.NUMPAD1)
+            return "*";
+        if (code == KeyCode.DIGIT2 || code == KeyCode.NUMPAD2)
+            return "**";
+        if (code == KeyCode.DIGIT3 || code == KeyCode.NUMPAD3)
+            return "***";
+        if (code == KeyCode.DIGIT4 || code == KeyCode.NUMPAD4)
+            return "****";
+        if (code == KeyCode.DIGIT5 || code == KeyCode.NUMPAD5)
+            return "*****";
+        if (code == KeyCode.DIGIT0 || code == KeyCode.NUMPAD0)
+            return "";
         return null;
     }
 
@@ -304,10 +310,9 @@ public class SlideshowStage extends Stage {
             });
         } else {
             // Standard formats: load at screen resolution
-            double screenW = Screen.getPrimary().getBounds().getWidth();
-            double screenH = Screen.getPrimary().getBounds().getHeight();
-            Image image = new Image(Path.of(filePath).toUri().toString(),
-                    screenW, screenH, true, true, true);
+            // Loading full-resolution image to rely on ImageView's hardware-accelerated
+            // smooth scaling
+            Image image = new Image(Path.of(filePath).toUri().toString(), true);
             imageView.setImage(image);
         }
     }
@@ -317,10 +322,8 @@ public class SlideshowStage extends Stage {
         if (RAW_EXTENSIONS.contains(ext)) {
             return thumbnailService.getThumbnail(filePath);
         } else {
-            double screenW = Screen.getPrimary().getBounds().getWidth();
-            double screenH = Screen.getPrimary().getBounds().getHeight();
-            return new Image(Path.of(filePath).toUri().toString(),
-                    screenW, screenH, true, true, false);
+            // Background preload without bounding constraints
+            return new Image(Path.of(filePath).toUri().toString(), false);
         }
     }
 
@@ -361,15 +364,18 @@ public class SlideshowStage extends Stage {
             exif.append(metadata.getApertureString());
         }
         if (metadata.getShutterSpeed() != null && !metadata.getShutterSpeed().isEmpty()) {
-            if (exif.length() > 0) exif.append("  ");
+            if (exif.length() > 0)
+                exif.append("  ");
             exif.append(metadata.getShutterSpeed());
         }
         if (metadata.getIso() != null) {
-            if (exif.length() > 0) exif.append("  ");
+            if (exif.length() > 0)
+                exif.append("  ");
             exif.append("ISO ").append(metadata.getIso());
         }
         if (metadata.getFocalLengthString() != null && !metadata.getFocalLengthString().isEmpty()) {
-            if (exif.length() > 0) exif.append("  ");
+            if (exif.length() > 0)
+                exif.append("  ");
             exif.append(metadata.getFocalLengthString());
         }
         exifLabel.setText(exif.toString());
@@ -404,14 +410,16 @@ public class SlideshowStage extends Stage {
     }
 
     /**
-     * Set a callback invoked after an image is deleted, so the caller can refresh its view.
+     * Set a callback invoked after an image is deleted, so the caller can refresh
+     * its view.
      */
     public void setDeleteCallback(Consumer<ImageMetadata> callback) {
         this.deleteCallback = callback;
     }
 
     private void deleteCurrentImage() {
-        if (images.isEmpty()) return;
+        if (images.isEmpty())
+            return;
 
         ImageMetadata metadata = images.get(currentIndex);
         String fileName = metadata.getFileName();
@@ -419,14 +427,15 @@ public class SlideshowStage extends Stage {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Confirm Delete");
         confirm.setHeaderText("Delete " + fileName + "?");
-        confirm.setContentText("This will permanently delete the file from disk and remove it from the index. This cannot be undone.");
+        confirm.setContentText(
+                "This will permanently delete the file from disk and remove it from the index. This cannot be undone.");
         confirm.initOwner(this);
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 // Delete file + sidecar from disk
-                FileOperationsService.BatchOperationResult result =
-                        fileOperationsService.deleteImages(Collections.singletonList(metadata.getFilePath()), true);
+                FileOperationsService.BatchOperationResult result = fileOperationsService
+                        .deleteImages(Collections.singletonList(metadata.getFilePath()), true);
 
                 if (result.successCount > 0) {
                     // Remove from index
@@ -471,7 +480,8 @@ public class SlideshowStage extends Stage {
     }
 
     private void promptAddTag() {
-        if (images.isEmpty()) return;
+        if (images.isEmpty())
+            return;
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getTags() != null ? String.join(", ", metadata.getTags()) : "";
 
@@ -482,7 +492,8 @@ public class SlideshowStage extends Stage {
                     if (!trimmed.isEmpty()) {
                         for (String tag : trimmed.split(",")) {
                             String t = tag.trim();
-                            if (!t.isEmpty()) metadata.addTag(t);
+                            if (!t.isEmpty())
+                                metadata.addTag(t);
                         }
                     }
                     saveMetadata(metadata);
@@ -491,7 +502,8 @@ public class SlideshowStage extends Stage {
     }
 
     private void promptAddPerson() {
-        if (images.isEmpty()) return;
+        if (images.isEmpty())
+            return;
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getPersons() != null ? String.join(", ", metadata.getPersons()) : "";
 
@@ -502,7 +514,8 @@ public class SlideshowStage extends Stage {
                     if (!trimmed.isEmpty()) {
                         for (String person : trimmed.split(",")) {
                             String p = person.trim();
-                            if (!p.isEmpty()) metadata.addPerson(p);
+                            if (!p.isEmpty())
+                                metadata.addPerson(p);
                         }
                     }
                     saveMetadata(metadata);
@@ -511,7 +524,8 @@ public class SlideshowStage extends Stage {
     }
 
     private void promptSetPlace() {
-        if (images.isEmpty()) return;
+        if (images.isEmpty())
+            return;
         ImageMetadata metadata = images.get(currentIndex);
         String existing = metadata.getPlace() != null ? metadata.getPlace() : "";
 
