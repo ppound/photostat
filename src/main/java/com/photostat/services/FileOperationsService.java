@@ -6,22 +6,23 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service for file operations like copying and deleting images.
- * Handles sidecar files alongside images when configured.
+ * Handles sidecar files (both JSON and XMP backends) alongside images.
  */
 public class FileOperationsService {
 
     private static FileOperationsService instance;
     private final ConfigService configService;
     private final LoggingService logger;
-
-    private static final String SIDECAR_EXTENSION = ".photostat.json";
+    private final SidecarService sidecarService;
 
     private FileOperationsService() {
         this.configService = ConfigService.getInstance();
         this.logger = LoggingService.getInstance();
+        this.sidecarService = SidecarService.getInstance();
     }
 
     public static synchronized FileOperationsService getInstance() {
@@ -66,10 +67,10 @@ public class FileOperationsService {
             Files.copy(source, destination, options);
             logger.info("FileOperationsService", "Copied: " + source + " -> " + destination);
 
-            // Copy sidecar file if it exists
-            Path sidecarSource = Path.of(imagePath + SIDECAR_EXTENSION);
-            if (Files.exists(sidecarSource)) {
-                Path sidecarDest = destinationDir.resolve(source.getFileName() + SIDECAR_EXTENSION);
+            // Copy all sidecar files (JSON and/or XMP) that travel with this image.
+            for (Path sidecarSource : sidecarService.getAllExistingSidecarPaths(imagePath)) {
+                Path sidecarDest = destinationDir.resolve(
+                        relocatedSidecarFilename(source, sidecarSource, source.getFileName().toString()));
                 Files.copy(sidecarSource, sidecarDest, options);
                 logger.info("FileOperationsService", "Copied sidecar: " + sidecarSource + " -> " + sidecarDest);
             }
@@ -125,10 +126,9 @@ public class FileOperationsService {
             Files.delete(source);
             logger.info("FileOperationsService", "Deleted: " + source);
 
-            // Delete sidecar file if requested and exists
+            // Delete all sidecar files if requested
             if (deleteSidecar) {
-                Path sidecarPath = Path.of(imagePath + SIDECAR_EXTENSION);
-                if (Files.exists(sidecarPath)) {
+                for (Path sidecarPath : sidecarService.getAllExistingSidecarPaths(imagePath)) {
                     Files.delete(sidecarPath);
                     logger.info("FileOperationsService", "Deleted sidecar: " + sidecarPath);
                 }
@@ -199,10 +199,10 @@ public class FileOperationsService {
             Files.move(source, destination, options);
             logger.info("FileOperationsService", "Moved: " + source + " -> " + destination);
 
-            // Move sidecar file if it exists
-            Path sidecarSource = Path.of(imagePath + SIDECAR_EXTENSION);
-            if (Files.exists(sidecarSource)) {
-                Path sidecarDest = destinationDir.resolve(source.getFileName() + SIDECAR_EXTENSION);
+            // Move all sidecar files (JSON and/or XMP) that travel with this image.
+            for (Path sidecarSource : sidecarService.getAllExistingSidecarPaths(imagePath)) {
+                Path sidecarDest = destinationDir.resolve(
+                        relocatedSidecarFilename(source, sidecarSource, source.getFileName().toString()));
                 Files.move(sidecarSource, sidecarDest, options);
                 logger.info("FileOperationsService", "Moved sidecar: " + sidecarSource + " -> " + sidecarDest);
             }
@@ -237,6 +237,98 @@ public class FileOperationsService {
         }
 
         return result;
+    }
+
+    /**
+     * Rename a single image in place (same directory, new filename). Renames
+     * all sidecars (JSON and XMP) that exist alongside the image, and records
+     * the old basename in the JSON sidecar's {@code previousFilenames} history
+     * (creating the sidecar if absent) so sibling files like RAW originals can
+     * still be located later.
+     *
+     * @param imagePath Current image path
+     * @param newFilename New basename (filename only, not a path)
+     * @return Result of the operation; the message contains the new full path on success
+     */
+    public OperationResult renameImage(String imagePath, String newFilename) {
+        try {
+            Path source = Path.of(imagePath);
+            if (!Files.exists(source)) {
+                return new OperationResult(false, "Source file not found: " + imagePath);
+            }
+
+            String oldFilename = source.getFileName().toString();
+            if (newFilename == null || newFilename.isEmpty() || newFilename.equals(oldFilename)) {
+                return new OperationResult(false, "New filename is empty or unchanged: " + oldFilename);
+            }
+            if (newFilename.contains("/") || newFilename.contains("\\")) {
+                return new OperationResult(false, "New filename must not contain path separators: " + newFilename);
+            }
+
+            Path parent = source.getParent();
+            Path destination = parent.resolve(newFilename);
+
+            if (Files.exists(destination)) {
+                return new OperationResult(false, "Destination file already exists: " + destination);
+            }
+
+            // Record original basename before renaming sidecars — this writes
+            // to the sidecar at the OLD image path so it moves with the rename.
+            sidecarService.appendPreviousFilename(imagePath, oldFilename);
+
+            Files.move(source, destination);
+            logger.info("FileOperationsService", "Renamed: " + source + " -> " + destination);
+
+            // Rename all sidecar files alongside the image.
+            for (Path sidecarSource : sidecarService.getAllExistingSidecarPaths(imagePath)) {
+                Path sidecarDest = parent.resolve(
+                        relocatedSidecarFilename(source, sidecarSource, newFilename));
+                Files.move(sidecarSource, sidecarDest);
+                logger.info("FileOperationsService", "Renamed sidecar: " + sidecarSource + " -> " + sidecarDest);
+            }
+
+            return new OperationResult(true, destination.toString());
+
+        } catch (IOException e) {
+            logger.error("FileOperationsService", "Failed to rename: " + imagePath, e);
+            return new OperationResult(false, "Failed to rename: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Rename multiple images in place. Skips entries with empty/unchanged names
+     * and reports per-file errors without aborting the batch.
+     *
+     * @param renames Map of current image path to new basename
+     * @return Batch result with per-file success/failure
+     */
+    public BatchOperationResult renameImages(Map<String, String> renames) {
+        BatchOperationResult result = new BatchOperationResult();
+        for (Map.Entry<String, String> entry : renames.entrySet()) {
+            OperationResult opResult = renameImage(entry.getKey(), entry.getValue());
+            if (opResult.isSuccess()) {
+                result.successCount++;
+            } else {
+                result.failureCount++;
+                result.errors.add(opResult.getMessage());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Compute the destination filename for a sidecar travelling alongside an
+     * image, preserving the sidecar's suffix (e.g. {@code .photostat.json} or
+     * {@code .xmp}). Works for both image rename (new basename) and move/copy
+     * (same basename).
+     */
+    private static String relocatedSidecarFilename(Path imageSource, Path sidecarSource, String newImageFilename) {
+        String oldImageFilename = imageSource.getFileName().toString();
+        String sidecarFilename = sidecarSource.getFileName().toString();
+        String suffix = sidecarFilename.startsWith(oldImageFilename)
+                ? sidecarFilename.substring(oldImageFilename.length())
+                : sidecarFilename;
+        return newImageFilename + suffix;
     }
 
     /**

@@ -107,6 +107,23 @@ public class SidecarService {
         return false;
     }
 
+    /**
+     * Return the on-disk paths of all sidecar files that currently exist for
+     * the given image, across both JSON and XMP backends. Used by file
+     * operations (move, copy, rename) so every sidecar travels with the image
+     * regardless of which format the user has configured.
+     */
+    public List<Path> getAllExistingSidecarPaths(String imagePath) {
+        List<Path> paths = new java.util.ArrayList<>(2);
+        if (jsonBackend.exists(imagePath)) {
+            paths.add(jsonBackend.getSidecarPath(imagePath));
+        }
+        if (xmpBackend.exists(imagePath)) {
+            paths.add(xmpBackend.getSidecarPath(imagePath));
+        }
+        return paths;
+    }
+
     // --- Public API: read ---------------------------------------------------
 
     /**
@@ -126,10 +143,23 @@ public class SidecarService {
     /**
      * Read for internal use: returns existing primary-format data if any,
      * otherwise an empty {@link SidecarData} so callers can merge new values in.
+     *
+     * <p>{@code previousFilenames} is JSON-only, so if the primary read came
+     * from XMP we still pull the history from the JSON sidecar to preserve it
+     * across writes.
      */
     private SidecarData readOrEmpty(String imagePath) {
         SidecarData existing = readSidecar(imagePath);
-        return existing != null ? existing : new SidecarData();
+        if (existing == null) {
+            existing = new SidecarData();
+        }
+        if (!existing.hasPreviousFilenames() && primaryBackend() != jsonBackend) {
+            SidecarData json = jsonBackend.read(imagePath);
+            if (json != null && json.hasPreviousFilenames()) {
+                existing.setPreviousFilenames(json.getPreviousFilenames());
+            }
+        }
+        return existing;
     }
 
     // --- Public API: write --------------------------------------------------
@@ -174,6 +204,20 @@ public class SidecarService {
     }
 
     /**
+     * Append a basename to the rename history for an image, creating the JSON
+     * sidecar if absent. Called by batch rename to record the original name so
+     * sibling files (e.g. a matching RAW) can still be located later.
+     */
+    public boolean appendPreviousFilename(String imagePath, String oldBasename) {
+        SidecarData merged = readOrEmpty(imagePath);
+        List<String> history = merged.getPreviousFilenames();
+        history = history == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(history);
+        history.add(oldBasename);
+        merged.setPreviousFilenames(history);
+        return persistMerged(imagePath, merged);
+    }
+
+    /**
      * Add a cloud upload record to a sidecar file. Preserves all existing data.
      */
     public boolean addCloudUpload(String imagePath, String remoteName) {
@@ -193,27 +237,41 @@ public class SidecarService {
 
     /**
      * Persist merged data to the appropriate backend(s). If the merged data is
-     * fully empty (no custom metadata, no analysis hash, no cloud uploads),
-     * deletes all sidecar files instead.
+     * fully empty (no custom metadata, no analysis hash, no cloud uploads, no
+     * rename history), deletes all sidecar files instead.
+     *
+     * <p>{@code previousFilenames} is JSON-only — when XMP is the primary
+     * format we still write the JSON sidecar to preserve history.
      */
     private boolean persistMerged(String imagePath, SidecarData merged) {
-        boolean hasAnything = !merged.isEmpty()
+        boolean hasUserContent = !merged.isEmpty()
                 || merged.hasAnalysisCache()
                 || (merged.getCloudUploads() != null && !merged.getCloudUploads().isEmpty());
+        boolean hasHistory = merged.hasPreviousFilenames();
 
-        if (!hasAnything) {
+        if (!hasUserContent && !hasHistory) {
             // Delete both backends so we don't leave stale data from either format
             boolean ok1 = jsonBackend.delete(imagePath);
             boolean ok2 = xmpBackend.delete(imagePath);
             return ok1 && ok2;
         }
 
-        boolean primaryOk = primaryBackend().write(imagePath, merged);
-        if (isBothMode()) {
-            boolean secondaryOk = secondaryBackend().write(imagePath, merged);
-            return primaryOk && secondaryOk;
+        boolean ok = true;
+        if (hasUserContent) {
+            ok &= primaryBackend().write(imagePath, merged);
+            if (isBothMode()) {
+                ok &= secondaryBackend().write(imagePath, merged);
+            }
         }
-        return primaryOk;
+
+        // Ensure JSON carries previousFilenames even when XMP is primary or no
+        // user-content write happened above.
+        boolean jsonAlreadyWritten = hasUserContent
+                && (primaryBackend() == jsonBackend || isBothMode());
+        if (hasHistory && !jsonAlreadyWritten) {
+            ok &= jsonBackend.write(imagePath, merged);
+        }
+        return ok;
     }
 
     /**
@@ -338,6 +396,11 @@ public class SidecarService {
         // Cloud upload tracking - list of remote names this file has been uploaded to
         private List<String> cloudUploads;
 
+        // Rename history — basenames the file previously had, oldest first.
+        // Useful for locating sibling RAW files after a batch rename. JSON-only;
+        // XMP sidecars do not carry this field.
+        private List<String> previousFilenames;
+
         public List<String> getPersons() {
             return persons;
         }
@@ -388,6 +451,18 @@ public class SidecarService {
 
         public boolean isUploadedTo(String remoteName) {
             return cloudUploads != null && cloudUploads.contains(remoteName);
+        }
+
+        public List<String> getPreviousFilenames() {
+            return previousFilenames;
+        }
+
+        public void setPreviousFilenames(List<String> previousFilenames) {
+            this.previousFilenames = previousFilenames;
+        }
+
+        public boolean hasPreviousFilenames() {
+            return previousFilenames != null && !previousFilenames.isEmpty();
         }
 
         public boolean isEmpty() {

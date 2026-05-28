@@ -67,6 +67,9 @@ class JsonSidecarBackend implements SidecarBackend {
             if (data.containsKey("cloudUploads")) {
                 sidecar.setCloudUploads((List<String>) data.get("cloudUploads"));
             }
+            if (data.containsKey("previousFilenames")) {
+                sidecar.setPreviousFilenames((List<String>) data.get("previousFilenames"));
+            }
 
             logger.debug("JsonSidecarBackend", "Read sidecar for: " + imagePath);
             return sidecar;
@@ -99,6 +102,9 @@ class JsonSidecarBackend implements SidecarBackend {
         }
         if (data.getCloudUploads() != null && !data.getCloudUploads().isEmpty()) {
             map.put("cloudUploads", data.getCloudUploads());
+        }
+        if (data.getPreviousFilenames() != null && !data.getPreviousFilenames().isEmpty()) {
+            map.put("previousFilenames", data.getPreviousFilenames());
         }
 
         try {

@@ -128,6 +128,10 @@ public class ResultsPanel extends VBox {
         moveSelectedBtn.setOnAction(e -> moveSelectedImages());
         moveSelectedBtn.setTooltip(new Tooltip("Move selected images to another directory and update the index." + multiSelectHint));
 
+        Button renameBtn = new Button("Rename...");
+        renameBtn.setOnAction(e -> batchRenameImages());
+        renameBtn.setTooltip(new Tooltip("Find/replace in filenames across the current selection or full result set." + multiSelectHint));
+
         Button deleteSelectedBtn = new Button("Delete Selected");
         deleteSelectedBtn.getStyleClass().add("delete-button");
         deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
@@ -145,7 +149,7 @@ public class ResultsPanel extends VBox {
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, uploadSelectedBtn, deleteSelectedBtn);
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, renameBtn, uploadSelectedBtn, deleteSelectedBtn);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -648,6 +652,173 @@ public class ResultsPanel extends VBox {
 
             showAlert(Alert.AlertType.INFORMATION, "Move Complete", result.getSummary() + indexMessage);
         }
+    }
+
+    /**
+     * Open the batch rename dialog. Pre-fetches the full current result set so
+     * the dialog can offer "Current results" as a source in addition to the
+     * user's selection.
+     */
+    private void batchRenameImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+
+        if (selected.isEmpty() && totalResults == 0) {
+            showAlert(Alert.AlertType.WARNING, "No Images", "Select images or run a search first.");
+            return;
+        }
+
+        // Fetch the current result set (up to OpenSearch's default 10K cap) on
+        // a background thread so the dialog can detect conflicts across the
+        // whole set, not just the displayed page.
+        Thread fetchThread = new Thread(() -> {
+            List<ImageMetadata> currentResults;
+            try {
+                int fetchSize = (int) Math.min(totalResults, 10000L);
+                if (fetchSize <= 0) {
+                    currentResults = new ArrayList<>();
+                } else {
+                    OpenSearchService.SearchResult full = openSearchService.search(
+                            currentQuery, currentFilters, 0, fetchSize);
+                    currentResults = full.getResults();
+                }
+            } catch (Exception ex) {
+                logger.error("ResultsPanel", "Failed to fetch current results for rename", ex);
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, "Rename",
+                        "Failed to fetch current results: " + ex.getMessage()));
+                return;
+            }
+            final List<ImageMetadata> finalResults = currentResults;
+            Platform.runLater(() -> openRenameDialog(selected, finalResults));
+        });
+        fetchThread.setDaemon(true);
+        fetchThread.start();
+    }
+
+    private void openRenameDialog(List<ImageMetadata> selected, List<ImageMetadata> currentResults) {
+        BatchRenameDialog dialog = new BatchRenameDialog(selected, currentResults);
+        dialog.initOwner(getScene().getWindow());
+        dialog.showAndWait().ifPresent(result -> applyRenames(result.getRenames()));
+    }
+
+    private void applyRenames(Map<String, String> renames) {
+        if (renames == null || renames.isEmpty()) {
+            return;
+        }
+
+        // Progress dialog so the user gets feedback during a multi-second
+        // rename + reindex pass.
+        Stage progressStage = new Stage();
+        progressStage.initModality(Modality.APPLICATION_MODAL);
+        progressStage.initStyle(StageStyle.UTILITY);
+        progressStage.setTitle("Renaming Files");
+        progressStage.setResizable(false);
+        if (getScene() != null && getScene().getWindow() != null) {
+            progressStage.initOwner(getScene().getWindow());
+        }
+
+        Label titleLabel = new Label("Renaming files...");
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        javafx.scene.control.ProgressBar progressBar = new javafx.scene.control.ProgressBar(0);
+        progressBar.setPrefWidth(400);
+        progressBar.setPrefHeight(20);
+        Label progressLabel = new Label("0 of " + renames.size());
+        Label currentFileLabel = new Label("Starting...");
+        currentFileLabel.setWrapText(true);
+        currentFileLabel.setMaxWidth(400);
+
+        VBox progressContent = new VBox(12, titleLabel, progressBar, progressLabel, currentFileLabel);
+        progressContent.setPadding(new Insets(20));
+        progressContent.setAlignment(Pos.CENTER);
+        progressContent.setPrefWidth(450);
+        progressStage.setScene(new javafx.scene.Scene(progressContent));
+        progressStage.show();
+
+        Thread applyThread = new Thread(() -> {
+            int success = 0;
+            int failure = 0;
+            int reindexed = 0;
+            int analysisCachePreserved = 0;
+            List<String> errors = new ArrayList<>();
+            int total = renames.size();
+            int i = 0;
+
+            for (Map.Entry<String, String> e : renames.entrySet()) {
+                String oldPath = e.getKey();
+                String newBasename = e.getValue();
+                final int current = ++i;
+                final String currentLabel = Path.of(oldPath).getFileName() + " → " + newBasename;
+                Platform.runLater(() -> {
+                    progressBar.setProgress((double) (current - 1) / total);
+                    progressLabel.setText(current + " of " + total);
+                    currentFileLabel.setText(currentLabel);
+                });
+
+                // Snapshot the analysis-cache validity BEFORE renaming; the path
+                // is part of the hash so a rename invalidates it otherwise.
+                boolean wasAnalysisCached = imageAnalysisService.isAnalysisCached(oldPath);
+
+                FileOperationsService.OperationResult op =
+                        fileOperationsService.renameImage(oldPath, newBasename);
+                if (op.isSuccess()) {
+                    success++;
+                    String newPath = op.getMessage();
+                    if (wasAnalysisCached) {
+                        try {
+                            imageAnalysisService.refreshAnalysisHash(newPath);
+                            analysisCachePreserved++;
+                        } catch (Exception ex) {
+                            logger.warn("ResultsPanel", "Failed to refresh analysis hash for " + newPath + ": " + ex.getMessage());
+                        }
+                    }
+                    try {
+                        openSearchService.deleteDocument(oldPath);
+                        if (indexerService.indexSingleFile(newPath)) {
+                            reindexed++;
+                        }
+                    } catch (Exception ex) {
+                        logger.error("ResultsPanel", "Failed to update index for renamed file", ex);
+                    }
+                } else {
+                    failure++;
+                    errors.add(op.getMessage());
+                }
+            }
+
+            final int finalSuccess = success;
+            final int finalFailure = failure;
+            final int finalReindexed = reindexed;
+            final int finalCachePreserved = analysisCachePreserved;
+            Platform.runLater(() -> {
+                progressStage.close();
+                StringBuilder msg = new StringBuilder();
+                msg.append("Renamed ").append(finalSuccess).append(" file(s)");
+                if (finalFailure > 0) {
+                    msg.append(", ").append(finalFailure).append(" failed");
+                }
+                msg.append(".\nIndex updated: ").append(finalReindexed).append(" file(s) re-indexed.");
+                if (finalCachePreserved > 0) {
+                    msg.append("\nAnalysis cache preserved for ").append(finalCachePreserved).append(" file(s).");
+                }
+                if (!errors.isEmpty()) {
+                    msg.append("\nErrors: ").append(String.join("; ",
+                            errors.subList(0, Math.min(errors.size(), 5))));
+                    if (errors.size() > 5) {
+                        msg.append(" (+").append(errors.size() - 5).append(" more)");
+                    }
+                }
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("Rename Complete");
+                alert.setHeaderText(null);
+                alert.setContentText(msg.toString());
+                if (getScene() != null && getScene().getWindow() != null) {
+                    alert.initOwner(getScene().getWindow());
+                }
+                alert.showAndWait();
+                refresh();
+            });
+        });
+        applyThread.setDaemon(true);
+        applyThread.start();
     }
 
     /**

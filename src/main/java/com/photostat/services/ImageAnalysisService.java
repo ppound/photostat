@@ -1289,4 +1289,16 @@ public class ImageAnalysisService {
             sidecarService.updateAnalysisCache(imagePath, analysisHash);
         }
     }
+
+    /**
+     * Recompute the analysis hash for an image and write it to the sidecar.
+     * Used by batch rename: the file's path is part of the hash input, so a
+     * rename otherwise invalidates the cache even though the underlying image
+     * is unchanged. Callers should only invoke this when the cache was valid
+     * before the rename (i.e. {@link #isAnalysisCached} returned true on the
+     * old path), so we don't promote a stale hash.
+     */
+    public void refreshAnalysisHash(String imagePath) {
+        saveAnalysisCache(imagePath);
+    }
 }
