@@ -126,6 +126,18 @@ You can choose which file types to index in **File > Settings > Indexing**. Each
 - Click **Stop Indexing** to cancel if needed
 - TIFF and RAW files are slower to index and require ExifTool
 
+### Re-index All
+
+**Start Indexing** is incremental — it skips files that are already in the index. **Re-index All** is the full-rebuild variant: it re-processes every file in the configured directories regardless of whether it has been indexed before. Use it after changing settings that affect what gets stored per image (for example, enabling new file types or updating hash settings), or as a recovery step when something looks wrong.
+
+**The confirmation dialog has one option:**
+
+- **Also remove orphaned index entries** — when checked, after re-indexing finishes, PhotoStat sweeps the index for entries whose files no longer exist on disk and removes them. This is the simplest way to clean up after files have been renamed, moved, or deleted outside of PhotoStat (renames done *inside* PhotoStat via the **Rename...** button already keep the index in sync, so this option mainly matters for changes made in Finder/Explorer or by other tools).
+
+**Safety with unmounted drives:** the orphan sweep only operates on configured directories that are accessible at the time it runs. If an external drive isn't plugged in, the directories on it are skipped entirely — their entries are left untouched. So if you accidentally check the box without your backup drive attached, nothing on that drive is removed. To run a full sweep across an external library, attach the drive first, then run **Re-index All** with the option checked.
+
+The completion summary reports the orphan count (when greater than zero) alongside the usual indexed/skipped/error counts.
+
 ---
 
 ## Searching Your Photos

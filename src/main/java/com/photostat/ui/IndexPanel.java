@@ -454,8 +454,32 @@ public class IndexPanel extends BorderPane {
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Re-index All");
         confirm.setHeaderText("Re-index all files?");
-        confirm.setContentText("This will re-process all files in the configured directories, " +
+
+        Label intro = new Label(
+                "This will re-process every file in the configured directories, " +
                 "including files that have already been indexed.");
+        intro.setWrapText(true);
+        intro.setMaxWidth(480);
+
+        CheckBox removeOrphans = new CheckBox("Also remove orphaned index entries");
+        removeOrphans.setSelected(false);
+
+        Label explanation = new Label(
+                "When checked, index entries whose files no longer exist on disk " +
+                "will be deleted at the end of indexing. Useful for cleaning up after " +
+                "files have been renamed, moved, or deleted outside of PhotoStat.\n\n" +
+                "Safe with unmounted drives: any configured directory that isn't " +
+                "currently accessible (for example, an external drive that isn't " +
+                "plugged in) is skipped entirely — its entries are left untouched. " +
+                "If you want a full sweep across an external library, attach the " +
+                "drive first, then run Re-index All with this option checked.");
+        explanation.setWrapText(true);
+        explanation.setMaxWidth(480);
+        explanation.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+
+        VBox content = new VBox(10, intro, removeOrphans, explanation);
+        content.setPadding(new Insets(5, 0, 0, 0));
+        confirm.getDialogPane().setContent(content);
 
         confirm.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
@@ -465,7 +489,7 @@ public class IndexPanel extends BorderPane {
                 convertSidecarsButton.setDisable(true);
                 progressBar.setProgress(0);
 
-                indexerService.reindexAll();
+                indexerService.reindexAll(removeOrphans.isSelected());
             }
         });
     }

@@ -106,7 +106,7 @@ public class IndexerService {
             return;
         }
 
-        currentTask = createIndexingTask(directories, false);
+        currentTask = createIndexingTask(directories, false, false);
         Thread thread = new Thread(currentTask);
         thread.setDaemon(true);
         thread.start();
@@ -116,6 +116,18 @@ public class IndexerService {
      * Re-index all files, ignoring previously indexed status.
      */
     public void reindexAll() {
+        reindexAll(false);
+    }
+
+    /**
+     * Re-index all files, ignoring previously indexed status. When
+     * {@code removeOrphans} is {@code true}, an orphan-sweep pass runs after
+     * indexing: index entries whose files no longer exist on disk are deleted.
+     * Configured directories that are not accessible at sweep time (e.g.
+     * unmounted external drives) are skipped so their entries are not removed
+     * accidentally.
+     */
+    public void reindexAll(boolean removeOrphans) {
         if (isIndexing.get()) {
             updateStatus("Indexing already in progress");
             return;
@@ -127,7 +139,7 @@ public class IndexerService {
             return;
         }
 
-        currentTask = createIndexingTask(directories, true);
+        currentTask = createIndexingTask(directories, true, removeOrphans);
         Thread thread = new Thread(currentTask);
         thread.setDaemon(true);
         thread.start();
@@ -153,7 +165,7 @@ public class IndexerService {
     /**
      * Create the indexing task.
      */
-    private Task<Void> createIndexingTask(List<String> directories, boolean forceReindex) {
+    private Task<Void> createIndexingTask(List<String> directories, boolean forceReindex, boolean removeOrphans) {
         return new Task<>() {
             @Override
             protected Void call() throws Exception {
@@ -328,6 +340,19 @@ public class IndexerService {
                         updateStatus("Indexing complete. Indexed " + stats.indexedFiles.get() + " files.");
                     }
 
+                    // Phase 3 (opt-in): remove orphaned index entries for files that
+                    // are gone from disk. Only sweeps within configured directories
+                    // that are currently accessible — entries under an unmounted
+                    // external drive are left alone.
+                    if (removeOrphans && !isCancelled()) {
+                        try {
+                            sweepOrphans(directories, allFiles, stats);
+                        } catch (Exception e) {
+                            updateStatus("Orphan sweep failed: " + e.getMessage());
+                            System.err.println("Orphan sweep error: " + e.getMessage());
+                        }
+                    }
+
                     notifyCompletion(stats);
 
                 } catch (Exception e) {
@@ -357,6 +382,90 @@ public class IndexerService {
             lastUpdate.set(now);
             updateProgressSafe(current, total);
         }
+    }
+
+    /**
+     * Remove OpenSearch documents for files that no longer exist on disk
+     * under the supplied directories. Skips any configured directory that
+     * isn't currently accessible (e.g. an unmounted external drive) so its
+     * entries are not deleted accidentally.
+     */
+    private void sweepOrphans(List<String> directories, List<Path> diskFiles, IndexingStats stats) throws IOException {
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
+        // Directories we'll actually sweep — those that exist now.
+        List<String> sweepable = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
+        for (String dir : directories) {
+            if (Files.isDirectory(Path.of(dir))) {
+                sweepable.add(normalizeForCompare(dir, isWindows));
+            } else {
+                skipped.add(dir);
+            }
+        }
+
+        if (sweepable.isEmpty()) {
+            updateStatus("Orphan sweep skipped: no configured directories are accessible.");
+            return;
+        }
+        if (!skipped.isEmpty()) {
+            updateStatus("Orphan sweep: skipping " + skipped.size() +
+                    " inaccessible director(y/ies); entries there will not be removed.");
+        }
+
+        // Set of paths we just saw on disk (normalized for case-insensitive
+        // comparison on Windows).
+        Set<String> diskPaths = new HashSet<>(diskFiles.size());
+        for (Path p : diskFiles) {
+            diskPaths.add(normalizeForCompare(p.toAbsolutePath().toString(), isWindows));
+        }
+
+        updateStatus("Checking for orphaned index entries...");
+
+        int orphans = 0;
+        for (String indexedPath : openSearchService.searchAllFilePaths(10000)) {
+            if (currentTask != null && currentTask.isCancelled()) {
+                break;
+            }
+            String normalized = normalizeForCompare(indexedPath, isWindows);
+            if (!isUnderAny(normalized, sweepable)) {
+                continue;
+            }
+            if (!diskPaths.contains(normalized)) {
+                try {
+                    if (openSearchService.deleteDocument(indexedPath)) {
+                        orphans++;
+                    }
+                } catch (Exception e) {
+                    System.err.println("Failed to delete orphan " + indexedPath + ": " + e.getMessage());
+                }
+            }
+        }
+
+        stats.orphansDeleted.set(orphans);
+        updateStatus("Orphan sweep removed " + orphans + " stale index entr" + (orphans == 1 ? "y" : "ies") + ".");
+    }
+
+    private static String normalizeForCompare(String path, boolean isWindows) {
+        String norm;
+        try {
+            norm = Path.of(path).toAbsolutePath().normalize().toString();
+        } catch (Exception e) {
+            norm = path;
+        }
+        return isWindows ? norm.toLowerCase() : norm;
+    }
+
+    private static boolean isUnderAny(String normalizedPath, List<String> normalizedDirs) {
+        for (String d : normalizedDirs) {
+            if (normalizedPath.equals(d)) return true;
+            if (!normalizedPath.startsWith(d)) continue;
+            char next = normalizedPath.charAt(d.length());
+            if (next == '/' || next == '\\' || next == java.io.File.separatorChar) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -524,14 +633,17 @@ public class IndexerService {
         public final AtomicLong indexedFiles = new AtomicLong(0);
         public final AtomicLong skippedFiles = new AtomicLong(0);
         public final AtomicLong errorFiles = new AtomicLong(0);
+        public final AtomicLong orphansDeleted = new AtomicLong(0);
 
         @Override
         public String toString() {
-            return String.format(
+            String base = String.format(
                     "Total: %d, Processed: %d, Indexed: %d, Skipped: %d, Errors: %d",
                     totalFiles.get(), processedFiles.get(), indexedFiles.get(),
                     skippedFiles.get(), errorFiles.get()
             );
+            long orphans = orphansDeleted.get();
+            return orphans > 0 ? base + ", Orphans removed: " + orphans : base;
         }
     }
 }

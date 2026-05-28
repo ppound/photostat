@@ -150,6 +150,23 @@ java --module-path /path/to/javafx-sdk-21/lib \
 4. Try clicking "Re-index All"
 5. Check the log file for errors (if logging enabled)
 
+### Stale entries: files renamed, moved, or deleted outside PhotoStat
+
+**Symptom:** the index still shows entries for files that no longer exist at their stored paths — clicking them in results, opening their folder, or searching by old filename surfaces things that don't match what's on disk. Common causes: renaming files in Finder/Explorer, moving them between drives, or deleting them outside the app.
+
+**Cause:** OpenSearch documents are keyed by the file's path. PhotoStat keeps the index in sync for operations done *inside* the app (Move, Rename, Delete in the results toolbar), but external changes aren't observed — a regular Re-index All adds the new paths as new documents and leaves the old ones behind as orphans.
+
+**Solution:**
+
+1. Go to the **Index** tab
+2. Click **Re-index All**
+3. In the confirmation dialog, check **"Also remove orphaned index entries"**
+4. Click OK
+
+After indexing completes, the orphan sweep deletes index entries whose files no longer exist on disk. The completion summary reports the count.
+
+**Important — unmounted drives:** the sweep only operates on configured directories that are currently accessible. Any configured directory whose drive isn't mounted (or whose folder is missing) is skipped entirely and its entries are preserved. To do a full sweep across an external library, attach the drive first, then run Re-index All with the option checked. See the [Re-index All](USER_GUIDE.md#re-index-all) section of the User Guide for details.
+
 ### RAW files not indexed
 
 **Cause:** ExifTool is not installed or not in PATH.
