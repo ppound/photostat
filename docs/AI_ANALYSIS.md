@@ -324,7 +324,7 @@ Monitor usage:
 PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
 
 - An `analysisHash` is stored in the sidecar file after each analysis
-- The hash combines: provider + model + prompt + image (file size + modification time)
+- The hash combines: provider + model + prompt + image path + file size + modification time
 - When re-analyzing, images with matching hashes are skipped
 - The progress dialog shows "Cached (skipped)" count for unchanged images
 - Cache is invalidated when you:
@@ -332,6 +332,7 @@ PhotoStat caches analysis results to avoid redundant API calls and reduce costs:
   - Change the model in settings
   - Modify the analysis prompt in config.json
   - Edit or replace the image file
+- **Batch rename preserves the cache.** Renaming a file would otherwise invalidate the hash because the path is part of it. The Rename... action checks each file's cache validity *before* renaming and refreshes the hash at the new path after, so previously-analyzed files are not re-billed
 
 ---
 

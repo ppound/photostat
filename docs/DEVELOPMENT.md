@@ -107,7 +107,7 @@ photostat-java/
 │   ├── services/
 │   │   ├── ConfigService.java           # Configuration management
 │   │   ├── ExifService.java             # EXIF metadata extraction
-│   │   ├── FileOperationsService.java   # Copy, move, delete operations
+│   │   ├── FileOperationsService.java   # Copy, move, rename, delete operations
 │   │   ├── ImageAnalysisService.java    # AI image analysis (Claude/Gemini)
 │   │   ├── OpenSearchService.java       # OpenSearch client
 │   │   ├── IndexerService.java          # Background indexing
@@ -181,10 +181,10 @@ All services use the singleton pattern with `getInstance()`:
 - **`IndexerService`** - Background indexing with progress reporting
 - **`ThumbnailService`** - Generates and caches thumbnails
 - **`HashService`** - Computes SHA-256 content hashes and perceptual hashes (dHash) for duplicate detection
-- **`SidecarService`** - Manages `.photostat.json` sidecar files
+- **`SidecarService`** - Manages `.photostat.json` and `.xmp` sidecar files (both backends)
 - **`ImageAnalysisService`** - AI image analysis (Claude/Gemini)
 - **`FaceRecognitionService`** - Face detection, clustering, and naming via Python sidecar
-- **`FileOperationsService`** - Copy/move/delete operations
+- **`FileOperationsService`** - Copy/move/rename/delete operations (iterates all sidecar backends so JSON and XMP sidecars travel with the image)
 - **`LoggingService`** - File-based logging
 
 ### UI Components

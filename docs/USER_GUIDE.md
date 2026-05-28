@@ -384,6 +384,7 @@ You can copy, move, or delete images directly from search results:
 |-----------|--------|-------------|
 | **Copy** | Copy Selected... | Copy images to a new directory |
 | **Move** | Move Selected... | Move images to a new directory |
+| **Rename** | Rename... | Find/replace in filenames across selected images or the full result set |
 | **Upload** | Upload Selected... | Upload images to a cloud remote via rclone |
 | **Delete** | Delete Selected | Permanently delete images |
 
@@ -403,6 +404,36 @@ You can copy, move, or delete images directly from search results:
 4. Files are moved and automatically re-indexed at the new location
 5. A summary shows the result and indexing status
 
+**Batch Rename Images:**
+
+The **Rename...** button opens a find/replace dialog that operates on either your current selection or the entire current result set — handy after faceting on a person, place, or tag.
+
+1. (Optional) Narrow your results by faceting or searching, or select specific images
+2. Click **Rename...** in the toolbar
+3. In the dialog:
+
+   | Option | Description |
+   |--------|-------------|
+   | **Source** | **Selected (N)** or **Current results (M)** — defaults to whichever is non-empty |
+   | **Find** | Substring to replace in each filename (e.g. `DSC-`) |
+   | **Replace** | New substring (e.g. `Scotland-`) |
+   | **Regex** | Treat the find pattern as a Java regular expression instead of a literal substring |
+
+4. The preview table updates live, showing each file's **Current name**, **New name**, and **Status**:
+   - **Will rename to <newname>** — eligible for rename
+   - **No match** — find string isn't present, file is left alone (greyed out)
+   - **Conflict: target exists** or **Conflict: duplicate target** — a destination file already exists, or two source files would collide on the same new name (highlighted red)
+
+5. The status line summarises counts: `X will rename, Y unchanged, Z conflicts`. **Apply** is disabled if there are any conflicts or zero renames
+
+6. Click **Apply**. A progress dialog shows the rename + reindex pass; when complete, a summary reports how many files were renamed, how many were re-indexed at their new paths, and how many AI analysis cache entries were preserved
+
+**Notes on batch rename:**
+- **Selection vs. current results:** the current-results option fetches up to OpenSearch's 10,000-document cap. For larger sets, narrow your search first
+- **Sidecars come along:** both `.photostat.json` and `.xmp` sidecars are renamed alongside the image
+- **Rename history is recorded:** each rename appends the original basename to a `previousFilenames` list in the JSON sidecar (the sidecar is created just for this if it didn't exist). Useful for locating a sibling RAW file later if you've renamed its JPEG
+- **AI analysis cache is preserved:** the analysis hash includes the file path, so a rename would otherwise invalidate the cache. PhotoStat checks each file's cache validity *before* renaming and refreshes the hash at the new path after, so previously-analyzed files don't need to be re-analyzed (and re-billed)
+
 **Delete Images:**
 1. Select one or more images
 2. Click **Delete Selected**
@@ -410,8 +441,8 @@ You can copy, move, or delete images directly from search results:
 4. Files are permanently deleted from disk and removed from the index
 
 **Notes:**
-- Sidecar files (`.photostat.json`) are automatically copied/moved/deleted with their images
-- Move and delete operations update the search index automatically
+- Sidecar files (`.photostat.json` and `.xmp`) are automatically copied/moved/renamed/deleted with their images
+- Move, rename, and delete operations update the search index automatically
 - Deleted files cannot be recovered - use with caution!
 
 ---

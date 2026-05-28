@@ -38,6 +38,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Custom Metadata** - Add persons, places, tags, and ratings
 - **Keyboard Rating** - Press 1-5 to rate, 0 to clear — instant save for fast culling
 - **Slideshow Mode** - Full-screen browsing with keyboard navigation, quick rating, and image deletion
+- **Batch Rename** - Substring or regex find/replace across selected images or the full current result set, with live preview and conflict detection
 - **Dark Theme** - Switch between light and dark themes in Settings for comfortable low-light use
 - **Sidecar Files** - Metadata persists with your images in JSON or XMP format (XMP is readable by Lightroom, Bridge, digiKam, ExifTool, and other standard photo tools)
 - **Copy & Paste Metadata** - Quickly apply tags across multiple images
