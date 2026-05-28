@@ -134,7 +134,7 @@ You can choose which file types to index in **File > Settings > Indexing**. Each
 
 - **Also remove orphaned index entries** — when checked, after re-indexing finishes, PhotoStat sweeps the index for entries whose files no longer exist on disk and removes them. This is the simplest way to clean up after files have been renamed, moved, or deleted outside of PhotoStat (renames done *inside* PhotoStat via the **Rename...** button already keep the index in sync, so this option mainly matters for changes made in Finder/Explorer or by other tools).
 
-**Safety with unmounted drives:** the orphan sweep only operates on configured directories that are accessible at the time it runs. If an external drive isn't plugged in, the directories on it are skipped entirely — their entries are left untouched. So if you accidentally check the box without your backup drive attached, nothing on that drive is removed. To run a full sweep across an external library, attach the drive first, then run **Re-index All** with the option checked.
+**Safety with unmounted drives:** the orphan sweep only operates on configured directories that are accessible at the time it runs. If an external drive isn't plugged in, the directories on it are skipped entirely — their entries in the Opensearch index are left untouched. So if you accidentally check the box without your backup drive attached, no image metadata from images on that drive is removed from the Opensearch index. To run a full sweep across an external library, attach the drive first, then run **Re-index All** with the option checked.
 
 The completion summary reports the orphan count (when greater than zero) alongside the usual indexed/skipped/error counts.
 
