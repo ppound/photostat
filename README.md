@@ -28,6 +28,7 @@ After years of photography and using various software like Lightroom, Capture On
 ### Core Capabilities
 - **Fast Full-Text Search** - Search across all EXIF metadata fields instantly
 - **Faceted Navigation** - Filter by camera, lens, file type, ISO, date, and more
+- **On This Day** - Revisit photos taken on this calendar day across all years, with an optional ± window for multi-day trips
 - **Thumbnail Preview** - Quick visual preview of search results
 - **Multi-Directory Indexing** - Index photos from multiple locations with selective directory choice
 - **Background Indexing** - Continue working while photos are being indexed

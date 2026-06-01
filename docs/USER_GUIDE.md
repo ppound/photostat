@@ -17,6 +17,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Managing Files](#managing-files)
 - [Finding Duplicates](#finding-duplicates)
 - [Face Recognition](#face-recognition)
+- [On This Day](#on-this-day)
 - [Exploring Charts](#exploring-charts)
 - [GPS Map](#gps-map)
 - [Thumbnail Cache](#thumbnail-cache)
@@ -30,13 +31,15 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 
 ## First Launch
 
-When you first launch PhotoStat, you'll see the main window with six tabs:
+When you first launch PhotoStat, you'll see the main window with eight tabs:
 
 - **Search** - Find and browse your indexed photos
 - **Index** - Manage directories and run indexing
 - **Duplicates** - Find and manage duplicate images
 - **Faces** - Face detection, clustering, and person naming
 - **Map** - Interactive map of geotagged photos
+- **Timeline** - Photos arranged by year and month
+- **On This Day** - Photos taken on this calendar day across all years
 - **Charts** - View visualizations of your collection
 
 ![Application Tabs](screenshots/app-tabs.png)
@@ -160,7 +163,7 @@ The completion summary reports the orphan count (when greater than zero) alongsi
    | Camera Model | Filter by specific camera model with autocomplete |
    | Lens | Filter by lens used with autocomplete |
    | File Type | JPEG, PNG, RAW formats |
-   | Date Range | Photos taken between dates |
+   | Date Range | Photos taken between dates, or — via the **On this day** checkbox inside the pane — photos taken on a specific month/day across all years (with an optional ± days window) |
    | ISO Range | Filter by ISO sensitivity |
    | Aperture | Filter by f-stop value |
    | Person | Multi-select with chips - filter by tagged people |
@@ -631,6 +634,22 @@ java -jar photostat-java-2.1.0-executable.jar --detect-faces --cluster-only
 - Progress is saved every 500 images; safe to interrupt and resume
 - Each parallel worker loads its own model (more RAM needed)
 - Face data is stored at `~/.photostat/faces/`
+
+---
+
+## On This Day
+
+The **On This Day** tab surfaces photos you took on this calendar day in previous years — a quick way to revisit memories without searching.
+
+**Controls:**
+- **Date** - defaults to today; only the month and day are used for matching, so the year you pick is ignored
+- **± days** - widens the match window to include neighbouring calendar days (useful for trips that spanned several days); defaults to 0 (exact day only)
+- **Today** - jumps back to today's month/day
+- **Refresh** - re-runs the query
+
+The header above the results summarises totals and breaks them down by year — for example, *"23 photos across 5 years on June 1 — 2024 (8), 2023 (5), 2022 (4), …"*. Results are sorted newest-first and use the same table, thumbnails, ratings, and detail panel as the Search tab; clicking a row opens it in the right-hand detail panel and the keyboard rating shortcuts (1–5, 0) work the same way.
+
+**Quick filter on the Search tab:** the same logic is also available as a checkbox inside the **Date Range** section of the Search tab. Toggle **On this day**, pick a date and an optional ± window, and combine it with any other filters (e.g. *On this day + Person: Mom + Place: Cottage*). When the checkbox is on, the regular From/To pickers are disabled.
 
 ---
 
