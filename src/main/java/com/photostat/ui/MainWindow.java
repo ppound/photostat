@@ -34,6 +34,7 @@ public class MainWindow extends BorderPane {
     private MapPanel mapPanel;
     private TimelinePanel timelinePanel;
     private ChartsPanel chartsPanel;
+    private OnThisDayPanel onThisDayPanel;
 
     private Label statusLabel;
     private Label connectionLabel;
@@ -82,12 +83,17 @@ public class MainWindow extends BorderPane {
         timelinePanel.setStatusCallback(this::updateStatus);
         timelineTab.setContent(timelinePanel);
 
+        // Create On This Day tab
+        Tab onThisDayTab = new Tab("On This Day");
+        onThisDayPanel = new OnThisDayPanel();
+        onThisDayTab.setContent(onThisDayPanel);
+
         // Create Charts tab
         Tab chartsTab = new Tab("Charts");
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, chartsTab);
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, onThisDayTab, chartsTab);
 
         // Refresh panels when switching tabs
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
@@ -99,6 +105,8 @@ public class MainWindow extends BorderPane {
                 mapPanel.refresh();
             } else if (newTab == facesTab) {
                 facesPanel.refresh();
+            } else if (newTab == onThisDayTab) {
+                onThisDayPanel.refresh();
             }
         });
 

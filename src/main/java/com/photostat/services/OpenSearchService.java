@@ -420,7 +420,9 @@ public class OpenSearchService {
 
             if (value == null) continue;
 
-            if (value instanceof String && !((String) value).isEmpty()) {
+            if (field.equals("on_this_day") && value instanceof String) {
+                addOnThisDayFilter(boolQuery, (String) value);
+            } else if (value instanceof String && !((String) value).isEmpty()) {
                 boolQuery.filter(Query.of(q -> q.term(t -> t
                         .field(field)
                         .value(FieldValue.of((String) value)))));
@@ -455,6 +457,63 @@ public class OpenSearchService {
                 }
                 boolQuery.filter(Query.of(q -> q.range(rangeBuilder.build())));
             }
+        }
+    }
+
+    /**
+     * Add an "on this day" filter to the bool query.
+     * Encoded value is "MM-dd" or "MM-dd:N" where N is the +/- days window.
+     * Builds one date_taken range per year so OpenSearch can use the indexed
+     * field directly — avoids scripting and the cross-version Painless date-API
+     * quirks that come with it.
+     */
+    private void addOnThisDayFilter(BoolQuery.Builder boolQuery, String encoded) {
+        try {
+            int colonIdx = encoded.indexOf(':');
+            String mmdd = colonIdx >= 0 ? encoded.substring(0, colonIdx) : encoded;
+            int windowDays = colonIdx >= 0 ? Integer.parseInt(encoded.substring(colonIdx + 1)) : 0;
+            String[] parts = mmdd.split("-");
+            int month = Integer.parseInt(parts[0]);
+            int day = Integer.parseInt(parts[1]);
+
+            // ~125 range clauses worst case (1900..current+1) — well below the
+            // 1024 default bool max_clause_count.
+            int currentYear = java.time.LocalDate.now().getYear();
+            int minYear = 1900;
+
+            // Collect ranges into a list — opensearch-java's bool builder
+            // overwrites should() on each call instead of appending.
+            List<Query> shouldClauses = new ArrayList<>();
+            for (int y = minYear; y <= currentYear + 1; y++) {
+                java.time.LocalDate center;
+                try {
+                    center = java.time.LocalDate.of(y, month, day);
+                } catch (java.time.DateTimeException e) {
+                    // Feb 29 in non-leap years — skip
+                    continue;
+                }
+                java.time.LocalDate from = center.minusDays(windowDays);
+                java.time.LocalDate to = center.plusDays(windowDays + 1L);
+                String fromStr = from.toString() + "T00:00:00";
+                String toStr = to.toString() + "T00:00:00";
+
+                shouldClauses.add(Query.of(q -> q.range(r -> r
+                        .field("date_taken")
+                        .gte(JsonData.of(fromStr))
+                        .lt(JsonData.of(toStr)))));
+            }
+
+            if (shouldClauses.isEmpty()) {
+                return;
+            }
+
+            BoolQuery onThisDayBool = new BoolQuery.Builder()
+                    .should(shouldClauses)
+                    .minimumShouldMatch("1")
+                    .build();
+            boolQuery.filter(Query.of(q -> q.bool(onThisDayBool)));
+        } catch (Exception e) {
+            logger.warn("OpenSearchService", "Invalid on_this_day filter value: " + encoded);
         }
     }
 

@@ -37,6 +37,9 @@ public class SearchPanel extends VBox {
     private ComboBox<String> fileTypeCombo;
     private DatePicker dateFromPicker;
     private DatePicker dateToPicker;
+    private CheckBox onThisDayCheck;
+    private DatePicker onThisDayPicker;
+    private Spinner<Integer> onThisDayWindowSpinner;
     private Spinner<Integer> isoMinSpinner;
     private Spinner<Integer> isoMaxSpinner;
     private Spinner<Double> apertureMinSpinner;
@@ -153,6 +156,28 @@ public class SearchPanel extends VBox {
         dateGrid.add(dateFromPicker, 1, 0);
         dateGrid.add(new Label("To:"), 0, 1);
         dateGrid.add(dateToPicker, 1, 1);
+
+        // On This Day quick filter — matches any year on the picked month/day.
+        // When enabled, From/To are disabled since the script filter overrides them.
+        onThisDayCheck = new CheckBox("On this day:");
+        onThisDayPicker = new DatePicker(LocalDate.now());
+        onThisDayPicker.setPrefWidth(130);
+        onThisDayPicker.setDisable(true);
+        onThisDayWindowSpinner = new Spinner<>(0, 30, 0, 1);
+        onThisDayWindowSpinner.setEditable(true);
+        onThisDayWindowSpinner.setPrefWidth(70);
+        onThisDayWindowSpinner.setDisable(true);
+        onThisDayCheck.selectedProperty().addListener((obs, oldV, newV) -> {
+            onThisDayPicker.setDisable(!newV);
+            onThisDayWindowSpinner.setDisable(!newV);
+            dateFromPicker.setDisable(newV);
+            dateToPicker.setDisable(newV);
+        });
+        dateGrid.add(onThisDayCheck, 0, 2);
+        dateGrid.add(onThisDayPicker, 1, 2);
+        dateGrid.add(new Label("± days:"), 0, 3);
+        dateGrid.add(onThisDayWindowSpinner, 1, 3);
+
         datePane.setContent(dateGrid);
 
         // Exposure settings
@@ -347,14 +372,25 @@ public class SearchPanel extends VBox {
             filters.put("file_type", fileType.trim());
         }
 
-        // Date range
-        LocalDate dateFrom = dateFromPicker.getValue();
-        if (dateFrom != null) {
-            filters.put("date_from", LocalDateTime.of(dateFrom, LocalTime.MIN));
-        }
-        LocalDate dateTo = dateToPicker.getValue();
-        if (dateTo != null) {
-            filters.put("date_to", LocalDateTime.of(dateTo, LocalTime.MAX));
+        // On this day takes precedence over the explicit date range when enabled
+        if (onThisDayCheck.isSelected()) {
+            LocalDate otd = onThisDayPicker.getValue();
+            if (otd != null) {
+                int window = onThisDayWindowSpinner.getValue() != null
+                        ? onThisDayWindowSpinner.getValue() : 0;
+                filters.put("on_this_day",
+                        String.format("%02d-%02d:%d", otd.getMonthValue(), otd.getDayOfMonth(), window));
+            }
+        } else {
+            // Date range
+            LocalDate dateFrom = dateFromPicker.getValue();
+            if (dateFrom != null) {
+                filters.put("date_from", LocalDateTime.of(dateFrom, LocalTime.MIN));
+            }
+            LocalDate dateTo = dateToPicker.getValue();
+            if (dateTo != null) {
+                filters.put("date_to", LocalDateTime.of(dateTo, LocalTime.MAX));
+            }
         }
 
         // ISO range
@@ -427,6 +463,13 @@ public class SearchPanel extends VBox {
         fileTypeCombo.setValue(null);
         dateFromPicker.setValue(null);
         dateToPicker.setValue(null);
+        dateFromPicker.setDisable(false);
+        dateToPicker.setDisable(false);
+        onThisDayCheck.setSelected(false);
+        onThisDayPicker.setValue(LocalDate.now());
+        onThisDayPicker.setDisable(true);
+        onThisDayWindowSpinner.getValueFactory().setValue(0);
+        onThisDayWindowSpinner.setDisable(true);
         isoMinSpinner.getValueFactory().setValue(0);
         isoMaxSpinner.getValueFactory().setValue(0);
         apertureMinSpinner.getValueFactory().setValue(0.0);
@@ -519,6 +562,20 @@ public class SearchPanel extends VBox {
                 break;
             case "rating":
                 ratingCombo.getEditor().setText(value);
+                break;
+            case "on_this_day":
+                // Encoded as "MM-dd" or "MM-dd:N"
+                try {
+                    int colonIdx = value.indexOf(':');
+                    String mmdd = colonIdx >= 0 ? value.substring(0, colonIdx) : value;
+                    int window = colonIdx >= 0 ? Integer.parseInt(value.substring(colonIdx + 1)) : 0;
+                    String[] parts = mmdd.split("-");
+                    int month = Integer.parseInt(parts[0]);
+                    int day = Integer.parseInt(parts[1]);
+                    onThisDayCheck.setSelected(true);
+                    onThisDayPicker.setValue(LocalDate.of(LocalDate.now().getYear(), month, day));
+                    onThisDayWindowSpinner.getValueFactory().setValue(window);
+                } catch (Exception ignored) {}
                 break;
         }
     }
