@@ -476,6 +476,24 @@ public class ConfigService {
         setNestedValue("ui", "theme", theme);
     }
 
+    // Which tab to open on startup. Values: "search", "ontheday", "lastused".
+    public String getOpenTab() {
+        return getNestedString("ui", "open_tab", "search");
+    }
+
+    public void setOpenTab(String openTab) {
+        setNestedValue("ui", "open_tab", openTab);
+    }
+
+    // Last tab the user was on; only consulted when getOpenTab() == "lastused".
+    public String getLastUsedTab() {
+        return getNestedString("ui", "last_used_tab", "search");
+    }
+
+    public void setLastUsedTab(String tabKey) {
+        setNestedValue("ui", "last_used_tab", tabKey);
+    }
+
     // ExifTool settings
     public String getExifToolPath() {
         return getNestedString("exiftool", "path", "exiftool");

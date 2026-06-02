@@ -95,7 +95,19 @@ public class MainWindow extends BorderPane {
 
         tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, onThisDayTab, chartsTab);
 
-        // Refresh panels when switching tabs
+        // Tag each tab with a stable key used by the "Open to tab" setting so
+        // tab labels can change without breaking persistence.
+        searchTab.setUserData("search");
+        indexTab.setUserData("index");
+        duplicatesTab.setUserData("duplicates");
+        facesTab.setUserData("faces");
+        mapTab.setUserData("map");
+        timelineTab.setUserData("timeline");
+        onThisDayTab.setUserData("ontheday");
+        chartsTab.setUserData("charts");
+
+        // Refresh panels when switching tabs; also persist last-used when the
+        // user has chosen the "lastused" open-tab mode.
         tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
             if (newTab == chartsTab) {
                 chartsPanel.refresh();
@@ -108,7 +120,16 @@ public class MainWindow extends BorderPane {
             } else if (newTab == onThisDayTab) {
                 onThisDayPanel.refresh();
             }
+            if (newTab != null && "lastused".equals(configService.getOpenTab())) {
+                Object key = newTab.getUserData();
+                if (key instanceof String) {
+                    configService.setLastUsedTab((String) key);
+                    configService.saveConfig();
+                }
+            }
         });
+
+        applyOpenTab();
 
         setCenter(tabPane);
 
@@ -119,6 +140,28 @@ public class MainWindow extends BorderPane {
         // Create status bar
         HBox statusBar = createStatusBar();
         setBottom(statusBar);
+    }
+
+    /**
+     * Select the tab the user has configured for app launch. Falls back to
+     * the first tab if the configured key doesn't match any present tab.
+     */
+    private void applyOpenTab() {
+        String mode = configService.getOpenTab();
+        String targetKey;
+        if ("lastused".equals(mode)) {
+            targetKey = configService.getLastUsedTab();
+        } else if ("ontheday".equals(mode)) {
+            targetKey = "ontheday";
+        } else {
+            targetKey = "search";
+        }
+        for (Tab tab : tabPane.getTabs()) {
+            if (targetKey.equals(tab.getUserData())) {
+                tabPane.getSelectionModel().select(tab);
+                return;
+            }
+        }
     }
 
     private BorderPane createSearchView() {

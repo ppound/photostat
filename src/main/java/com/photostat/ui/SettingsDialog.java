@@ -47,6 +47,11 @@ public class SettingsDialog extends Dialog<Boolean> {
     private ComboBox<String> themeCombo;
     private Spinner<Integer> thumbnailSizeSpinner;
     private Spinner<Integer> resultsPerPageSpinner;
+    private ComboBox<String> openTabCombo;
+
+    private static final String OPEN_TAB_SEARCH_LABEL = "Search";
+    private static final String OPEN_TAB_ONTHEDAY_LABEL = "On This Day";
+    private static final String OPEN_TAB_LASTUSED_LABEL = "Last used";
 
     // Logging settings
     private CheckBox loggingEnabledCheckbox;
@@ -353,6 +358,16 @@ public class SettingsDialog extends Dialog<Boolean> {
         resultsPerPageSpinner.setPrefWidth(100);
         grid.add(resultsPerPageSpinner, 1, row++);
 
+        // Open to tab (which tab is selected on launch)
+        grid.add(new Label("Open to tab:"), 0, row);
+        openTabCombo = new ComboBox<>();
+        openTabCombo.getItems().addAll(OPEN_TAB_SEARCH_LABEL, OPEN_TAB_ONTHEDAY_LABEL, OPEN_TAB_LASTUSED_LABEL);
+        openTabCombo.setPrefWidth(150);
+        grid.add(openTabCombo, 1, row);
+        Label openTabNote = new Label("Applies on next launch.");
+        openTabNote.getStyleClass().add("info-label-small");
+        grid.add(openTabNote, 2, row++);
+
         // Config file location
         Label configPathLabel = new Label("Config file: " + configService.getConfigPath());
         configPathLabel.getStyleClass().add("info-label-small");
@@ -360,6 +375,21 @@ public class SettingsDialog extends Dialog<Boolean> {
         pane.getChildren().addAll(grid, new Separator(), configPathLabel);
 
         return pane;
+    }
+
+    private static String openTabKeyToLabel(String key) {
+        if (key == null) return OPEN_TAB_SEARCH_LABEL;
+        switch (key) {
+            case "ontheday": return OPEN_TAB_ONTHEDAY_LABEL;
+            case "lastused": return OPEN_TAB_LASTUSED_LABEL;
+            default: return OPEN_TAB_SEARCH_LABEL;
+        }
+    }
+
+    private static String openTabLabelToKey(String label) {
+        if (OPEN_TAB_ONTHEDAY_LABEL.equals(label)) return "ontheday";
+        if (OPEN_TAB_LASTUSED_LABEL.equals(label)) return "lastused";
+        return "search";
     }
 
     private VBox createLoggingPane() {
@@ -1411,6 +1441,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         themeCombo.setValue("dark".equalsIgnoreCase(configService.getTheme()) ? "Dark" : "Light");
         thumbnailSizeSpinner.getValueFactory().setValue(configService.getThumbnailSize());
         resultsPerPageSpinner.getValueFactory().setValue(configService.getResultsPerPage());
+        openTabCombo.setValue(openTabKeyToLabel(configService.getOpenTab()));
 
         // Logging settings
         loggingEnabledCheckbox.setSelected(configService.isLoggingEnabled());
@@ -1512,6 +1543,7 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         configService.setThumbnailSize(thumbnailSizeSpinner.getValue());
         configService.setResultsPerPage(resultsPerPageSpinner.getValue());
+        configService.setOpenTab(openTabLabelToKey(openTabCombo.getValue()));
 
         // Logging settings
         configService.setLoggingEnabled(loggingEnabledCheckbox.isSelected());
