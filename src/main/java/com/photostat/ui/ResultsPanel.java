@@ -38,6 +38,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -124,18 +125,18 @@ public class ResultsPanel extends VBox {
         copySelectedBtn.setOnAction(e -> copySelectedImages());
         copySelectedBtn.setTooltip(new Tooltip("Copy selected images to another directory." + multiSelectHint));
 
-        Button moveSelectedBtn = new Button("Move Selected...");
+        Button moveSelectedBtn = new Button("Move...");
         moveSelectedBtn.setOnAction(e -> moveSelectedImages());
-        moveSelectedBtn.setTooltip(new Tooltip("Move selected images to another directory and update the index." + multiSelectHint));
+        moveSelectedBtn.setTooltip(new Tooltip("Move images to another directory and update the index. Operates on the current selection or full result set." + multiSelectHint));
 
         Button renameBtn = new Button("Rename...");
         renameBtn.setOnAction(e -> batchRenameImages());
         renameBtn.setTooltip(new Tooltip("Find/replace in filenames across the current selection or full result set." + multiSelectHint));
 
-        Button deleteSelectedBtn = new Button("Delete Selected");
+        Button deleteSelectedBtn = new Button("Delete...");
         deleteSelectedBtn.getStyleClass().add("delete-button");
         deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
-        deleteSelectedBtn.setTooltip(new Tooltip("Permanently delete selected images from disk and remove from index." + multiSelectHint));
+        deleteSelectedBtn.setTooltip(new Tooltip("Permanently delete images from disk and remove from index. Operates on the current selection or full result set." + multiSelectHint));
 
         Button uploadSelectedBtn = new Button("Upload Selected...");
         uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
@@ -170,11 +171,11 @@ public class ResultsPanel extends VBox {
         generateMenuItem.setOnAction(e -> generateFromSelectedImages());
         MenuItem copyMenuItem = new MenuItem("Copy Selected...");
         copyMenuItem.setOnAction(e -> copySelectedImages());
-        MenuItem moveMenuItem = new MenuItem("Move Selected...");
+        MenuItem moveMenuItem = new MenuItem("Move...");
         moveMenuItem.setOnAction(e -> moveSelectedImages());
         MenuItem uploadMenuItem = new MenuItem("Upload Selected...");
         uploadMenuItem.setOnAction(e -> uploadSelectedImages());
-        MenuItem deleteMenuItem = new MenuItem("Delete Selected");
+        MenuItem deleteMenuItem = new MenuItem("Delete...");
         deleteMenuItem.setOnAction(e -> deleteSelectedImages());
         contextMenu.getItems().addAll(analyzeMenuItem, generateMenuItem, new SeparatorMenuItem(),
                 copyMenuItem, moveMenuItem, uploadMenuItem, new SeparatorMenuItem(), deleteMenuItem);
@@ -601,57 +602,136 @@ public class ResultsPanel extends VBox {
     }
 
     /**
-     * Move selected images to a chosen directory.
+     * Which set a batch operation should run on.
+     */
+    private enum BatchSource { SELECTED, RESULTS }
+
+    /**
+     * Ask the user whether a batch operation should target the current
+     * selection or the full current result set. Returns null if the user
+     * cancels. If only one of the two is non-empty, the dialog is skipped.
+     */
+    private BatchSource askBatchSource(int selectedCount, long resultsCount, String title, String header) {
+        if (resultsCount <= 0) return BatchSource.SELECTED;
+        if (selectedCount == 0) return BatchSource.RESULTS;
+
+        Alert dialog = new Alert(Alert.AlertType.CONFIRMATION);
+        dialog.setTitle(title);
+        dialog.setHeaderText(header);
+        dialog.setContentText(null);
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
+        ButtonType selectedBtn = new ButtonType("Selected (" + selectedCount + ")", ButtonBar.ButtonData.OK_DONE);
+        ButtonType resultsBtn = new ButtonType("Current results (" + resultsCount + ")", ButtonBar.ButtonData.OTHER);
+        dialog.getButtonTypes().setAll(selectedBtn, resultsBtn, ButtonType.CANCEL);
+
+        Optional<ButtonType> chosen = dialog.showAndWait();
+        if (chosen.isEmpty()) return null;
+        ButtonType bt = chosen.get();
+        if (bt == selectedBtn) return BatchSource.SELECTED;
+        if (bt == resultsBtn) return BatchSource.RESULTS;
+        return null;
+    }
+
+    /**
+     * Fetch the full current result set on a background thread, then invoke
+     * the given callback on the JavaFX thread. Matches the pattern used by
+     * batch rename so conflict-/scope-detection sees the whole set, not just
+     * the displayed page.
+     */
+    private void fetchCurrentResults(String operation, Consumer<List<ImageMetadata>> onReady) {
+        Thread fetchThread = new Thread(() -> {
+            List<ImageMetadata> results;
+            try {
+                int fetchSize = (int) Math.min(totalResults, 10000L);
+                if (fetchSize <= 0) {
+                    results = new ArrayList<>();
+                } else {
+                    OpenSearchService.SearchResult full = openSearchService.search(
+                            currentQuery, currentFilters, 0, fetchSize);
+                    results = full.getResults();
+                }
+            } catch (Exception ex) {
+                logger.error("ResultsPanel", "Failed to fetch current results for " + operation, ex);
+                Platform.runLater(() -> showAlert(Alert.AlertType.ERROR, operation,
+                        "Failed to fetch current results: " + ex.getMessage()));
+                return;
+            }
+            final List<ImageMetadata> finalResults = results;
+            Platform.runLater(() -> onReady.accept(finalResults));
+        });
+        fetchThread.setDaemon(true);
+        fetchThread.start();
+    }
+
+    /**
+     * Move images to a chosen directory. Operates on either the current
+     * selection or the full current result set.
      */
     private void moveSelectedImages() {
         List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
-        if (selected.isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to move.");
+
+        if (selected.isEmpty() && totalResults == 0) {
+            showAlert(Alert.AlertType.WARNING, "No Images", "Select images or run a search first.");
+            return;
+        }
+
+        BatchSource source = askBatchSource(selected.size(), totalResults,
+                "Move Images", "Which images do you want to move?");
+        if (source == null) return;
+
+        if (source == BatchSource.SELECTED) {
+            performMove(selected);
+        } else {
+            fetchCurrentResults("Move", this::performMove);
+        }
+    }
+
+    private void performMove(List<ImageMetadata> targets) {
+        if (targets.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Images", "There are no images to move.");
             return;
         }
 
         DirectoryChooser chooser = new DirectoryChooser();
         chooser.setTitle("Select Destination Directory");
         File destination = chooser.showDialog(getScene().getWindow());
+        if (destination == null) return;
 
-        if (destination != null) {
-            List<String> paths = selected.stream()
-                    .map(ImageMetadata::getFilePath)
-                    .collect(Collectors.toList());
+        List<String> paths = targets.stream()
+                .map(ImageMetadata::getFilePath)
+                .collect(Collectors.toList());
 
-            FileOperationsService.BatchOperationResult result =
-                    fileOperationsService.moveImages(paths, destination.toPath(), false);
+        FileOperationsService.BatchOperationResult result =
+                fileOperationsService.moveImages(paths, destination.toPath(), false);
 
-            if (result.hasErrors()) {
-                logger.warn("ResultsPanel", "Move errors: " + String.join(", ", result.errors));
-            }
-
-            // Update index for moved files
-            String indexMessage = "\nIndex not updated.";
-            if (result.successCount > 0) {
-                int reindexed = 0;
-                for (ImageMetadata metadata : selected) {
-                    try {
-                        // Delete old entry from index
-                        openSearchService.deleteDocument(metadata.getFilePath());
-
-                        // Re-index at new location
-                        Path oldPath = Path.of(metadata.getFilePath());
-                        Path newPath = destination.toPath().resolve(oldPath.getFileName());
-                        if (indexerService.indexSingleFile(newPath.toString())) {
-                            reindexed++;
-                        }
-                    } catch (Exception e) {
-                        logger.error("ResultsPanel", "Failed to update index for moved file", e);
-                    }
-                }
-                indexMessage = "\nIndex updated: " + reindexed + " file(s) re-indexed at new location.";
-                logger.info("ResultsPanel", "Re-indexed " + reindexed + " moved files at new location");
-                refresh();
-            }
-
-            showAlert(Alert.AlertType.INFORMATION, "Move Complete", result.getSummary() + indexMessage);
+        if (result.hasErrors()) {
+            logger.warn("ResultsPanel", "Move errors: " + String.join(", ", result.errors));
         }
+
+        String indexMessage = "\nIndex not updated.";
+        if (result.successCount > 0) {
+            int reindexed = 0;
+            for (ImageMetadata metadata : targets) {
+                try {
+                    openSearchService.deleteDocument(metadata.getFilePath());
+
+                    Path oldPath = Path.of(metadata.getFilePath());
+                    Path newPath = destination.toPath().resolve(oldPath.getFileName());
+                    if (indexerService.indexSingleFile(newPath.toString())) {
+                        reindexed++;
+                    }
+                } catch (Exception e) {
+                    logger.error("ResultsPanel", "Failed to update index for moved file", e);
+                }
+            }
+            indexMessage = "\nIndex updated: " + reindexed + " file(s) re-indexed at new location.";
+            logger.info("ResultsPanel", "Re-indexed " + reindexed + " moved files at new location");
+            refresh();
+        }
+
+        showAlert(Alert.AlertType.INFORMATION, "Move Complete", result.getSummary() + indexMessage);
     }
 
     /**
@@ -822,54 +902,136 @@ public class ResultsPanel extends VBox {
     }
 
     /**
-     * Delete selected images after confirmation.
+     * Delete images after a typed confirmation. Operates on either the
+     * current selection or the full current result set; deleting the result
+     * set requires explicitly typing DELETE to guard against accidents.
      */
     private void deleteSelectedImages() {
         List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
-        if (selected.isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to delete.");
+
+        if (selected.isEmpty() && totalResults == 0) {
+            showAlert(Alert.AlertType.WARNING, "No Images", "Select images or run a search first.");
             return;
         }
 
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-        confirm.setTitle("Confirm Delete");
-        confirm.setHeaderText("Delete " + selected.size() + " image(s)?");
-        confirm.setContentText("This will permanently delete the selected files from disk and remove them from the index. This cannot be undone.");
+        BatchSource source = askDeleteConfirm(selected.size(), totalResults);
+        if (source == null) return;
 
-        confirm.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.OK) {
-                List<String> paths = selected.stream()
-                        .map(ImageMetadata::getFilePath)
-                        .collect(Collectors.toList());
+        if (source == BatchSource.SELECTED) {
+            performDelete(selected);
+        } else {
+            fetchCurrentResults("Delete", this::performDelete);
+        }
+    }
 
-                FileOperationsService.BatchOperationResult result =
-                        fileOperationsService.deleteImages(paths, true);
+    /**
+     * Combined source-picker + typed-DELETE confirmation dialog. Returns the
+     * chosen source, or null if cancelled. The OK button stays disabled
+     * until a source is selected AND the text field contains "DELETE".
+     */
+    private BatchSource askDeleteConfirm(int selectedCount, long resultsCount) {
+        Dialog<BatchSource> dialog = new Dialog<>();
+        dialog.setTitle("Confirm Delete");
+        dialog.setHeaderText("Permanently delete images");
+        if (getScene() != null && getScene().getWindow() != null) {
+            dialog.initOwner(getScene().getWindow());
+        }
 
-                // Remove from index
-                int indexRemoved = 0;
-                for (ImageMetadata metadata : selected) {
-                    try {
-                        if (openSearchService.deleteDocument(metadata.getFilePath())) {
-                            indexRemoved++;
-                        }
-                    } catch (Exception e) {
-                        logger.error("ResultsPanel", "Failed to remove from index: " + metadata.getFilePath(), e);
-                    }
-                }
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        Button okBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.setText("Delete");
+        okBtn.getStyleClass().add("delete-button");
+        okBtn.setDisable(true);
 
-                String summary = result.getSummary() + "\nRemoved " + indexRemoved + " from index.";
-                showAlert(Alert.AlertType.INFORMATION, "Delete Complete", summary);
+        ToggleGroup group = new ToggleGroup();
+        RadioButton selectedRadio = new RadioButton("Selected (" + selectedCount + ")");
+        RadioButton resultsRadio = new RadioButton("Current results (" + resultsCount + ")");
+        selectedRadio.setToggleGroup(group);
+        resultsRadio.setToggleGroup(group);
+        selectedRadio.setDisable(selectedCount == 0);
+        resultsRadio.setDisable(resultsCount == 0);
+        if (selectedCount > 0) {
+            selectedRadio.setSelected(true);
+        } else {
+            resultsRadio.setSelected(true);
+        }
 
-                if (result.hasErrors()) {
-                    logger.warn("ResultsPanel", "Delete errors: " + String.join(", ", result.errors));
-                }
+        HBox sourceBox = new HBox(15, new Label("Source:"), selectedRadio, resultsRadio);
 
-                // Refresh results
-                if (result.successCount > 0) {
-                    refresh();
-                }
+        Label countLabel = new Label();
+        countLabel.setStyle("-fx-font-weight: bold;");
+
+        Label warning = new Label(
+                "This will permanently delete the files from disk and remove them from the index. "
+                + "This cannot be undone.");
+        warning.setWrapText(true);
+        warning.setMaxWidth(420);
+
+        Label confirmPrompt = new Label("Type DELETE to confirm:");
+        TextField confirmField = new TextField();
+        confirmField.setPromptText("DELETE");
+
+        Runnable updateState = () -> {
+            long count = selectedRadio.isSelected() ? selectedCount : resultsCount;
+            countLabel.setText("Will delete " + count + " image(s).");
+            boolean confirmed = "DELETE".equals(confirmField.getText());
+            boolean hasSource = group.getSelectedToggle() != null;
+            okBtn.setDisable(!(confirmed && hasSource));
+        };
+        updateState.run();
+        selectedRadio.selectedProperty().addListener((o, a, b) -> updateState.run());
+        resultsRadio.selectedProperty().addListener((o, a, b) -> updateState.run());
+        confirmField.textProperty().addListener((o, a, b) -> updateState.run());
+
+        VBox content = new VBox(10, sourceBox, countLabel, warning, confirmPrompt, confirmField);
+        content.setPadding(new Insets(10));
+        content.setPrefWidth(450);
+        dialog.getDialogPane().setContent(content);
+
+        dialog.setResultConverter(bt -> {
+            if (bt == ButtonType.OK) {
+                return selectedRadio.isSelected() ? BatchSource.SELECTED : BatchSource.RESULTS;
             }
+            return null;
         });
+
+        return dialog.showAndWait().orElse(null);
+    }
+
+    private void performDelete(List<ImageMetadata> targets) {
+        if (targets.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Images", "There are no images to delete.");
+            return;
+        }
+
+        List<String> paths = targets.stream()
+                .map(ImageMetadata::getFilePath)
+                .collect(Collectors.toList());
+
+        FileOperationsService.BatchOperationResult result =
+                fileOperationsService.deleteImages(paths, true);
+
+        int indexRemoved = 0;
+        for (ImageMetadata metadata : targets) {
+            try {
+                if (openSearchService.deleteDocument(metadata.getFilePath())) {
+                    indexRemoved++;
+                }
+            } catch (Exception e) {
+                logger.error("ResultsPanel", "Failed to remove from index: " + metadata.getFilePath(), e);
+            }
+        }
+
+        String summary = result.getSummary() + "\nRemoved " + indexRemoved + " from index.";
+        showAlert(Alert.AlertType.INFORMATION, "Delete Complete", summary);
+
+        if (result.hasErrors()) {
+            logger.warn("ResultsPanel", "Delete errors: " + String.join(", ", result.errors));
+        }
+
+        if (result.successCount > 0) {
+            refresh();
+        }
     }
 
     /**
