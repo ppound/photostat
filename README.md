@@ -50,6 +50,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Quality Rating** - AI-generated ratings based on composition
 - **Batch Processing** - Analyze via GUI or command-line
 - **Cost Tracking** - Monitor token usage and estimated costs
+- **No-install Docker option** - Run Moondream as a container instead of a local Python setup (see [docker/README.md](docker/README.md))
 
 > See [docs/AI_ANALYSIS.md](docs/AI_ANALYSIS.md) for API key setup, CLI usage, cost tracking, and provider configuration.
 
@@ -68,6 +69,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Cluster Merging** - Merge clusters that belong to the same person
 - **Incremental Scanning** - Only new images are processed on re-runs; safe to interrupt and resume
 - **GPU Acceleration** - Automatically uses CUDA GPU when available for faster detection
+- **No-install Docker option** - Run InsightFace as a container instead of a local Python setup (see [docker/README.md](docker/README.md))
 - **CLI Support** - Batch face detection with parallel workers via `--detect-faces`
 
 > See [docs/FACE_RECOGNITION.md](docs/FACE_RECOGNITION.md) for full setup instructions, Windows GPU configuration, and workflow details.
@@ -209,6 +211,7 @@ java -jar photostat-java-2.3.0-executable.jar
 | [AI Analysis](docs/AI_ANALYSIS.md) | AI setup, CLI mode, and cost tracking |
 | [Face Recognition](docs/FACE_RECOGNITION.md) | Python setup, GPU acceleration, and face detection workflow |
 | [Configuration](docs/CONFIGURATION.md) | All settings and options explained |
+| [Docker Backends](docker/README.md) | Run faces/analysis as containers (CPU or GPU) instead of local Python |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 | [Development](docs/DEVELOPMENT.md) | Building from source and project structure |
 

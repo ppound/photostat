@@ -158,6 +158,27 @@ Both mean CUDA 12.x is not installed or its `bin` directory is not in PATH. CUDA
 
 > **Note:** The **Faces tab** in the GUI shows "Available (GPU)" based on whether `onnxruntime` can *see* the CUDA driver — not whether GPU inference will actually succeed. The verification command above is the reliable test.
 
+### Running via Docker (no local Python)
+
+Instead of installing Python, InsightFace, and onnxruntime yourself, you can run
+face detection as a container and have PhotoStat talk to it over HTTP — the
+easiest path to a clean, optionally GPU-accelerated setup.
+
+1. Start the faces service (see [`docker/README.md`](../docker/README.md)):
+   ```bash
+   cd docker
+   docker compose up -d faces               # CPU
+   # or, with an NVIDIA GPU + Container Toolkit:
+   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d faces
+   ```
+2. In **Settings → Face Recognition**, set **Backend** to **Docker (HTTP)** and
+   point **Docker Endpoint** at the service (default `http://localhost:8001`).
+3. Click **Check** — it should report the loaded providers (`CUDAExecutionProvider`
+   for GPU, otherwise CPU).
+
+Images are sent to the container as bytes, so it needs no access to your photo
+files. Scanning and clustering behave identically to local mode.
+
 ---
 
 ## Using Face Recognition (GUI)

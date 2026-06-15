@@ -85,6 +85,8 @@ public class SettingsDialog extends Dialog<Boolean> {
     private TextField moondreamPythonPathField;
     private ComboBox<String> moondreamModelCombo;
     private Label moondreamStatusLabel;
+    private ComboBox<String> moondreamModeCombo;
+    private TextField moondreamEndpointField;
 
     // Analysis prompt
     private TextArea analysisPromptArea;
@@ -95,6 +97,12 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Slider facesConfidenceSlider;
     private Slider facesClusterSlider;
     private Label facesPythonStatusLabel;
+    private ComboBox<String> facesModeCombo;
+    private TextField facesEndpointField;
+
+    // Backend mode combo labels (shared by faces + moondream).
+    private static final String MODE_LOCAL_LABEL = "Local (Python)";
+    private static final String MODE_DOCKER_LABEL = "Docker (HTTP)";
 
     // Luma AI image generation settings
     private PasswordField lumaApiKeyField;
@@ -659,36 +667,56 @@ public class SettingsDialog extends Dialog<Boolean> {
         moondreamGrid.setVgap(10);
         moondreamGrid.setPadding(new Insets(10));
 
-        moondreamGrid.add(new Label("Python Path:"), 0, 0);
+        // Backend: run the model locally (spawn Python) or via the Docker service.
+        moondreamGrid.add(new Label("Backend:"), 0, 0);
+        moondreamModeCombo = new ComboBox<>();
+        moondreamModeCombo.getItems().addAll(MODE_LOCAL_LABEL, MODE_DOCKER_LABEL);
+        moondreamModeCombo.setPrefWidth(250);
+        moondreamGrid.add(moondreamModeCombo, 1, 0);
+
+        moondreamGrid.add(new Label("Docker Endpoint:"), 0, 1);
+        moondreamEndpointField = new TextField();
+        moondreamEndpointField.setPromptText("http://localhost:8002");
+        moondreamEndpointField.setPrefWidth(250);
+        moondreamGrid.add(moondreamEndpointField, 1, 1);
+
+        moondreamGrid.add(new Label("Python Path:"), 0, 2);
         moondreamPythonPathField = new TextField();
         moondreamPythonPathField.setPromptText("python3");
         moondreamPythonPathField.setPrefWidth(250);
-        moondreamGrid.add(moondreamPythonPathField, 1, 0);
+        moondreamGrid.add(moondreamPythonPathField, 1, 2);
 
-        moondreamGrid.add(new Label("Model:"), 0, 1);
+        moondreamGrid.add(new Label("Model:"), 0, 3);
         moondreamModelCombo = new ComboBox<>();
         moondreamModelCombo.getItems().addAll(
             "vikhyatk/moondream2"
         );
         moondreamModelCombo.setEditable(true);
         moondreamModelCombo.setPrefWidth(250);
-        moondreamGrid.add(moondreamModelCombo, 1, 1);
+        moondreamGrid.add(moondreamModelCombo, 1, 3);
 
         Button testMoondreamButton = new Button("Test");
         moondreamStatusLabel = new Label("");
         testMoondreamButton.setOnAction(e -> testMoondreamSetup());
         HBox moondreamTestBox = new HBox(10, testMoondreamButton, moondreamStatusLabel);
-        moondreamGrid.add(moondreamTestBox, 1, 2);
+        moondreamGrid.add(moondreamTestBox, 1, 4);
+
+        // Enable only the fields relevant to the selected backend.
+        moondreamModeCombo.valueProperty().addListener((obs, o, mode) -> {
+            boolean docker = MODE_DOCKER_LABEL.equals(mode);
+            moondreamEndpointField.setDisable(!docker);
+            moondreamPythonPathField.setDisable(docker);
+        });
 
         Label moondreamInfoLabel = new Label(
             "Free local AI analysis. No API key needed.\n" +
-            "Install: pip install \"transformers>=4.51,<5\" torch Pillow accelerate\n" +
-            "First run downloads the model (~1.5 GB).\n" +
-            "Slower than cloud APIs (~5-15s per image on CPU)."
+            "Local: pip install \"transformers>=4.51,<5\" torch Pillow accelerate (first run downloads ~1.5 GB).\n" +
+            "Docker: run the analysis container (see docker/README.md) and point the endpoint at it.\n" +
+            "Slower than cloud APIs on CPU; a GPU (Docker) is much faster."
         );
         moondreamInfoLabel.setWrapText(true);
         moondreamInfoLabel.getStyleClass().add("info-label-small");
-        moondreamGrid.add(moondreamInfoLabel, 1, 3);
+        moondreamGrid.add(moondreamInfoLabel, 1, 5);
 
         moondreamSection.setContent(moondreamGrid);
 
@@ -923,6 +951,20 @@ public class SettingsDialog extends Dialog<Boolean> {
         facesEnabledCheckbox = new CheckBox("Enable face detection and recognition");
         grid.add(facesEnabledCheckbox, 1, row++, 2, 1);
 
+        // Backend: local Python or the Docker service.
+        grid.add(new Label("Backend:"), 0, row);
+        facesModeCombo = new ComboBox<>();
+        facesModeCombo.getItems().addAll(MODE_LOCAL_LABEL, MODE_DOCKER_LABEL);
+        facesModeCombo.setPrefWidth(200);
+        grid.add(facesModeCombo, 1, row++, 2, 1);
+
+        // Docker endpoint
+        grid.add(new Label("Docker Endpoint:"), 0, row);
+        facesEndpointField = new TextField();
+        facesEndpointField.setPromptText("http://localhost:8001");
+        facesEndpointField.setPrefWidth(200);
+        grid.add(facesEndpointField, 1, row++, 2, 1);
+
         // Python path
         grid.add(new Label("Python Path:"), 0, row);
         facesPythonPathField = new TextField();
@@ -930,15 +972,22 @@ public class SettingsDialog extends Dialog<Boolean> {
         facesPythonPathField.setPrefWidth(200);
         grid.add(facesPythonPathField, 1, row);
 
-        Button checkPythonButton = new Button("Check Python");
+        Button checkPythonButton = new Button("Check");
         grid.add(checkPythonButton, 2, row++);
 
-        // Python status
+        // Status
         grid.add(new Label("Status:"), 0, row);
         facesPythonStatusLabel = new Label("");
         grid.add(facesPythonStatusLabel, 1, row++, 2, 1);
 
         checkPythonButton.setOnAction(e -> checkFacesPython());
+
+        // Enable only the fields relevant to the selected backend.
+        facesModeCombo.valueProperty().addListener((obs, o, mode) -> {
+            boolean docker = MODE_DOCKER_LABEL.equals(mode);
+            facesEndpointField.setDisable(!docker);
+            facesPythonPathField.setDisable(docker);
+        });
 
         // Detection confidence threshold
         grid.add(new Label("Detection Confidence:"), 0, row);
@@ -1168,31 +1217,39 @@ public class SettingsDialog extends Dialog<Boolean> {
         facesPythonStatusLabel.setText("Checking...");
         setStatusStyle(facesPythonStatusLabel, "text-muted");
 
-        // Temporarily update config to use the current field value
+        // Temporarily apply the in-dialog values so the check reflects unsaved edits.
+        final boolean docker = MODE_DOCKER_LABEL.equals(facesModeCombo.getValue());
         String pythonPath = facesPythonPathField.getText().trim();
         if (pythonPath.isEmpty()) pythonPath = "python3";
+        String endpoint = facesEndpointField.getText().trim();
+        if (endpoint.isEmpty()) endpoint = "http://localhost:8001";
 
         final String finalPythonPath = pythonPath;
+        final String finalEndpoint = endpoint;
 
         new Thread(() -> {
+            // Save current, set temp, check, restore
+            String origMode = configService.getFacesMode();
+            String origPython = configService.getFacesPythonPath();
+            String origEndpoint = configService.getFacesEndpoint();
             try {
-                // Save current, set temp, check, restore
-                String original = configService.getFacesPythonPath();
+                configService.setFacesMode(docker ? "docker" : "local");
                 configService.setFacesPythonPath(finalPythonPath);
+                configService.setFacesEndpoint(finalEndpoint);
 
                 com.photostat.services.FaceRecognitionService faceService =
                         com.photostat.services.FaceRecognitionService.getInstance();
                 boolean available = faceService.isPythonAvailable();
                 String versionInfo = faceService.getPythonVersionInfo();
 
-                configService.setFacesPythonPath(original);
-
                 Platform.runLater(() -> {
                     if (available) {
                         facesPythonStatusLabel.setText("Available - " + versionInfo);
                         setStatusStyle(facesPythonStatusLabel, "text-success");
                     } else {
-                        facesPythonStatusLabel.setText("Not found or missing dependencies");
+                        facesPythonStatusLabel.setText(docker
+                                ? "Service not reachable at " + finalEndpoint
+                                : "Not found or missing dependencies");
                         setStatusStyle(facesPythonStatusLabel, "text-error");
                     }
                 });
@@ -1201,6 +1258,10 @@ public class SettingsDialog extends Dialog<Boolean> {
                     facesPythonStatusLabel.setText("Error: " + e.getMessage());
                     setStatusStyle(facesPythonStatusLabel, "text-error");
                 });
+            } finally {
+                configService.setFacesMode(origMode);
+                configService.setFacesPythonPath(origPython);
+                configService.setFacesEndpoint(origEndpoint);
             }
         }).start();
     }
@@ -1209,29 +1270,37 @@ public class SettingsDialog extends Dialog<Boolean> {
         moondreamStatusLabel.setText("Checking...");
         setStatusStyle(moondreamStatusLabel, "text-muted");
 
+        final boolean docker = MODE_DOCKER_LABEL.equals(moondreamModeCombo.getValue());
         String pythonPath = moondreamPythonPathField.getText().trim();
         if (pythonPath.isEmpty()) pythonPath = "python3";
+        String endpoint = moondreamEndpointField.getText().trim();
+        if (endpoint.isEmpty()) endpoint = "http://localhost:8002";
 
         final String finalPythonPath = pythonPath;
+        final String finalEndpoint = endpoint;
 
         new Thread(() -> {
+            // Temporarily apply the in-dialog values for the check, then restore.
+            String origMode = configService.getMoondreamMode();
+            String origPython = configService.getMoondreamPythonPath();
+            String origEndpoint = configService.getMoondreamEndpoint();
             try {
-                // Temporarily set python path for the check
-                String original = configService.getMoondreamPythonPath();
+                configService.setMoondreamMode(docker ? "docker" : "local");
                 configService.setMoondreamPythonPath(finalPythonPath);
+                configService.setMoondreamEndpoint(finalEndpoint);
 
                 ImageAnalysisService analysisService = ImageAnalysisService.getInstance();
                 boolean available = analysisService.isMoondreamAvailable();
                 String versionInfo = analysisService.getMoondreamVersionInfo();
-
-                configService.setMoondreamPythonPath(original);
 
                 Platform.runLater(() -> {
                     if (available) {
                         moondreamStatusLabel.setText("Available - " + versionInfo);
                         setStatusStyle(moondreamStatusLabel, "text-success");
                     } else {
-                        moondreamStatusLabel.setText("Not found. Install: pip install \"transformers>=4.51,<5\" torch Pillow accelerate");
+                        moondreamStatusLabel.setText(docker
+                                ? "Service not reachable at " + finalEndpoint
+                                : "Not found. Install: pip install \"transformers>=4.51,<5\" torch Pillow accelerate");
                         setStatusStyle(moondreamStatusLabel, "text-error");
                     }
                 });
@@ -1240,6 +1309,10 @@ public class SettingsDialog extends Dialog<Boolean> {
                     moondreamStatusLabel.setText("Error: " + e.getMessage());
                     setStatusStyle(moondreamStatusLabel, "text-error");
                 });
+            } finally {
+                configService.setMoondreamMode(origMode);
+                configService.setMoondreamPythonPath(origPython);
+                configService.setMoondreamEndpoint(origEndpoint);
             }
         }).start();
     }
@@ -1479,6 +1552,9 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Moondream settings
         moondreamPythonPathField.setText(configService.getMoondreamPythonPath());
         moondreamModelCombo.setValue(configService.getMoondreamModel());
+        moondreamModeCombo.setValue("docker".equalsIgnoreCase(configService.getMoondreamMode())
+                ? MODE_DOCKER_LABEL : MODE_LOCAL_LABEL);
+        moondreamEndpointField.setText(configService.getMoondreamEndpoint());
 
         // Luma AI settings
         lumaApiKeyField.setText(configService.getLumaApiKey());
@@ -1496,6 +1572,9 @@ public class SettingsDialog extends Dialog<Boolean> {
         // Face recognition settings
         facesEnabledCheckbox.setSelected(configService.isFacesEnabled());
         facesPythonPathField.setText(configService.getFacesPythonPath());
+        facesModeCombo.setValue("docker".equalsIgnoreCase(configService.getFacesMode())
+                ? MODE_DOCKER_LABEL : MODE_LOCAL_LABEL);
+        facesEndpointField.setText(configService.getFacesEndpoint());
         facesConfidenceSlider.setValue(configService.getFacesConfidenceThreshold());
         facesClusterSlider.setValue(configService.getFacesClusterThreshold());
 
@@ -1601,6 +1680,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         if (moondreamModelCombo.getValue() != null && !moondreamModelCombo.getValue().trim().isEmpty()) {
             configService.setMoondreamModel(moondreamModelCombo.getValue().trim());
         }
+        configService.setMoondreamMode(
+                MODE_DOCKER_LABEL.equals(moondreamModeCombo.getValue()) ? "docker" : "local");
+        String moondreamEndpoint = moondreamEndpointField.getText().trim();
+        if (!moondreamEndpoint.isEmpty()) {
+            configService.setMoondreamEndpoint(moondreamEndpoint);
+        }
 
         // Analysis prompt
         configService.setClaudeAnalysisPrompt(analysisPromptArea.getText());
@@ -1637,6 +1722,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         String pythonPath = facesPythonPathField.getText().trim();
         if (!pythonPath.isEmpty()) {
             configService.setFacesPythonPath(pythonPath);
+        }
+        configService.setFacesMode(
+                MODE_DOCKER_LABEL.equals(facesModeCombo.getValue()) ? "docker" : "local");
+        String facesEndpoint = facesEndpointField.getText().trim();
+        if (!facesEndpoint.isEmpty()) {
+            configService.setFacesEndpoint(facesEndpoint);
         }
         configService.setFacesConfidenceThreshold(facesConfidenceSlider.getValue());
         configService.setFacesClusterThreshold(facesClusterSlider.getValue());

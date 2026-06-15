@@ -58,11 +58,15 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "python_path": "python3",
     "enabled": true,
     "confidence_threshold": 0.6,
-    "cluster_threshold": 0.6
+    "cluster_threshold": 0.6,
+    "mode": "local",
+    "endpoint": "http://localhost:8001"
   },
   "moondream": {
     "python_path": "python3",
-    "model": "vikhyatk/moondream2"
+    "model": "vikhyatk/moondream2",
+    "mode": "local",
+    "endpoint": "http://localhost:8002"
   },
   "ai": {
     "provider": "claude"
@@ -201,6 +205,8 @@ These settings can be configured via **Settings > Indexing > Sidecar Format** in
 |---------|------|---------|-------------|
 | `moondream.python_path` | string | `python3` | Path to Python executable with moondream package |
 | `moondream.model` | string | `vikhyatk/moondream2` | Moondream model identifier |
+| `moondream.mode` | string | `local` | Backend: `local` (spawn Python) or `docker` (HTTP service) |
+| `moondream.endpoint` | string | `http://localhost:8002` | Analysis service URL when `mode` is `docker` |
 
 **Prerequisites:** `pip install "transformers>=4.51,<5" torch Pillow accelerate`
 
@@ -214,6 +220,8 @@ These settings can be configured via **Settings > Indexing > Sidecar Format** in
 | `faces.enabled` | boolean | `true` | Enable face recognition feature |
 | `faces.confidence_threshold` | double | `0.6` | Minimum confidence for face detection (0.3-0.9) |
 | `faces.cluster_threshold` | double | `0.6` | Similarity threshold for face clustering (0.3-0.9) |
+| `faces.mode` | string | `local` | Backend: `local` (spawn Python) or `docker` (HTTP service) |
+| `faces.endpoint` | string | `http://localhost:8001` | Faces service URL when `mode` is `docker` |
 
 **Prerequisites:** `pip install insightface onnxruntime` (or `onnxruntime-gpu` for CUDA). Optionally `pip install scikit-learn` for DBSCAN clustering.
 

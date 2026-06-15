@@ -268,6 +268,26 @@ To verify GPU is detected, click **Test** in the Moondream settings — it shoul
 - First run downloads the model (~1.5 GB)
 - GPU (CUDA) strongly recommended for usable performance
 
+#### Running Moondream via Docker (no local Python)
+
+Instead of installing Python, PyTorch, and the model dependencies yourself, you
+can run Moondream as a container and have PhotoStat talk to it over HTTP. This is
+the easiest way to get a clean (optionally GPU-accelerated) setup.
+
+1. Start the analysis service (see [`docker/README.md`](../docker/README.md)):
+   ```bash
+   cd docker
+   docker compose up -d analysis            # CPU
+   # or, with an NVIDIA GPU + Container Toolkit:
+   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d analysis
+   ```
+2. In **File > Settings → AI Analysis**, set **Backend** to **Docker (HTTP)** and
+   point **Docker Endpoint** at the service (default `http://localhost:8002`).
+3. Click **Test** — it should report `"device": "cuda"` (GPU) or `"cpu"`.
+
+The image is sent to the container as bytes, so it needs no access to your photo
+files. Everything else (provider selection, prompts, caching) works the same.
+
 ### API Costs
 
 | Provider | Cost Level | Best For |
