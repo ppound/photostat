@@ -1019,10 +1019,17 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         // Info label
         Label infoLabel = new Label(
-                "Face recognition requires Python 3 with InsightFace and ONNX Runtime.\n" +
-                "Install with: pip install insightface onnxruntime\n" +
-                "The InsightFace buffalo_l model (~350MB) auto-downloads on first scan.\n" +
-                "For GPU acceleration: pip install onnxruntime-gpu"
+                "Face recognition runs InsightFace either locally (Python) or in a Docker container.\n" +
+                "\n" +
+                "Local (Python): requires Python 3 with InsightFace and ONNX Runtime.\n" +
+                "  Install with: pip install insightface onnxruntime  (GPU: onnxruntime-gpu instead).\n" +
+                "  Set the Python Path above, then click Check.\n" +
+                "\n" +
+                "Docker (HTTP): no local Python needed — run the faces container and set the\n" +
+                "  Docker Endpoint above (default http://localhost:8001). CPU or NVIDIA GPU.\n" +
+                "  Start it with: docker compose up -d faces  (see docker/README.md). Click Check.\n" +
+                "\n" +
+                "Either way, the InsightFace buffalo_l model (~350MB) auto-downloads on first scan."
         );
         infoLabel.setWrapText(true);
         infoLabel.getStyleClass().add("info-label");
