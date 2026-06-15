@@ -533,7 +533,8 @@ public class DetailPanel extends VBox {
         int row = 0;
 
         addInfoRow(basicInfoGrid, row++, "File:", metadata.getFileName());
-        addInfoRow(basicInfoGrid, row++, "Path:", truncatePath(metadata.getFilePath()));
+        addInfoRow(basicInfoGrid, row++, "Path:", truncatePath(metadata.getFilePath()),
+                metadata.getFilePath());
         addInfoRow(basicInfoGrid, row++, "Size:", metadata.getFileSizeString());
         addInfoRow(basicInfoGrid, row++, "Type:", metadata.getFileType() != null ?
                 metadata.getFileType().toUpperCase() : "");
@@ -636,11 +637,22 @@ public class DetailPanel extends VBox {
     }
 
     private void addInfoRow(GridPane grid, int row, String label, String value) {
+        addInfoRow(grid, row, label, value, null);
+    }
+
+    private void addInfoRow(GridPane grid, int row, String label, String value, String tooltipText) {
         Label labelNode = new Label(label);
         labelNode.setStyle("-fx-font-weight: bold;");
 
         Label valueNode = new Label(value != null ? value : "");
         valueNode.setWrapText(true);
+        if (tooltipText != null && !tooltipText.isEmpty()) {
+            Tooltip tip = new Tooltip(tooltipText);
+            tip.setWrapText(true);
+            tip.setMaxWidth(600);
+            tip.setShowDelay(javafx.util.Duration.millis(300));
+            Tooltip.install(valueNode, tip);
+        }
 
         grid.add(labelNode, 0, row);
         grid.add(valueNode, 1, row);
