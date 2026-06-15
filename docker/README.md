@@ -58,10 +58,12 @@ curl localhost:8001/health   # expect "CUDAExecutionProvider" in providers
 curl localhost:8002/health   # expect "device": "cuda"
 ```
 
-> The GPU image pins (CUDA 12.6/12.4, onnxruntime-gpu 1.19, torch 2.4 cu124)
-> are known-good combinations but have not been verified on every driver.
-> Verify on your GPU machine; adjust the `requirements-gpu.txt` / base image
-> tags if your driver needs a different CUDA version.
+> The GPU image pins (CUDA 12.6/12.4, onnxruntime-gpu 1.19.2, torch 2.5.1 cu124)
+> are verified working on an NVIDIA RTX 4060 (driver 576.02, CUDA 12.9) under
+> Docker Desktop on WSL2. Other drivers may need a different CUDA base image or
+> `requirements-gpu.txt` pin — adjust the tags if your driver reports a CUDA
+> initialization error (e.g. `CUDA failure 500: named symbol not found`, which
+> usually means the host driver/runtime predates the image's CUDA version).
 
 ## Connecting PhotoStat
 

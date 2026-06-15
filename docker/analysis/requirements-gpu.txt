@@ -1,6 +1,7 @@
 # GPU build for the PhotoStat analysis service.
 # CUDA 12.4 torch wheels (matches the cuda:12.4-cudnn base in Dockerfile.gpu).
-# Verify on your GPU machine before relying on it.
+# Verified on an RTX 4060 (WSL2, Docker Desktop): /health reports device "cuda"
+# and a real /analyze query runs on GPU.
 --extra-index-url https://download.pytorch.org/whl/cu124
 # moondream2's current remote code uses scaled_dot_product_attention(enable_gqa=...),
 # which requires torch >= 2.5.
