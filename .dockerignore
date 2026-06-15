@@ -1,0 +1,13 @@
+# Keep the Docker build context (repo root) small. The analysis/faces images
+# only need src/main/resources/*.py and the docker/ folder.
+.git
+target
+*.jar
+.idea
+.vscode
+docs
+*.md
+RELEASE_NOTES_*.md
+.mvn
+mvnw
+mvnw.cmd

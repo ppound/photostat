@@ -1,0 +1,8 @@
+# CPU build for the PhotoStat faces service (InsightFace via onnxruntime).
+insightface==0.7.3
+onnxruntime==1.19.2
+opencv-python-headless==4.10.0.84
+scikit-learn==1.5.2
+numpy<2
+fastapi==0.115.0
+uvicorn[standard]==0.30.6

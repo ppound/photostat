@@ -118,11 +118,20 @@ def check():
 
 
 def get_face_app():
-    """Initialize InsightFace app with buffalo_l model."""
+    """Initialize InsightFace app with buffalo_l model.
+
+    The model root can be overridden with the PHOTOSTAT_FACES_MODEL_ROOT env var
+    (used by the Docker image to cache models in a mounted volume); it defaults to
+    the local ~/.photostat path so non-Docker usage is unchanged.
+    """
     import insightface
+    model_root = os.environ.get(
+        "PHOTOSTAT_FACES_MODEL_ROOT",
+        os.path.expanduser("~/.photostat/faces/models"),
+    )
     app = insightface.app.FaceAnalysis(
         name="buffalo_l",
-        root=os.path.expanduser("~/.photostat/faces/models"),
+        root=model_root,
         providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
     )
     app.prepare(ctx_id=0, det_size=(640, 640))
@@ -130,10 +139,20 @@ def get_face_app():
 
 
 def detect_faces_in_image(app, image_path, threshold=0.6):
-    """Detect faces in a single image using a pre-initialized app."""
+    """Detect faces in a single image file using a pre-initialized app."""
     import cv2
 
     img = cv2.imread(image_path)
+    return detect_faces_in_array(app, img, image_path, threshold)
+
+
+def detect_faces_in_array(app, img, image_path, threshold=0.6):
+    """Detect faces in an already-decoded BGR image array (as from cv2).
+
+    image_path is used only as a label for face_id hashing and the returned
+    record, so callers working with in-memory image bytes (e.g. the HTTP server)
+    can pass a logical path/id while supplying the decoded pixels in img.
+    """
     if img is None:
         return []
 
@@ -379,27 +398,18 @@ def cluster_fallback(embeddings_norm, threshold):
     return labels
 
 
-def cmd_cluster(args):
-    """Handle 'cluster' command — uses DBSCAN if sklearn available, else centroid-based fallback."""
-    if len(args) < 2:
-        print("Usage: cluster <face_data_json> <output_json> [threshold]", file=sys.stderr)
-        sys.exit(1)
+def cluster_faces(faces, threshold=0.6):
+    """Cluster a list of face dicts into person clusters.
 
-    face_data_path = args[0]
-    output_path = args[1]
-    threshold = float(args[2]) if len(args) > 2 else 0.6
-
-    with open(face_data_path, "r") as f:
-        faces = json.load(f)
-
+    Each face dict needs "face_id", "confidence" and "embedding" keys.
+    Returns (clusters, method) where method is one of "dbscan", "fallback", "none".
+    Pure (no file I/O) so it can be reused by both the CLI and the HTTP server.
+    """
     # Filter faces that have embeddings
     faces_with_emb = [f for f in faces if f.get("embedding") and len(f["embedding"]) > 0]
 
     if not faces_with_emb:
-        with open(output_path, "w") as f:
-            json.dump([], f)
-        print(json.dumps({"status": "ok", "clusters": 0, "method": "none"}))
-        return
+        return [], "none"
 
     n = len(faces_with_emb)
     print(f"Clustering {n} faces with threshold {threshold}...", file=sys.stderr, flush=True)
@@ -444,10 +454,32 @@ def cmd_cluster(args):
             "representative_face_id": faces_with_emb[best_idx]["face_id"]
         })
 
+    return clusters, method
+
+
+def cmd_cluster(args):
+    """Handle 'cluster' command — uses DBSCAN if sklearn available, else centroid-based fallback."""
+    if len(args) < 2:
+        print("Usage: cluster <face_data_json> <output_json> [threshold]", file=sys.stderr)
+        sys.exit(1)
+
+    face_data_path = args[0]
+    output_path = args[1]
+    threshold = float(args[2]) if len(args) > 2 else 0.6
+
+    with open(face_data_path, "r") as f:
+        faces = json.load(f)
+
+    clusters, method = cluster_faces(faces, threshold)
+
     with open(output_path, "w") as f:
         json.dump(clusters, f, indent=2)
 
-    print(json.dumps({"status": "ok", "clusters": len(clusters), "faces": n, "method": method}))
+    if method == "none":
+        print(json.dumps({"status": "ok", "clusters": 0, "method": "none"}))
+    else:
+        n = sum(1 for f in faces if f.get("embedding") and len(f["embedding"]) > 0)
+        print(json.dumps({"status": "ok", "clusters": len(clusters), "faces": n, "method": method}))
 
 
 def main():

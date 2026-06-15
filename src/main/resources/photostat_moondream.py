@@ -67,15 +67,7 @@ def check():
         sys.exit(1)
 
     # Check for GPU availability
-    device = "cpu"
-    try:
-        import torch
-        if torch.cuda.is_available():
-            device = "cuda"
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            device = "mps"
-    except Exception:
-        pass
+    device = detect_device()
 
     print(json.dumps({
         "status": "ok",
@@ -85,26 +77,32 @@ def check():
     sys.exit(0)
 
 
-def worker():
-    """Persistent worker mode: load model once, process commands from stdin."""
-    import torch
-    from transformers import AutoModelForCausalLM
-    from PIL import Image
-
-    # Detect device
+def detect_device():
+    """Return the best available torch device: 'cuda', 'mps', or 'cpu'."""
     device = "cpu"
     try:
+        import torch
         if torch.cuda.is_available():
             device = "cuda"
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = "mps"
     except Exception:
         pass
+    return device
+
+
+def load_model(device):
+    """Load the Moondream model for the given device, with CPU fallback.
+
+    Returns the loaded model. Raises RuntimeError if every load attempt fails.
+    Shared by the stdin worker and the HTTP server.
+    """
+    import torch
+    from transformers import AutoModelForCausalLM
 
     # Load model (this takes 10-30+ seconds)
     print(f"Loading Moondream model on {device}...", file=sys.stderr, flush=True)
 
-    model = None
     # Try GPU-optimized loading first, fall back to CPU.
     # Note: moondream2 uses trust_remote_code with custom __init__ that doesn't support
     # device_map for MPS/CPU — load without device_map then move with .to() instead.
@@ -129,18 +127,25 @@ def worker():
             if move_to:
                 model = model.to(move_to)
             print(f"Model loaded successfully ({desc})", file=sys.stderr, flush=True)
-            break
+            return model
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
             print(f"Failed with {desc}: {tb}", file=sys.stderr, flush=True)
             failures.append(f"{desc}: {type(e).__name__}: {e}")
-            model = None
 
-    if model is None:
-        detail = " | ".join(failures)
-        print(json.dumps({"status": "error", "message": f"Failed to load model. Attempts: {detail}"}),
-              flush=True)
+    raise RuntimeError("Failed to load model. Attempts: " + " | ".join(failures))
+
+
+def worker():
+    """Persistent worker mode: load model once, process commands from stdin."""
+    from PIL import Image
+
+    device = detect_device()
+    try:
+        model = load_model(device)
+    except RuntimeError as e:
+        print(json.dumps({"status": "error", "message": str(e)}), flush=True)
         sys.exit(1)
 
     # Signal ready on stdout

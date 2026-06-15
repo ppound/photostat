@@ -1,0 +1,55 @@
+# PhotoStat backend services: OpenSearch + face recognition + local analysis.
+#
+# CPU (default):
+#   docker compose up -d
+#
+# GPU (NVIDIA, optional):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Build context is the parent directory (repo root) so the images can copy the
+# shared Python sources from src/main/resources.
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # PhotoStat defaults to host=localhost port=9200 ssl=false with no auth,
+      # so run the dev-friendly insecure single-node configuration.
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+  faces:
+    build:
+      context: ..
+      dockerfile: docker/faces/Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - faces-models:/models
+
+  analysis:
+    build:
+      context: ..
+      dockerfile: docker/analysis/Dockerfile
+    ports:
+      - "8002:8002"
+    volumes:
+      - hf-cache:/models
+
+volumes:
+  opensearch-data:
+  faces-models:
+  hf-cache:

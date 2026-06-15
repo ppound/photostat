@@ -1,0 +1,10 @@
+# GPU build for the PhotoStat faces service.
+# onnxruntime-gpu 1.19.x targets CUDA 12.x + cuDNN 9 (matches the cuda:12.6-cudnn
+# base image in Dockerfile.gpu). Verify on your GPU machine before relying on it.
+insightface==0.7.3
+onnxruntime-gpu==1.19.2
+opencv-python-headless==4.10.0.84
+scikit-learn==1.5.2
+numpy<2
+fastapi==0.115.0
+uvicorn[standard]==0.30.6

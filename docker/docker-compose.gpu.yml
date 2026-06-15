@@ -1,0 +1,30 @@
+# GPU override for the PhotoStat backend services.
+# Use together with docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Requires an NVIDIA GPU, recent drivers, and the NVIDIA Container Toolkit
+# (on Windows this works through WSL2). GPU is opt-in per service, so you can
+# run, e.g., faces on GPU and analysis on CPU by overriding only one service.
+
+services:
+  faces:
+    build:
+      dockerfile: docker/faces/Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  analysis:
+    build:
+      dockerfile: docker/analysis/Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
