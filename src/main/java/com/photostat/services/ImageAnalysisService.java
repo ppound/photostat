@@ -55,6 +55,13 @@ public class ImageAnalysisService {
     private MoondreamWorker moondreamWorker;
     private final Path moondreamScriptPath;
 
+    /**
+     * HTTP client for the Dockerized Moondream service (lazily created).
+     * Forced to HTTP/1.1: the uvicorn/h11 service doesn't support the HTTP/2
+     * (h2c) upgrade HttpClient attempts by default, which drops the request body.
+     */
+    private volatile HttpClient moondreamDockerClient;
+
     private ImageAnalysisService() {
         this.configService = ConfigService.getInstance();
         this.sidecarService = SidecarService.getInstance();
@@ -425,56 +432,45 @@ public class ImageAnalysisService {
                 return result;
             }
 
-            // Optimize image and write to temp file for Python to read
+            // Optimize image for the model.
             byte[] optimizedBytes = optimizeImageForApi(path.toFile());
             if (optimizedBytes == null) {
                 result.setError("Failed to process image");
                 return result;
             }
 
-            Path tempImage = Files.createTempFile("photostat_moondream_", ".jpg");
-            try {
-                Files.write(tempImage, optimizedBytes);
+            logger.info("ImageAnalysisService", "Sending image to Moondream ("
+                    + (isMoondreamDockerMode() ? "docker" : "local") + "): " + imagePath);
 
-                // Lazy-init worker (synchronized for thread safety)
-                MoondreamWorker worker = getMoondreamWorker();
-                String tempPath = tempImage.toString();
+            // Ask multiple simple questions in one call — encodes the image only once
+            List<String> prompts = List.of(
+                    "List descriptive tags for this photo separated by commas. Include the type of photography, main subjects, mood, and setting.",
+                    "Are there any people in this image? If yes, briefly describe each person. If no, say \"none\".",
+                    "What is the location or type of place shown in this image? Give a short answer.",
+                    "Rate the photographic quality of this image from 1 to 5 stars. Consider composition, sharpness, and artistic value. Reply with just the number of stars like: ***"
+            );
 
-                logger.info("ImageAnalysisService", "Sending image to Moondream (local): " + imagePath);
+            List<String> responses = runMoondreamMulti(optimizedBytes, prompts);
 
-                // Ask multiple simple questions in one call — encodes the image only once
-                List<String> prompts = List.of(
-                        "List descriptive tags for this photo separated by commas. Include the type of photography, main subjects, mood, and setting.",
-                        "Are there any people in this image? If yes, briefly describe each person. If no, say \"none\".",
-                        "What is the location or type of place shown in this image? Give a short answer.",
-                        "Rate the photographic quality of this image from 1 to 5 stars. Consider composition, sharpness, and artistic value. Reply with just the number of stars like: ***"
-                );
+            String tagsResponse = responses.size() > 0 ? responses.get(0) : "";
+            String personsResponse = responses.size() > 1 ? responses.get(1) : "";
+            String placeResponse = responses.size() > 2 ? responses.get(2) : "";
+            String ratingResponse = responses.size() > 3 ? responses.get(3) : "";
 
-                List<String> responses = worker.analyzeMulti(tempPath, prompts);
+            logger.debug("ImageAnalysisService", "Moondream tags: " + tagsResponse);
+            logger.debug("ImageAnalysisService", "Moondream persons: " + personsResponse);
+            logger.debug("ImageAnalysisService", "Moondream place: " + placeResponse);
+            logger.debug("ImageAnalysisService", "Moondream rating: " + ratingResponse);
 
-                String tagsResponse = responses.size() > 0 ? responses.get(0) : "";
-                String personsResponse = responses.size() > 1 ? responses.get(1) : "";
-                String placeResponse = responses.size() > 2 ? responses.get(2) : "";
-                String ratingResponse = responses.size() > 3 ? responses.get(3) : "";
+            parseMoondreamResults(result, tagsResponse, personsResponse, placeResponse, ratingResponse);
 
-                logger.debug("ImageAnalysisService", "Moondream tags: " + tagsResponse);
-                logger.debug("ImageAnalysisService", "Moondream persons: " + personsResponse);
-                logger.debug("ImageAnalysisService", "Moondream place: " + placeResponse);
-                logger.debug("ImageAnalysisService", "Moondream rating: " + ratingResponse);
-
-                parseMoondreamResults(result, tagsResponse, personsResponse, placeResponse, ratingResponse);
-
-                // Save analysis cache if successful
-                if (!result.hasError()) {
-                    saveAnalysisCache(imagePath);
-                }
-
-                logger.info("ImageAnalysisService", "Moondream analysis complete. Tags: " + result.getTags().size() +
-                        ", Persons: " + result.getPersons().size() + ", Rating: " + result.getRating());
-
-            } finally {
-                Files.deleteIfExists(tempImage);
+            // Save analysis cache if successful
+            if (!result.hasError()) {
+                saveAnalysisCache(imagePath);
             }
+
+            logger.info("ImageAnalysisService", "Moondream analysis complete. Tags: " + result.getTags().size() +
+                    ", Persons: " + result.getPersons().size() + ", Rating: " + result.getRating());
 
         } catch (Exception e) {
             logger.error("ImageAnalysisService", "Failed to analyze image with Moondream", e);
@@ -572,6 +568,96 @@ public class ImageAnalysisService {
         }
     }
 
+    /** True when Moondream should run against the Dockerized HTTP service. */
+    private boolean isMoondreamDockerMode() {
+        return "docker".equalsIgnoreCase(configService.getMoondreamMode());
+    }
+
+    private HttpClient getMoondreamDockerClient() {
+        if (moondreamDockerClient == null) {
+            synchronized (this) {
+                if (moondreamDockerClient == null) {
+                    moondreamDockerClient = HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)
+                            .connectTimeout(Duration.ofSeconds(10))
+                            .build();
+                }
+            }
+        }
+        return moondreamDockerClient;
+    }
+
+    /**
+     * Run a multi-prompt Moondream analysis against the configured backend
+     * (local Python worker or the Docker HTTP service), encoding the image once.
+     */
+    private List<String> runMoondreamMulti(byte[] optimizedBytes, List<String> prompts) throws IOException {
+        if (isMoondreamDockerMode()) {
+            return moondreamDockerAnalyze(optimizedBytes, prompts);
+        }
+        // Local: the worker reads the image from a temp file.
+        Path tempImage = Files.createTempFile("photostat_moondream_", ".jpg");
+        try {
+            Files.write(tempImage, optimizedBytes);
+            MoondreamWorker worker = getMoondreamWorker();
+            return worker.analyzeMulti(tempImage.toString(), prompts);
+        } finally {
+            Files.deleteIfExists(tempImage);
+        }
+    }
+
+    /**
+     * Analyze an image via the Dockerized Moondream service. Sends the optimized
+     * image as base64 so the container needs no host filesystem access.
+     */
+    private List<String> moondreamDockerAnalyze(byte[] optimizedBytes, List<String> prompts) throws IOException {
+        String url = configService.getMoondreamEndpoint().replaceAll("/+$", "") + "/analyze";
+
+        ObjectNode request = objectMapper.createObjectNode();
+        request.put("image", Base64.getEncoder().encodeToString(optimizedBytes));
+        ArrayNode promptsArray = objectMapper.createArrayNode();
+        for (String prompt : prompts) {
+            promptsArray.add(prompt);
+        }
+        request.set("prompts", promptsArray);
+
+        try {
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    // Generous: multi-prompt Moondream inference can take many
+                    // minutes on CPU (it's near-instant on GPU).
+                    .timeout(Duration.ofMinutes(30))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(request)))
+                    .build();
+
+            HttpResponse<String> response = getMoondreamDockerClient()
+                    .send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IOException("Moondream service error: HTTP " + response.statusCode()
+                        + " - " + response.body());
+            }
+
+            JsonNode parsed = objectMapper.readTree(response.body());
+            if (!"ok".equals(parsed.path("status").asText(""))) {
+                throw new IOException("Moondream service error: "
+                        + parsed.path("message").asText("unknown error"));
+            }
+
+            List<String> results = new ArrayList<>();
+            JsonNode responses = parsed.path("responses");
+            if (responses.isArray()) {
+                for (JsonNode r : responses) {
+                    results.add(r.asText(""));
+                }
+            }
+            return results;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Moondream request interrupted", e);
+        }
+    }
+
     /**
      * Get or create the Moondream worker (lazy init with crash recovery).
      */
@@ -600,9 +686,41 @@ public class ImageAnalysisService {
     }
 
     /**
-     * Check if Moondream Python dependencies are available.
+     * Fetch the Docker Moondream service /health response, or throw on failure.
+     */
+    private String fetchMoondreamHealth() throws IOException {
+        String url = configService.getMoondreamEndpoint().replaceAll("/+$", "") + "/health";
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = getMoondreamDockerClient()
+                    .send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IOException("HTTP " + response.statusCode());
+            }
+            return response.body();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Health check interrupted", e);
+        }
+    }
+
+    /**
+     * Check if the configured Moondream backend is available
+     * (Python deps locally, or the Docker service over HTTP).
      */
     public boolean isMoondreamAvailable() {
+        if (isMoondreamDockerMode()) {
+            try {
+                return fetchMoondreamHealth().contains("\"status\"");
+            } catch (IOException e) {
+                logger.debug("ImageAnalysisService", "Docker Moondream health check failed: " + e.getMessage());
+                return false;
+            }
+        }
         Process process = null;
         try {
             String pythonPath = configService.getMoondreamPythonPath();
@@ -631,6 +749,13 @@ public class ImageAnalysisService {
      * Get Moondream version/device info.
      */
     public String getMoondreamVersionInfo() {
+        if (isMoondreamDockerMode()) {
+            try {
+                return fetchMoondreamHealth();
+            } catch (IOException e) {
+                return "Error: " + e.getMessage();
+            }
+        }
         Process process = null;
         try {
             String pythonPath = configService.getMoondreamPythonPath();

@@ -145,8 +145,20 @@ public class ConfigService {
             Map<String, Object> moondream = new HashMap<>();
             moondream.put("python_path", DEFAULT_PYTHON_PATH);
             moondream.put("model", "vikhyatk/moondream2");
+            moondream.put("mode", "local");
+            moondream.put("endpoint", "http://localhost:8002");
             config.put("moondream", moondream);
             changed = true;
+        } else {
+            Map<String, Object> moondream = (Map<String, Object>) config.get("moondream");
+            if (!moondream.containsKey("mode")) {
+                moondream.put("mode", "local");
+                changed = true;
+            }
+            if (!moondream.containsKey("endpoint")) {
+                moondream.put("endpoint", "http://localhost:8002");
+                changed = true;
+            }
         }
 
         // Ensure faces section exists
@@ -298,6 +310,8 @@ public class ConfigService {
         Map<String, Object> moondream = new HashMap<>();
         moondream.put("python_path", DEFAULT_PYTHON_PATH);
         moondream.put("model", "vikhyatk/moondream2");
+        moondream.put("mode", "local");
+        moondream.put("endpoint", "http://localhost:8002");
         defaultConfig.put("moondream", moondream);
 
         // Face recognition settings
@@ -657,6 +671,24 @@ public class ConfigService {
 
     public void setMoondreamModel(String model) {
         setNestedValue("moondream", "model", model);
+    }
+
+    /** Moondream backend mode: "local" (spawn Python) or "docker" (HTTP service). */
+    public String getMoondreamMode() {
+        return getNestedString("moondream", "mode", "local");
+    }
+
+    public void setMoondreamMode(String mode) {
+        setNestedValue("moondream", "mode", mode);
+    }
+
+    /** Base URL of the Dockerized analysis service (used when mode is "docker"). */
+    public String getMoondreamEndpoint() {
+        return getNestedString("moondream", "endpoint", "http://localhost:8002");
+    }
+
+    public void setMoondreamEndpoint(String endpoint) {
+        setNestedValue("moondream", "endpoint", endpoint);
     }
 
     // Face recognition settings
