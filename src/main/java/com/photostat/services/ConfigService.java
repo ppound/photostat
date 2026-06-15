@@ -156,8 +156,20 @@ public class ConfigService {
             faces.put("enabled", true);
             faces.put("confidence_threshold", 0.6);
             faces.put("cluster_threshold", 0.6);
+            faces.put("mode", "local");
+            faces.put("endpoint", "http://localhost:8001");
             config.put("faces", faces);
             changed = true;
+        } else {
+            Map<String, Object> faces = (Map<String, Object>) config.get("faces");
+            if (!faces.containsKey("mode")) {
+                faces.put("mode", "local");
+                changed = true;
+            }
+            if (!faces.containsKey("endpoint")) {
+                faces.put("endpoint", "http://localhost:8001");
+                changed = true;
+            }
         }
 
         // Ensure luma section exists
@@ -294,6 +306,8 @@ public class ConfigService {
         faces.put("enabled", true);
         faces.put("confidence_threshold", 0.6);
         faces.put("cluster_threshold", 0.6);
+        faces.put("mode", "local");
+        faces.put("endpoint", "http://localhost:8001");
         defaultConfig.put("faces", faces);
 
         // Luma AI image generation settings
@@ -676,6 +690,24 @@ public class ConfigService {
 
     public void setFacesClusterThreshold(double threshold) {
         setNestedValue("faces", "cluster_threshold", threshold);
+    }
+
+    /** Face backend mode: "local" (spawn Python) or "docker" (HTTP service). */
+    public String getFacesMode() {
+        return getNestedString("faces", "mode", "local");
+    }
+
+    public void setFacesMode(String mode) {
+        setNestedValue("faces", "mode", mode);
+    }
+
+    /** Base URL of the Dockerized faces service (used when mode is "docker"). */
+    public String getFacesEndpoint() {
+        return getNestedString("faces", "endpoint", "http://localhost:8001");
+    }
+
+    public void setFacesEndpoint(String endpoint) {
+        setNestedValue("faces", "endpoint", endpoint);
     }
 
     // Luma AI settings

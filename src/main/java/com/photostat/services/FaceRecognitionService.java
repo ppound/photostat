@@ -6,8 +6,14 @@ import com.photostat.models.FaceCluster;
 import com.photostat.models.FaceDetection;
 
 import java.io.*;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,6 +42,15 @@ public class FaceRecognitionService {
     private final Path scriptPath;
 
     private static final int CHUNK_SIZE = 500;
+
+    // Docker (HTTP) mode tuning. Images are optimized client-side and POSTed in
+    // small sub-batches so payloads stay bounded and progress stays responsive.
+    private static final int DOCKER_SUB_BATCH = 8;
+    private static final int DOCKER_IMAGE_MAX_SIZE = 1600;
+    private static final float DOCKER_IMAGE_QUALITY = 0.9f;
+
+    /** Shared HTTP client for Docker mode (lazily created). */
+    private volatile HttpClient httpClient;
 
     private List<FaceDetection> faceDetections = Collections.synchronizedList(new ArrayList<>());
     private List<FaceCluster> clusters = Collections.synchronizedList(new ArrayList<>());
@@ -84,6 +99,42 @@ public class FaceRecognitionService {
         return instance;
     }
 
+    /** True when faces should run against the Dockerized HTTP service. */
+    private boolean isDockerMode() {
+        return "docker".equalsIgnoreCase(configService.getFacesMode());
+    }
+
+    private HttpClient getHttpClient() {
+        if (httpClient == null) {
+            synchronized (this) {
+                if (httpClient == null) {
+                    // Force HTTP/1.1: the uvicorn/h11 services don't support the
+                    // HTTP/2 (h2c) upgrade that HttpClient attempts by default,
+                    // which otherwise causes the request body to be dropped.
+                    httpClient = HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)
+                            .connectTimeout(Duration.ofSeconds(10))
+                            .build();
+                }
+            }
+        }
+        return httpClient;
+    }
+
+    /** Open the detection backend appropriate for the configured mode. */
+    private FaceBackend openBackend() throws IOException {
+        return isDockerMode() ? new DockerFaceBackend() : new PythonWorker();
+    }
+
+    /**
+     * A face-detection backend that processes a batch of image paths.
+     * Implemented by the local Python worker and the Docker HTTP service.
+     */
+    private interface FaceBackend extends Closeable {
+        List<FaceDetection> detectBatch(List<String> paths, double threshold,
+                                        Consumer<Double> progressCallback) throws IOException;
+    }
+
     /**
      * Extract the Python script from JAR resources to ~/.photostat/.
      */
@@ -101,9 +152,41 @@ public class FaceRecognitionService {
     }
 
     /**
-     * Check if Python and InsightFace are available.
+     * Fetch the Docker faces service /health response, or throw on failure.
+     */
+    private String fetchDockerHealth() throws IOException {
+        String url = configService.getFacesEndpoint().replaceAll("/+$", "") + "/health";
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(10))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = getHttpClient()
+                    .send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IOException("HTTP " + response.statusCode());
+            }
+            return response.body();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Health check interrupted", e);
+        }
+    }
+
+    /**
+     * Check if the configured faces backend is available
+     * (Python + InsightFace locally, or the Docker service over HTTP).
      */
     public boolean isPythonAvailable() {
+        if (isDockerMode()) {
+            try {
+                return fetchDockerHealth().contains("\"status\"");
+            } catch (IOException e) {
+                logger.debug("FaceRecognitionService", "Docker faces health check failed: " + e.getMessage());
+                return false;
+            }
+        }
         Process process = null;
         try {
             String pythonPath = configService.getFacesPythonPath();
@@ -134,6 +217,13 @@ public class FaceRecognitionService {
      * Get version info from the Python environment.
      */
     public String getPythonVersionInfo() {
+        if (isDockerMode()) {
+            try {
+                return fetchDockerHealth();
+            } catch (IOException e) {
+                return "{\"status\": \"error\", \"message\": \"" + e.getMessage() + "\"}";
+            }
+        }
         Process process = null;
         try {
             String pythonPath = configService.getFacesPythonPath();
@@ -219,8 +309,9 @@ public class FaceRecognitionService {
         List<FaceDetection> allNewDetections = new ArrayList<>();
         double threshold = configService.getFacesConfidenceThreshold();
 
-        // Process all chunks with a single persistent Python worker (model loads once)
-        try (PythonWorker worker = new PythonWorker()) {
+        // Process all chunks with a single backend (local worker loads the model once;
+        // the Docker service is long-lived).
+        try (FaceBackend worker = openBackend()) {
             for (int chunkStart = 0; chunkStart < totalToScan; chunkStart += CHUNK_SIZE) {
                 int chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalToScan);
                 List<String> chunk = pathsToScan.subList(chunkStart, chunkEnd);
@@ -275,6 +366,18 @@ public class FaceRecognitionService {
                                                      BiConsumer<Integer, Integer> progressCallback,
                                                      boolean force)
             throws IOException, InterruptedException {
+
+        // Docker mode is backed by a single container that serializes inference, so
+        // parallel Java workers wouldn't help (and the model isn't thread-safe across
+        // concurrent requests). Route through the sequential batch path instead.
+        if (isDockerMode()) {
+            int total = imagePaths.size();
+            return detectFacesBatch(imagePaths, frac -> {
+                if (progressCallback != null) {
+                    progressCallback.accept((int) Math.round(frac * total), total);
+                }
+            }, force);
+        }
 
         List<String> pathsToScan = force ? new ArrayList<>(imagePaths)
                 : filterNewPaths(imagePaths);
@@ -352,7 +455,7 @@ public class FaceRecognitionService {
      * Persistent Python worker — loads InsightFace once and handles multiple detect-batch
      * requests over stdin/stdout, eliminating per-chunk model startup cost.
      */
-    private class PythonWorker implements Closeable {
+    private class PythonWorker implements FaceBackend {
         private final Process process;
         private final PrintWriter stdin;
         private final BufferedReader stdout;
@@ -430,7 +533,8 @@ public class FaceRecognitionService {
             initDone.set(true); // switch stderr logging to DEBUG from here on
         }
 
-        List<FaceDetection> detectBatch(List<String> paths, double threshold,
+        @Override
+        public List<FaceDetection> detectBatch(List<String> paths, double threshold,
                                          Consumer<Double> progressCallback) throws IOException {
             progressHandler.set(progress -> {
                 if (progressCallback != null) {
@@ -487,6 +591,96 @@ public class FaceRecognitionService {
     }
 
     /**
+     * Face-detection backend that calls the Dockerized HTTP service. Reads each
+     * image on the Java side, optimizes it, and sends base64 bytes — so the
+     * container needs no access to the host filesystem. Stateless: there is no
+     * process to manage, so close() is a no-op.
+     */
+    private class DockerFaceBackend implements FaceBackend {
+
+        @Override
+        public List<FaceDetection> detectBatch(List<String> paths, double threshold,
+                                               Consumer<Double> progressCallback) throws IOException {
+            String url = configService.getFacesEndpoint().replaceAll("/+$", "") + "/faces/detect-batch";
+            List<FaceDetection> results = new ArrayList<>();
+            int total = paths.size();
+            int processed = 0;
+
+            for (int start = 0; start < total; start += DOCKER_SUB_BATCH) {
+                int end = Math.min(start + DOCKER_SUB_BATCH, total);
+                List<String> sub = paths.subList(start, end);
+
+                // Build the request payload: optimized base64 images for this sub-batch.
+                List<Map<String, String>> images = new ArrayList<>();
+                for (String path : sub) {
+                    byte[] bytes = ImageOptimizer.optimizeToJpeg(
+                            new File(path), DOCKER_IMAGE_MAX_SIZE, DOCKER_IMAGE_QUALITY);
+                    if (bytes == null) {
+                        // Unreadable / unsupported (e.g. RAW) — skip, like cv2 returning None.
+                        logger.debug("FaceRecognitionService", "Skipping unreadable image: " + path);
+                        continue;
+                    }
+                    Map<String, String> item = new LinkedHashMap<>();
+                    item.put("id", path);
+                    item.put("data", Base64.getEncoder().encodeToString(bytes));
+                    images.add(item);
+                }
+
+                if (!images.isEmpty()) {
+                    Map<String, Object> request = new LinkedHashMap<>();
+                    request.put("threshold", threshold);
+                    request.put("images", images);
+                    results.addAll(postDetectBatch(url, request));
+                }
+
+                processed = end;
+                if (progressCallback != null) {
+                    progressCallback.accept((double) processed / total);
+                }
+            }
+            return results;
+        }
+
+        private List<FaceDetection> postDetectBatch(String url, Map<String, Object> request) throws IOException {
+            try {
+                String body = objectMapper.writeValueAsString(request);
+                HttpRequest httpRequest = HttpRequest.newBuilder()
+                        .uri(URI.create(url))
+                        .timeout(Duration.ofMinutes(10))
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                        .build();
+
+                HttpResponse<String> response = getHttpClient()
+                        .send(httpRequest, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() != 200) {
+                    throw new IOException("Faces service error: HTTP " + response.statusCode()
+                            + " - " + response.body());
+                }
+
+                Map<String, Object> parsed = objectMapper.readValue(
+                        response.body(), new TypeReference<Map<String, Object>>() {});
+                if (!"ok".equals(parsed.get("status"))) {
+                    throw new IOException("Faces service error: " + parsed.get("message"));
+                }
+                Object facesObj = parsed.get("faces");
+                if (facesObj == null) {
+                    return Collections.emptyList();
+                }
+                return objectMapper.convertValue(facesObj, new TypeReference<List<FaceDetection>>() {});
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Faces service request interrupted", e);
+            }
+        }
+
+        @Override
+        public void close() {
+            // Nothing to clean up — the HTTP service is long-lived.
+        }
+    }
+
+    /**
      * Merge new detections into the master list, deduplicating by faceId.
      */
     private void mergeDetections(List<FaceDetection> newDetections) {
@@ -502,7 +696,7 @@ public class FaceRecognitionService {
     }
 
     /**
-     * Cluster all detected faces.
+     * Cluster all detected faces using the configured backend.
      */
     public List<FaceCluster> clusterFaces() throws IOException, InterruptedException {
         if (faceDetections.isEmpty()) {
@@ -510,7 +704,22 @@ public class FaceRecognitionService {
         }
 
         double threshold = configService.getFacesClusterThreshold();
+        List<FaceCluster> newClusters = isDockerMode()
+                ? clusterViaDocker(threshold)
+                : clusterViaPython(threshold);
 
+        if (newClusters == null || newClusters.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        applyNewClusters(newClusters);
+        return clusters;
+    }
+
+    /**
+     * Cluster faces by spawning the local Python script (file-based I/O).
+     */
+    private List<FaceCluster> clusterViaPython(double threshold) throws IOException, InterruptedException {
         // Write face data to temp file
         Path inputPath = Files.createTempFile("photostat_faces_cluster_input_", ".json");
         Path outputPath = Files.createTempFile("photostat_faces_cluster_output_", ".json");
@@ -548,44 +757,88 @@ public class FaceRecognitionService {
                 }
             }
 
-            // Read output
             if (Files.exists(outputPath) && Files.size(outputPath) > 0) {
-                List<FaceCluster> newClusters = objectMapper.readValue(
+                return objectMapper.readValue(
                         outputPath.toFile(), new TypeReference<List<FaceCluster>>() {});
-
-                // Preserve existing person names by matching face IDs
-                Map<String, String> existingNames = new HashMap<>();
-                for (FaceCluster old : clusters) {
-                    if (old.getPersonName() != null && !old.getPersonName().isEmpty()) {
-                        for (String faceId : old.getFaceIds()) {
-                            existingNames.put(faceId, old.getPersonName());
-                        }
-                    }
-                }
-
-                for (FaceCluster cluster : newClusters) {
-                    if (cluster.getPersonName() == null || cluster.getPersonName().isEmpty()) {
-                        for (String faceId : cluster.getFaceIds()) {
-                            if (existingNames.containsKey(faceId)) {
-                                cluster.setPersonName(existingNames.get(faceId));
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                this.clusters.clear();
-                this.clusters.addAll(newClusters);
-                resolveClusters();
-                saveState();
-                return clusters;
             }
-
             return Collections.emptyList();
         } finally {
             Files.deleteIfExists(inputPath);
             Files.deleteIfExists(outputPath);
         }
+    }
+
+    /**
+     * Cluster faces via the Dockerized HTTP service.
+     */
+    private List<FaceCluster> clusterViaDocker(double threshold) throws IOException {
+        String url = configService.getFacesEndpoint().replaceAll("/+$", "") + "/faces/cluster";
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("threshold", threshold);
+        request.put("faces", faceDetections);
+
+        try {
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofMinutes(10))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            objectMapper.writeValueAsString(request), StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<String> response = getHttpClient()
+                    .send(httpRequest, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IOException("Faces clustering error: HTTP " + response.statusCode()
+                        + " - " + response.body());
+            }
+
+            Map<String, Object> parsed = objectMapper.readValue(
+                    response.body(), new TypeReference<Map<String, Object>>() {});
+            if (!"ok".equals(parsed.get("status"))) {
+                throw new IOException("Faces clustering error: " + parsed.get("message"));
+            }
+            Object clustersObj = parsed.get("clusters");
+            if (clustersObj == null) {
+                return Collections.emptyList();
+            }
+            return objectMapper.convertValue(clustersObj, new TypeReference<List<FaceCluster>>() {});
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Faces clustering request interrupted", e);
+        }
+    }
+
+    /**
+     * Apply freshly computed clusters: preserve existing person names (matched by
+     * face ID), replace the cluster list, resolve, and persist.
+     */
+    private void applyNewClusters(List<FaceCluster> newClusters) {
+        // Preserve existing person names by matching face IDs
+        Map<String, String> existingNames = new HashMap<>();
+        for (FaceCluster old : clusters) {
+            if (old.getPersonName() != null && !old.getPersonName().isEmpty()) {
+                for (String faceId : old.getFaceIds()) {
+                    existingNames.put(faceId, old.getPersonName());
+                }
+            }
+        }
+
+        for (FaceCluster cluster : newClusters) {
+            if (cluster.getPersonName() == null || cluster.getPersonName().isEmpty()) {
+                for (String faceId : cluster.getFaceIds()) {
+                    if (existingNames.containsKey(faceId)) {
+                        cluster.setPersonName(existingNames.get(faceId));
+                        break;
+                    }
+                }
+            }
+        }
+
+        this.clusters.clear();
+        this.clusters.addAll(newClusters);
+        resolveClusters();
+        saveState();
     }
 
     /**
