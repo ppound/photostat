@@ -592,10 +592,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         geminiGrid.add(new Label("Model:"), 0, 1);
         geminiModelCombo = new ComboBox<>();
         geminiModelCombo.getItems().addAll(
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash-lite"
         );
+        // Editable so newer model ids can be entered without a code change.
+        geminiModelCombo.setEditable(true);
         geminiModelCombo.setPrefWidth(250);
         geminiGrid.add(geminiModelCombo, 1, 1);
 
@@ -1340,6 +1342,14 @@ public class SettingsDialog extends Dialog<Boolean> {
             return;
         }
 
+        // Test against the model the user actually has selected, so the test
+        // reflects whether that model works (not a hardcoded one).
+        String testModel = geminiModelCombo.getValue();
+        if (testModel == null || testModel.isBlank()) {
+            testModel = "gemini-2.5-flash";
+        }
+        final String geminiTestModel = testModel.trim();
+
         new Thread(() -> {
             try {
                 com.google.genai.Client client = com.google.genai.Client.builder()
@@ -1351,7 +1361,7 @@ public class SettingsDialog extends Dialog<Boolean> {
                         com.google.genai.types.Part.fromText("Hi")
                 );
                 com.google.genai.types.GenerateContentResponse response =
-                        client.models.generateContent("gemini-2.0-flash", content, null);
+                        client.models.generateContent(geminiTestModel, content, null);
 
                 Platform.runLater(() -> {
                     if (response != null && response.text() != null) {

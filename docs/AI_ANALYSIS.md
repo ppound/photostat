@@ -105,9 +105,12 @@ Four AI providers are supported:
 
    | Model | Description |
    |-------|-------------|
-   | gemini-2.0-flash | Latest, fastest (recommended) |
-   | gemini-1.5-flash | Previous generation, very fast |
-   | gemini-1.5-pro | Most capable, slower |
+   | gemini-2.5-flash | Fast, great value (recommended) |
+   | gemini-2.5-pro | Most capable, slower |
+   | gemini-2.5-flash-lite | Cheapest, fastest |
+
+   The model box is editable, so you can enter any current Gemini model id.
+   The older 1.5 and 2.0 models have been retired by Google and no longer work.
 
 6. Click **Test API Key** to verify
 7. Click **OK** to save
@@ -539,9 +542,9 @@ The CLI displays token usage and estimated costs for Gemini API calls. This help
 
 | Model | Input (per 1M tokens) | Output (per 1M tokens) |
 |-------|----------------------|------------------------|
-| gemini-2.0-flash | $0.10 | $0.40 |
-| gemini-1.5-flash | $0.075 | $0.30 |
-| gemini-1.5-pro | $1.25 | $5.00 |
+| gemini-2.5-flash | $0.30 | $2.50 |
+| gemini-2.5-pro | $1.25 | $10.00 |
+| gemini-2.5-flash-lite | $0.10 | $0.40 |
 
 Note: Claude API does not provide token usage in responses, so cost tracking is only available for Gemini.
 

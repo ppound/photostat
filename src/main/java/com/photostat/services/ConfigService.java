@@ -125,7 +125,7 @@ public class ConfigService {
         if (!config.containsKey("gemini")) {
             Map<String, Object> gemini = new HashMap<>();
             gemini.put("api_key", "");
-            gemini.put("model", "gemini-2.0-flash");
+            gemini.put("model", "gemini-2.5-flash");
             config.put("gemini", gemini);
             changed = true;
         }
@@ -223,6 +223,25 @@ public class ConfigService {
             changed = true;
         }
 
+        // Migrate retired Gemini model names. Google retired the 1.5 and 2.0
+        // generations for generateContent, so saved configs pointing at them
+        // now 404 ("model not found"). Bump them to the current default.
+        Object geminiSection = config.get("gemini");
+        if (geminiSection instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> gemini = (Map<String, Object>) geminiSection;
+            Object model = gemini.get("model");
+            if (model instanceof String) {
+                String m = ((String) model).toLowerCase();
+                boolean retired = m.equals("gemini-2.0-flash") || m.equals("gemini-2.0-flash-exp")
+                        || m.startsWith("gemini-1.5") || m.equals("gemini-pro") || m.equals("gemini-pro-vision");
+                if (retired) {
+                    gemini.put("model", "gemini-2.5-flash");
+                    changed = true;
+                }
+            }
+        }
+
         if (changed) {
             saveConfig();
             System.out.println("Config migrated with new default values");
@@ -296,7 +315,7 @@ public class ConfigService {
         // Gemini API settings
         Map<String, Object> gemini = new HashMap<>();
         gemini.put("api_key", "");
-        gemini.put("model", "gemini-2.0-flash");
+        gemini.put("model", "gemini-2.5-flash");
         defaultConfig.put("gemini", gemini);
 
         // Ollama / OpenAI-compatible local API settings

@@ -659,16 +659,29 @@ public class AnalyzeCli {
         double outputPricePer1M;
 
         String modelLower = model.toLowerCase();
-        if (modelLower.contains("gemini-2.0-flash") || modelLower.contains("gemini-2.0-flash-exp")) {
-            // Gemini 2.0 Flash - very affordable
+        // Check flash-lite before flash (substring), and 2.5 family before 2.0.
+        if (modelLower.contains("gemini-2.5-flash-lite")) {
+            // Gemini 2.5 Flash-Lite
+            inputPricePer1M = 0.10;
+            outputPricePer1M = 0.40;
+        } else if (modelLower.contains("gemini-2.5-flash")) {
+            // Gemini 2.5 Flash
+            inputPricePer1M = 0.30;
+            outputPricePer1M = 2.50;
+        } else if (modelLower.contains("gemini-2.5-pro")) {
+            // Gemini 2.5 Pro
+            inputPricePer1M = 1.25;
+            outputPricePer1M = 10.00;
+        } else if (modelLower.contains("gemini-2.0-flash")) {
+            // Gemini 2.0 Flash (retired for generateContent; kept for old logs)
             inputPricePer1M = 0.10;
             outputPricePer1M = 0.40;
         } else if (modelLower.contains("gemini-1.5-flash")) {
-            // Gemini 1.5 Flash
+            // Gemini 1.5 Flash (retired)
             inputPricePer1M = 0.075;
             outputPricePer1M = 0.30;
         } else if (modelLower.contains("gemini-1.5-pro")) {
-            // Gemini 1.5 Pro
+            // Gemini 1.5 Pro (retired)
             inputPricePer1M = 1.25;
             outputPricePer1M = 5.00;
         } else if (modelLower.contains("claude")) {

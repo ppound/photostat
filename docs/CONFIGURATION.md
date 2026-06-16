@@ -78,7 +78,7 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
   },
   "gemini": {
     "api_key": "",
-    "model": "gemini-2.0-flash"
+    "model": "gemini-2.5-flash"
   },
   "rclone": {
     "rclone_path": "rclone",
@@ -232,12 +232,16 @@ These settings can be configured via **Settings > Indexing > Sidecar Format** in
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `gemini.api_key` | string | `""` | Your Google API key |
-| `gemini.model` | string | `gemini-2.0-flash` | Gemini model to use |
+| `gemini.model` | string | `gemini-2.5-flash` | Gemini model to use |
 
 **Available Gemini models:**
-- `gemini-2.0-flash` (recommended)
-- `gemini-1.5-flash`
-- `gemini-1.5-pro`
+- `gemini-2.5-flash` (recommended)
+- `gemini-2.5-pro` (most capable)
+- `gemini-2.5-flash-lite` (cheapest)
+
+The model field accepts any current Gemini model id, so newer models can be
+entered directly. The older 1.5 and 2.0 generations have been retired by Google
+for image analysis and will return "model not found".
 
 ### rclone Settings (Cloud Upload)
 
