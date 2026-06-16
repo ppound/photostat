@@ -522,13 +522,13 @@ You can also find duplicates from the command line:
 
 ```bash
 # Find exact duplicates (default)
-java -jar photostat-java-2.3.0-executable.jar --find-duplicates
+java -jar photostat-java-2.4.0-executable.jar --find-duplicates
 
 # Find visual duplicates
-java -jar photostat-java-2.3.0-executable.jar --find-duplicates --mode visual
+java -jar photostat-java-2.4.0-executable.jar --find-duplicates --mode visual
 
 # Minimal output
-java -jar photostat-java-2.3.0-executable.jar --find-duplicates --quiet
+java -jar photostat-java-2.4.0-executable.jar --find-duplicates --quiet
 ```
 
 The CLI outputs duplicate groups with file paths, sizes, dates, and reclaimable space.
@@ -609,25 +609,25 @@ For large collections, use the CLI for batch processing with parallel workers:
 
 ```bash
 # Detect and cluster faces
-java -jar photostat-java-2.3.0-executable.jar --detect-faces
+java -jar photostat-java-2.4.0-executable.jar --detect-faces
 
 # Use 4 parallel Python workers
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --parallel 4
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --parallel 4
 
 # Scan a specific directory (bypasses OpenSearch)
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --dir /path/to/photos
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --dir /path/to/photos
 
 # Preview what would be processed
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --dry-run
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --dry-run
 
 # Rescan all images (ignore previous results)
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --force
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --force
 
 # Detection only (skip clustering)
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --detect-only
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --detect-only
 
 # Clustering only (on existing face data)
-java -jar photostat-java-2.3.0-executable.jar --detect-faces --cluster-only
+java -jar photostat-java-2.4.0-executable.jar --detect-faces --cluster-only
 ```
 
 **Notes:**
@@ -761,7 +761,7 @@ Pre-caching improves the GUI experience by having thumbnails ready before you br
 You can also pre-cache thumbnails from the command line:
 
 ```bash
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails
 ```
 
 Options:
@@ -773,13 +773,13 @@ Options:
 Examples:
 ```bash
 # Use default 4 threads
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails
 
 # Use 8 threads for faster processing
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails --parallel 8
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails --parallel 8
 
 # Use 2 threads with minimal output
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails -p 2 --quiet
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails -p 2 --quiet
 ```
 
 **Cache Location:** `~/.photostat/cache/`
@@ -878,16 +878,16 @@ For scripting and scheduling, use the `--rclone-upload` command:
 
 ```bash
 # Upload all configured directories
-java -jar photostat-java-2.3.0-executable.jar --rclone-upload
+java -jar photostat-java-2.4.0-executable.jar --rclone-upload
 
 # Preview what would be uploaded
-java -jar photostat-java-2.3.0-executable.jar --rclone-upload --dry-run
+java -jar photostat-java-2.4.0-executable.jar --rclone-upload --dry-run
 
 # Upload a specific directory (overrides config)
-java -jar photostat-java-2.3.0-executable.jar --rclone-upload --dir /path/to/photos
+java -jar photostat-java-2.4.0-executable.jar --rclone-upload --dir /path/to/photos
 
 # Minimal output
-java -jar photostat-java-2.3.0-executable.jar --rclone-upload --quiet
+java -jar photostat-java-2.4.0-executable.jar --rclone-upload --quiet
 ```
 
 **Incremental uploads:** For most remotes (including Google Drive), rclone only transfers new or changed files. Running the upload multiple times is safe and efficient. **Exception:** Google Photos cannot detect previously uploaded files — see [Google Drive vs Google Photos](#google-drive-vs-google-photos) above.
@@ -1010,13 +1010,13 @@ The CLI is the best way to pre-cache a large collection since it runs in the bac
 
 ```bash
 # Pre-cache with default 4 threads
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails
 
 # Use 8 threads for faster processing
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails --parallel 8
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails --parallel 8
 
 # Preview what would be cached
-java -jar photostat-java-2.3.0-executable.jar --cache-thumbnails --dry-run
+java -jar photostat-java-2.4.0-executable.jar --cache-thumbnails --dry-run
 ```
 
 Already-cached thumbnails are skipped automatically, so you can re-run this after adding new images.
@@ -1029,16 +1029,16 @@ Analyzing thousands of images through the GUI is possible but the CLI is better 
 
 ```bash
 # Analyze all indexed images (skips already-analyzed ones)
-java -jar photostat-java-2.3.0-executable.jar --analyze
+java -jar photostat-java-2.4.0-executable.jar --analyze
 
 # Run 4 analyses in parallel for faster throughput
-java -jar photostat-java-2.3.0-executable.jar --analyze --parallel 4
+java -jar photostat-java-2.4.0-executable.jar --analyze --parallel 4
 
 # Use Gemini Flash for cheapest batch processing
-java -jar photostat-java-2.3.0-executable.jar --analyze --provider gemini
+java -jar photostat-java-2.4.0-executable.jar --analyze --provider gemini
 
 # Preview what would be analyzed without making API calls
-java -jar photostat-java-2.3.0-executable.jar --analyze --dry-run
+java -jar photostat-java-2.4.0-executable.jar --analyze --dry-run
 ```
 
 **Cost awareness**: AI analysis incurs API costs per image. For very large collections, consider:
@@ -1050,7 +1050,7 @@ java -jar photostat-java-2.3.0-executable.jar --analyze --dry-run
 Run it in the background on Linux/macOS:
 
 ```bash
-nohup java -jar photostat-java-2.3.0-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
+nohup java -jar photostat-java-2.4.0-executable.jar --analyze --parallel 4 > analysis.log 2>&1 &
 ```
 
 ### RAW Files
