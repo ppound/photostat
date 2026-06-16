@@ -66,7 +66,10 @@ public class FaceDetectCli {
             }
             if (!quiet) {
                 String info = faceService.getPythonVersionInfo();
-                boolean gpu = info.contains("\"gpu_available\": true");
+                // Match regardless of JSON spacing: the local backend (json.dumps)
+                // emits "gpu_available": true, the Docker FastAPI backend emits the
+                // compact "gpu_available":true.
+                boolean gpu = info.replaceAll("\\s+", "").contains("\"gpu_available\":true");
                 System.out.println("OK");
                 System.out.println("Execution:   " + (gpu ? "GPU (CUDA)" : "CPU"));
                 if (!gpu && info.contains("\"gpu_error\"")) {
