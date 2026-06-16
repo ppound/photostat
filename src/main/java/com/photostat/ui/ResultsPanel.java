@@ -175,10 +175,12 @@ public class ResultsPanel extends VBox {
         moveMenuItem.setOnAction(e -> moveSelectedImages());
         MenuItem uploadMenuItem = new MenuItem("Upload Selected...");
         uploadMenuItem.setOnAction(e -> uploadSelectedImages());
+        MenuItem reindexMenuItem = new MenuItem("Re-index Selected");
+        reindexMenuItem.setOnAction(e -> reindexSelectedImages());
         MenuItem deleteMenuItem = new MenuItem("Delete...");
         deleteMenuItem.setOnAction(e -> deleteSelectedImages());
         contextMenu.getItems().addAll(analyzeMenuItem, generateMenuItem, new SeparatorMenuItem(),
-                copyMenuItem, moveMenuItem, uploadMenuItem, new SeparatorMenuItem(), deleteMenuItem);
+                copyMenuItem, moveMenuItem, uploadMenuItem, reindexMenuItem, new SeparatorMenuItem(), deleteMenuItem);
         resultsTable.setContextMenu(contextMenu);
 
         // Keyboard shortcuts
@@ -599,6 +601,103 @@ public class ResultsPanel extends VBox {
 
             showAlert(Alert.AlertType.INFORMATION, "Copy Complete", result.getSummary() + indexMessage);
         }
+    }
+
+    /**
+     * Re-index the selected images: re-extract EXIF/metadata from disk and
+     * overwrite the existing index documents. Useful when an image was indexed
+     * by an older build (or a transient extraction failure) and is missing
+     * metadata that is present in the file.
+     */
+    private void reindexSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to re-index.");
+            return;
+        }
+
+        // Progress dialog (mirrors the analyze flow).
+        Stage progressStage = new Stage();
+        progressStage.initModality(Modality.APPLICATION_MODAL);
+        progressStage.initStyle(StageStyle.UTILITY);
+        progressStage.setTitle("Re-indexing");
+        progressStage.setResizable(false);
+
+        VBox progressContent = new VBox(15);
+        progressContent.setPadding(new Insets(20));
+        progressContent.setAlignment(Pos.CENTER);
+        progressContent.setPrefWidth(450);
+
+        Label titleLabel = new Label("Re-indexing selected images...");
+        titleLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        final int total = selected.size();
+        ProgressBar progressBar = new ProgressBar(0);
+        progressBar.setPrefWidth(400);
+        progressBar.setPrefHeight(25);
+
+        Label progressLabel = new Label("0 of " + total);
+        Label currentFileLabel = new Label("Preparing...");
+        currentFileLabel.getStyleClass().add("info-label-small");
+        currentFileLabel.setWrapText(true);
+        currentFileLabel.setMaxWidth(400);
+
+        Button cancelButton = new Button("Cancel");
+        final boolean[] cancelled = {false};
+        cancelButton.setOnAction(e -> {
+            cancelled[0] = true;
+            cancelButton.setDisable(true);
+            cancelButton.setText("Cancelling...");
+        });
+
+        progressContent.getChildren().addAll(titleLabel, progressBar, progressLabel, currentFileLabel, cancelButton);
+        progressStage.setScene(new javafx.scene.Scene(progressContent));
+        progressStage.show();
+        if (getScene() != null && getScene().getWindow() != null) {
+            progressStage.setX(getScene().getWindow().getX() + (getScene().getWindow().getWidth() - 450) / 2);
+            progressStage.setY(getScene().getWindow().getY() + (getScene().getWindow().getHeight() - 200) / 2);
+        }
+
+        new Thread(() -> {
+            int success = 0;
+            int failed = 0;
+            for (int i = 0; i < selected.size(); i++) {
+                if (cancelled[0]) break;
+                ImageMetadata metadata = selected.get(i);
+                final int current = i + 1;
+                final double progress = (double) i / total;
+                Platform.runLater(() -> {
+                    progressBar.setProgress(progress);
+                    progressLabel.setText(current + " of " + total);
+                    currentFileLabel.setText("Re-indexing: " + metadata.getFileName());
+                });
+                try {
+                    if (indexerService.indexSingleFile(metadata.getFilePath())) {
+                        success++;
+                    } else {
+                        failed++;
+                        logger.warn("ResultsPanel", "Re-index failed for " + metadata.getFilePath());
+                    }
+                } catch (Exception ex) {
+                    failed++;
+                    logger.error("ResultsPanel", "Re-index failed for " + metadata.getFilePath(), ex);
+                }
+            }
+
+            final int finalSuccess = success;
+            final int finalFailed = failed;
+            final boolean wasCancelled = cancelled[0];
+            Platform.runLater(() -> {
+                progressStage.close();
+                String summary = (wasCancelled ? "Re-indexing cancelled.\n" : "Re-indexing complete.\n")
+                        + "Re-indexed: " + finalSuccess + "\n"
+                        + "Failed: " + finalFailed;
+                showAlert(Alert.AlertType.INFORMATION, "Re-index Complete", summary);
+                if (finalSuccess > 0) {
+                    refresh();
+                }
+            });
+        }, "reindex-selected").start();
     }
 
     /**
