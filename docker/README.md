@@ -9,10 +9,12 @@ host and talks to the containers over HTTP.
 | `opensearch`| 9200 | Search index (same engine PhotoStat already uses)    |
 | `faces`     | 8001 | Face detection + clustering (InsightFace/onnxruntime)|
 | `analysis`  | 8002 | Local image tagging/captioning (Moondream)           |
+| `aesthetic` | 8003 | Local image-quality / aesthetic scoring (IQA-PyTorch)|
 
-The `faces` and `analysis` images import the **same** Python sources PhotoStat
-uses for local mode (`src/main/resources/photostat_faces.py` and
-`photostat_moondream.py`) — there is no forked copy to keep in sync. The HTTP
+The `faces`, `analysis`, and `aesthetic` images import the **same** Python
+sources PhotoStat uses for local mode (`src/main/resources/photostat_faces.py`,
+`photostat_moondream.py`, and `photostat_aesthetic.py`) — there is no forked
+copy to keep in sync. The HTTP
 servers (`docker/*/server.py`) are thin wrappers around those modules. Images
 are sent as base64 bytes, so the containers need **no access to your photo
 files** on disk.
@@ -24,14 +26,16 @@ cd docker
 docker compose up -d
 ```
 
-First start downloads the models (InsightFace `buffalo_l`, Moondream2). They are
-cached in named volumes (`faces-models`, `hf-cache`) so later starts are fast.
+First start downloads the models (InsightFace `buffalo_l`, Moondream2, and the
+IQA metric weights). They are cached in named volumes (`faces-models`,
+`hf-cache`, `iqa-models`) so later starts are fast.
 
 Check readiness:
 
 ```bash
-curl localhost:8001/health   # faces  -> providers / gpu_available
-curl localhost:8002/health   # analysis -> device (cpu/cuda/mps)
+curl localhost:8001/health   # faces     -> providers / gpu_available
+curl localhost:8002/health   # analysis  -> device (cpu/cuda/mps)
+curl localhost:8003/health   # aesthetic -> device (cpu/cuda/mps) + metric
 curl localhost:9200          # opensearch
 ```
 
@@ -98,3 +102,17 @@ or batch several prompts (image encoded once):
 { "image": "<base64 image>", "prompts": [ "Caption?", "Tags?" ] }
 ```
 Returns `{ "status": "ok", "response": "..." }` or `{ "responses": [ ... ] }`.
+
+### aesthetic — `POST /score`
+```json
+{ "image": "<base64 image>" }
+```
+Returns `{ "status": "ok", "metric": "clipiqa+", "score": 0.73, "normalized": 0.73 }`.
+
+### aesthetic — `POST /score-batch`
+```json
+{ "images": [ { "id": "/path/or/id.jpg", "data": "<base64 image>" } ] }
+```
+Returns `{ "status": "ok", "metric": "clipiqa+", "results": [ { id, score,
+normalized } ] }`. `normalized` is 0..1 (1.0 = best) regardless of which metric
+is configured, so it maps cleanly onto a rating.

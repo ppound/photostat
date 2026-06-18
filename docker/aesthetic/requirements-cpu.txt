@@ -1,0 +1,10 @@
+# CPU build for the PhotoStat aesthetic-scoring service (IQA-PyTorch).
+# CPU-only torch wheels keep the image small (no bundled CUDA libs).
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+torchvision==0.20.1
+# pyiqa pulls in timm + open_clip_torch for the CLIP-IQA metrics.
+pyiqa==0.1.13
+Pillow==10.4.0
+fastapi==0.115.0
+uvicorn[standard]==0.30.6

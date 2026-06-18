@@ -1,0 +1,27 @@
+# GPU image for the PhotoStat aesthetic-scoring service (IQA-PyTorch,
+# CUDA 12.4 + cuDNN 9). Requires the NVIDIA Container Toolkit on the host and
+# `--gpus`/device reservations at run time (see docker-compose.gpu.yml).
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    HF_HOME=/models \
+    TORCH_HOME=/models
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY docker/aesthetic/requirements-gpu.txt requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY src/main/resources/photostat_aesthetic.py .
+COPY docker/aesthetic/server.py .
+
+VOLUME ["/models"]
+EXPOSE 8003
+
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8003"]

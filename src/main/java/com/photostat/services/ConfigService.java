@@ -184,6 +184,16 @@ public class ConfigService {
             }
         }
 
+        // Ensure aesthetic section exists (local image-quality scoring backend)
+        if (!config.containsKey("aesthetic")) {
+            Map<String, Object> aesthetic = new HashMap<>();
+            aesthetic.put("mode", "docker");
+            aesthetic.put("endpoint", "http://localhost:8003");
+            aesthetic.put("metric", "clipiqa+");
+            config.put("aesthetic", aesthetic);
+            changed = true;
+        }
+
         // Ensure luma section exists
         if (!config.containsKey("luma")) {
             Map<String, Object> luma = new HashMap<>();
@@ -332,6 +342,12 @@ public class ConfigService {
         moondream.put("mode", "local");
         moondream.put("endpoint", "http://localhost:8002");
         defaultConfig.put("moondream", moondream);
+
+        Map<String, Object> aesthetic = new HashMap<>();
+        aesthetic.put("mode", "docker");
+        aesthetic.put("endpoint", "http://localhost:8003");
+        aesthetic.put("metric", "clipiqa+");
+        defaultConfig.put("aesthetic", aesthetic);
 
         // Face recognition settings
         Map<String, Object> faces = new HashMap<>();
@@ -759,6 +775,38 @@ public class ConfigService {
 
     public void setFacesEndpoint(String endpoint) {
         setNestedValue("faces", "endpoint", endpoint);
+    }
+
+    // Aesthetic / image-quality scoring settings
+
+    /** Aesthetic backend mode: currently "docker" (HTTP service). */
+    public String getAestheticMode() {
+        return getNestedString("aesthetic", "mode", "docker");
+    }
+
+    public void setAestheticMode(String mode) {
+        setNestedValue("aesthetic", "mode", mode);
+    }
+
+    /** Base URL of the Dockerized aesthetic-scoring service. */
+    public String getAestheticEndpoint() {
+        return getNestedString("aesthetic", "endpoint", "http://localhost:8003");
+    }
+
+    public void setAestheticEndpoint(String endpoint) {
+        setNestedValue("aesthetic", "endpoint", endpoint);
+    }
+
+    /**
+     * IQA metric label, informational only — the configured value the backend
+     * service was started with (PHOTOSTAT_IQA_METRIC) is authoritative.
+     */
+    public String getAestheticMetric() {
+        return getNestedString("aesthetic", "metric", "clipiqa+");
+    }
+
+    public void setAestheticMetric(String metric) {
+        setNestedValue("aesthetic", "metric", metric);
     }
 
     // Luma AI settings
