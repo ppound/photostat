@@ -611,26 +611,35 @@ public class FaceRecognitionService {
                 List<String> sub = paths.subList(start, end);
 
                 // Build the request payload: optimized base64 images for this sub-batch.
+                // We downscale before sending, so detections come back in the
+                // optimized image's coordinate space; remember each image's scale
+                // factor so we can map the boxes back to original-image pixels.
                 List<Map<String, String>> images = new ArrayList<>();
+                Map<String, double[]> scales = new HashMap<>();
                 for (String path : sub) {
-                    byte[] bytes = ImageOptimizer.optimizeToJpeg(
+                    ImageOptimizer.Result optimized = ImageOptimizer.optimizeToJpegScaled(
                             new File(path), DOCKER_IMAGE_MAX_SIZE, DOCKER_IMAGE_QUALITY);
-                    if (bytes == null) {
+                    if (optimized == null) {
                         // Unreadable / unsupported (e.g. RAW) — skip, like cv2 returning None.
                         logger.debug("FaceRecognitionService", "Skipping unreadable image: " + path);
                         continue;
                     }
                     Map<String, String> item = new LinkedHashMap<>();
                     item.put("id", path);
-                    item.put("data", Base64.getEncoder().encodeToString(bytes));
+                    item.put("data", Base64.getEncoder().encodeToString(optimized.jpeg));
                     images.add(item);
+                    scales.put(path, new double[]{optimized.scaleX, optimized.scaleY});
                 }
 
                 if (!images.isEmpty()) {
                     Map<String, Object> request = new LinkedHashMap<>();
                     request.put("threshold", threshold);
                     request.put("images", images);
-                    results.addAll(postDetectBatch(url, request));
+                    List<FaceDetection> subFaces = postDetectBatch(url, request);
+                    for (FaceDetection face : subFaces) {
+                        scaleToOriginal(face, scales.get(face.getImagePath()));
+                    }
+                    results.addAll(subFaces);
                 }
 
                 processed = end;
@@ -678,6 +687,25 @@ public class FaceRecognitionService {
         public void close() {
             // Nothing to clean up — the HTTP service is long-lived.
         }
+    }
+
+    /**
+     * Map a detection's bounding box from optimized-image space back to the
+     * original image. The Docker backend downscales images before sending them,
+     * so InsightFace reports boxes in the optimized image's pixel space; without
+     * this, face crops (read from the original file) land near the top-left.
+     * No-op when {@code scale} is null (image was skipped) or effectively 1.
+     */
+    private static void scaleToOriginal(FaceDetection face, double[] scale) {
+        if (scale == null) {
+            return;
+        }
+        double sx = scale[0];
+        double sy = scale[1];
+        face.setX((int) Math.round(face.getX() * sx));
+        face.setY((int) Math.round(face.getY() * sy));
+        face.setWidth((int) Math.round(face.getWidth() * sx));
+        face.setHeight((int) Math.round(face.getHeight() * sy));
     }
 
     /**

@@ -25,13 +25,46 @@ public final class ImageOptimizer {
     private ImageOptimizer() {}
 
     /**
+     * Result of an optimize operation: the JPEG bytes plus the scale factors
+     * needed to map coordinates measured on the optimized image back to the
+     * original image. Multiply an optimized-space x/width by {@link #scaleX}
+     * (and y/height by {@link #scaleY}) to get original-image pixels.
+     */
+    public static final class Result {
+        public final byte[] jpeg;
+        public final double scaleX;
+        public final double scaleY;
+
+        Result(byte[] jpeg, double scaleX, double scaleY) {
+            this.jpeg = jpeg;
+            this.scaleX = scaleX;
+            this.scaleY = scaleY;
+        }
+    }
+
+    /**
      * @param imageFile source image
      * @param maxSize   maximum width/height in pixels (aspect ratio preserved)
      * @param quality   JPEG quality 0..1
      * @return optimized JPEG bytes, or {@code null} on failure
      */
     public static byte[] optimizeToJpeg(File imageFile, int maxSize, float quality) {
+        Result result = optimizeToJpegScaled(imageFile, maxSize, quality);
+        return result == null ? null : result.jpeg;
+    }
+
+    /**
+     * Like {@link #optimizeToJpeg}, but also returns the scale factors from the
+     * optimized image back to the original. Use this when you need to translate
+     * coordinates produced from the optimized image (e.g. face bounding boxes
+     * from a downscaled image) back to original-image pixels.
+     *
+     * @return a {@link Result}, or {@code null} on failure
+     */
+    public static Result optimizeToJpegScaled(File imageFile, int maxSize, float quality) {
         try {
+            int trueOrigWidth = 0;
+            int trueOrigHeight = 0;
             // Read the image efficiently using subsampling.
             BufferedImage originalImage = null;
             try (javax.imageio.stream.ImageInputStream iis = ImageIO.createImageInputStream(imageFile)) {
@@ -42,6 +75,8 @@ public final class ImageOptimizer {
 
                     int origWidth = reader.getWidth(0);
                     int origHeight = reader.getHeight(0);
+                    trueOrigWidth = origWidth;
+                    trueOrigHeight = origHeight;
 
                     int scale = Math.max(1, Math.min(origWidth / maxSize, origHeight / maxSize));
                     int subsampling = 1;
@@ -108,7 +143,11 @@ public final class ImageOptimizer {
             writer.dispose();
             ios.close();
 
-            return outputStream.toByteArray();
+            // Scale from the encoded (newWidth x newHeight) image back to the
+            // true original dimensions, so callers can map coordinates back.
+            double scaleX = newWidth > 0 ? (double) trueOrigWidth / newWidth : 1.0;
+            double scaleY = newHeight > 0 ? (double) trueOrigHeight / newHeight : 1.0;
+            return new Result(outputStream.toByteArray(), scaleX, scaleY);
         } catch (Exception e) {
             return null;
         }
