@@ -76,7 +76,7 @@ public class ResultsPanel extends VBox {
     private Consumer<ImageMetadata> ratingChangedCallback;
     private BiConsumer<String, String> chipClickCallback;
 
-    private Button analyzeSelectedBtn;
+    private MenuItem analyzeActionItem;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -120,39 +120,39 @@ public class ResultsPanel extends VBox {
 
         String multiSelectHint = "\n\nCtrl+Click to select multiple, Shift+Click to select a range.";
 
-        // Toolbar for bulk operations
-        analyzeSelectedBtn = new Button("Analyze Selected");
-        analyzeSelectedBtn.setOnAction(e -> analyzeSelectedImages());
-        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with AI to populate tags, persons, place, and rating." + multiSelectHint));
-
-        Button copySelectedBtn = new Button("Copy Selected...");
-        copySelectedBtn.setOnAction(e -> copySelectedImages());
-        copySelectedBtn.setTooltip(new Tooltip("Copy selected images to another directory." + multiSelectHint));
-
-        Button moveSelectedBtn = new Button("Move...");
-        moveSelectedBtn.setOnAction(e -> moveSelectedImages());
-        moveSelectedBtn.setTooltip(new Tooltip("Move images to another directory and update the index. Operates on the current selection or full result set." + multiSelectHint));
-
-        Button renameBtn = new Button("Rename...");
-        renameBtn.setOnAction(e -> batchRenameImages());
-        renameBtn.setTooltip(new Tooltip("Find/replace in filenames across the current selection or full result set." + multiSelectHint));
-
-        Button deleteSelectedBtn = new Button("Delete...");
-        deleteSelectedBtn.getStyleClass().add("delete-button");
-        deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
-        deleteSelectedBtn.setTooltip(new Tooltip("Permanently delete images from disk and remove from index. Operates on the current selection or full result set." + multiSelectHint));
-
-        Button uploadSelectedBtn = new Button("Upload Selected...");
-        uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
-        uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone. Already-uploaded files can be skipped." + multiSelectHint));
-
-        Button generateImageBtn = new Button("Generate Image");
-        generateImageBtn.setOnAction(e -> generateFromSelectedImages());
-        generateImageBtn.setTooltip(new Tooltip("Generate a new image with Luma AI using selected images as reference." + multiSelectHint));
-
+        // Toolbar for bulk operations. Actions are grouped into two dropdown
+        // menus to keep the bar readable; Slideshow and Sort stay visible.
         Button slideshowBtn = new Button("Slideshow");
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
+
+        // AI menu: analyze + generate. analyzeActionItem is a field because it's
+        // disabled while an analysis run is in progress.
+        analyzeActionItem = new MenuItem("Analyze Selected");
+        analyzeActionItem.setOnAction(e -> analyzeSelectedImages());
+        MenuItem generateActionItem = new MenuItem("Generate Image with Luma");
+        generateActionItem.setOnAction(e -> generateFromSelectedImages());
+        MenuButton aiMenu = new MenuButton("AI", null, analyzeActionItem, generateActionItem);
+        aiMenu.setTooltip(new Tooltip("AI actions on the selection: analyze metadata, or generate a new image with Luma." + multiSelectHint));
+
+        // File menu: copy / move / rename / upload / re-index, then delete.
+        MenuItem copyActionItem = new MenuItem("Copy Selected...");
+        copyActionItem.setOnAction(e -> copySelectedImages());
+        MenuItem moveActionItem = new MenuItem("Move...");
+        moveActionItem.setOnAction(e -> moveSelectedImages());
+        MenuItem renameActionItem = new MenuItem("Rename...");
+        renameActionItem.setOnAction(e -> batchRenameImages());
+        MenuItem uploadActionItem = new MenuItem("Upload Selected...");
+        uploadActionItem.setOnAction(e -> uploadSelectedImages());
+        MenuItem reindexActionItem = new MenuItem("Re-index Selected");
+        reindexActionItem.setOnAction(e -> reindexSelectedImages());
+        MenuItem deleteActionItem = new MenuItem("Delete...");
+        deleteActionItem.getStyleClass().add("delete-button");
+        deleteActionItem.setOnAction(e -> deleteSelectedImages());
+        MenuButton fileMenu = new MenuButton("File", null,
+                copyActionItem, moveActionItem, renameActionItem, uploadActionItem, reindexActionItem,
+                new SeparatorMenuItem(), deleteActionItem);
+        fileMenu.setTooltip(new Tooltip("File actions on the selection or full result set: copy, move, rename, upload, re-index, delete." + multiSelectHint));
 
         // Sort control. Default order is date taken (newest first); "Aesthetic
         // (best first)" sorts by the AI aesthetic_score descending.
@@ -174,7 +174,7 @@ public class ResultsPanel extends VBox {
             loadPage(0);
         });
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, renameBtn, uploadSelectedBtn, deleteSelectedBtn, sortLabel, sortByCombo);
+        HBox toolbar = new HBox(10, slideshowBtn, aiMenu, fileMenu, sortLabel, sortByCombo);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -1254,7 +1254,7 @@ public class ResultsPanel extends VBox {
      * Analyze images in a background thread with progress dialog.
      */
     private void analyzeImagesInBackground(List<ImageMetadata> images) {
-        analyzeSelectedBtn.setDisable(true);
+        analyzeActionItem.setDisable(true);
         updateStatus("Analyzing " + images.size() + " image(s)...");
 
         // Create progress dialog
@@ -1407,7 +1407,7 @@ public class ResultsPanel extends VBox {
 
             Platform.runLater(() -> {
                 progressStage.close();
-                analyzeSelectedBtn.setDisable(false);
+                analyzeActionItem.setDisable(false);
 
                 String summary;
                 if (wasCancelled) {
