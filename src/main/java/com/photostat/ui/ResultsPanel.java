@@ -11,6 +11,7 @@ import com.photostat.services.LumaService;
 import com.photostat.services.RcloneService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
+import org.opensearch.client.opensearch._types.SortOrder;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -64,6 +65,9 @@ public class ResultsPanel extends VBox {
 
     private String currentQuery = "";
     private Map<String, Object> currentFilters;
+    // Result ordering. Null sort field = default (date taken, newest first).
+    private String currentSortField = null;
+    private SortOrder currentSortOrder = null;
     private long totalResults = 0;
 
     private Consumer<ImageMetadata> selectionCallback;
@@ -150,7 +154,27 @@ public class ResultsPanel extends VBox {
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, renameBtn, uploadSelectedBtn, deleteSelectedBtn);
+        // Sort control. Default order is date taken (newest first); "Aesthetic
+        // (best first)" sorts by the AI aesthetic_score descending.
+        Label sortLabel = new Label("Sort:");
+        ComboBox<String> sortByCombo = new ComboBox<>();
+        sortByCombo.getItems().addAll("Date (newest)", "Aesthetic (best first)");
+        sortByCombo.setValue("Date (newest)");
+        sortByCombo.setTooltip(new Tooltip("Order results. Aesthetic uses the AI quality score (0-100)."));
+        sortByCombo.setOnAction(e -> {
+            if ("Aesthetic (best first)".equals(sortByCombo.getValue())) {
+                currentSortField = "aesthetic_score";
+                currentSortOrder = SortOrder.Desc;
+            } else {
+                currentSortField = null;
+                currentSortOrder = null;
+            }
+            // Re-run the current search from page 1 with the new ordering.
+            pagination.setCurrentPageIndex(0);
+            loadPage(0);
+        });
+
+        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, renameBtn, uploadSelectedBtn, deleteSelectedBtn, sortLabel, sortByCombo);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -363,6 +387,17 @@ public class ResultsPanel extends VBox {
             return new SimpleStringProperty(rating.replace('*', '\u2605'));
         });
 
+        // Aesthetic score column (stored 0..1, shown as 0-100 integer)
+        TableColumn<ImageMetadata, String> scoreCol = new TableColumn<>("Score");
+        scoreCol.setPrefWidth(60);
+        scoreCol.setCellValueFactory(cellData -> {
+            Double score = cellData.getValue().getAestheticScore();
+            if (score == null) {
+                return new SimpleStringProperty("");
+            }
+            return new SimpleStringProperty(String.valueOf((int) Math.round(score * 100)));
+        });
+
         // Camera column
         TableColumn<ImageMetadata, String> cameraCol = new TableColumn<>("Camera");
         cameraCol.setPrefWidth(150);
@@ -424,7 +459,7 @@ public class ResultsPanel extends VBox {
         typeCol.setCellValueFactory(new PropertyValueFactory<>("fileType"));
 
         resultsTable.getColumns().addAll(
-                thumbnailCol, filenameCol, ratingCol, cameraCol, dateCol,
+                thumbnailCol, filenameCol, ratingCol, scoreCol, cameraCol, dateCol,
                 isoCol, apertureCol, shutterCol, focalCol, typeCol
         );
     }
@@ -455,7 +490,7 @@ public class ResultsPanel extends VBox {
             try {
                 logger.debug("ResultsPanel", "Calling openSearchService.search...");
                 OpenSearchService.SearchResult result = openSearchService.search(
-                        currentQuery, currentFilters, from, pageSize);
+                        currentQuery, currentFilters, from, pageSize, currentSortField, currentSortOrder);
                 logger.debug("ResultsPanel", "Search completed, got " + result.getResults().size() + " results");
 
                 Platform.runLater(() -> {

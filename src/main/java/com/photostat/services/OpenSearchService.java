@@ -367,9 +367,21 @@ public class OpenSearchService {
     }
 
     /**
-     * Search for images with optional filters and text query.
+     * Search for images with optional filters and text query (default sort:
+     * date taken, newest first).
      */
     public SearchResult search(String queryText, Map<String, Object> filters, int from, int size) throws IOException {
+        return search(queryText, filters, from, size, null, null);
+    }
+
+    /**
+     * Search with an explicit sort. When {@code sortField} is null, results are
+     * sorted by date taken descending (the historical default). Docs missing the
+     * sort field are placed last (OpenSearch default), so unscored photos sink to
+     * the bottom when sorting by aesthetic_score.
+     */
+    public SearchResult search(String queryText, Map<String, Object> filters, int from, int size,
+                               String sortField, SortOrder sortOrder) throws IOException {
         String indexName = configService.getIndexName();
         logger.debug("OpenSearchService", "Search called - query: '" + queryText + "', from: " + from + ", size: " + size);
         logger.debug("OpenSearchService", "Filters: " + (filters != null ? filters.toString() : "none"));
@@ -394,8 +406,16 @@ public class OpenSearchService {
                 .index(indexName)
                 .query(Query.of(q -> q.bool(boolQuery.build())))
                 .from(from)
-                .size(size)
-                .sort(s -> s.field(f -> f.field("date_taken").order(SortOrder.Desc)));
+                .size(size);
+
+        // Sort: explicit field if requested, otherwise newest-first by date taken.
+        if (sortField != null && !sortField.isEmpty()) {
+            final String sf = sortField;
+            final SortOrder so = (sortOrder != null) ? sortOrder : SortOrder.Desc;
+            searchBuilder.sort(s -> s.field(f -> f.field(sf).order(so)));
+        } else {
+            searchBuilder.sort(s -> s.field(f -> f.field("date_taken").order(SortOrder.Desc)));
+        }
 
         // Add aggregations for facets
         searchBuilder.aggregations("camera_make", Aggregation.of(a -> a.terms(t -> t.field("camera_make").size(20))));
@@ -420,6 +440,17 @@ public class OpenSearchService {
                 new AggregationRange.Builder().key("ISO 3200+").from("3200").build()
         );
         searchBuilder.aggregations("iso_ranges", Aggregation.of(a -> a.range(r -> r.field("iso").ranges(isoRanges))));
+
+        // Aesthetic score range aggregation. Stored field is 0..1; bucket labels
+        // are 0..100 to match what the user sees in the UI.
+        List<AggregationRange> aestheticRanges = Arrays.asList(
+                new AggregationRange.Builder().key("90-100").from("0.9").build(),
+                new AggregationRange.Builder().key("80-90").from("0.8").to("0.9").build(),
+                new AggregationRange.Builder().key("70-80").from("0.7").to("0.8").build(),
+                new AggregationRange.Builder().key("60-70").from("0.6").to("0.7").build(),
+                new AggregationRange.Builder().key("0-60").to("0.6").build()
+        );
+        searchBuilder.aggregations("aesthetic_ranges", Aggregation.of(a -> a.range(r -> r.field("aesthetic_score").ranges(aestheticRanges))));
 
         // Year aggregation
         searchBuilder.aggregations("year", Aggregation.of(a -> a.dateHistogram(dh -> dh

@@ -52,6 +52,7 @@ public class SearchPanel extends VBox {
     private MultiSelectAutoComplete placeSelect;
     private MultiSelectAutoComplete tagsSelect;
     private ComboBox<String> ratingCombo;
+    private Spinner<Integer> aestheticMinSpinner;
 
     // Store original items for autocomplete filtering
     private Map<ComboBox<String>, List<String>> originalItems = new HashMap<>();
@@ -262,6 +263,17 @@ public class SearchPanel extends VBox {
         setupAutoComplete(ratingCombo);
         customGrid.add(ratingCombo, 1, 3);
 
+        // Minimum aesthetic score (0-100, shown to the user; stored as 0..1).
+        // 0 means "no minimum" (filter disabled).
+        customGrid.add(new Label("Min Score:"), 0, 4);
+        aestheticMinSpinner = new Spinner<>(0, 100, 0, 5);
+        aestheticMinSpinner.setEditable(true);
+        aestheticMinSpinner.setPrefWidth(150);
+        aestheticMinSpinner.setTooltip(new Tooltip(
+                "Minimum aesthetic/quality score 0-100 (0 = no minimum).\n" +
+                "Populate scores with: java -jar photostat.jar --score-aesthetics"));
+        customGrid.add(aestheticMinSpinner, 1, 4);
+
         customPane.setContent(customGrid);
 
         // Buttons
@@ -444,6 +456,12 @@ public class SearchPanel extends VBox {
             filters.put("rating", rating.trim());
         }
 
+        // Aesthetic score: UI is 0-100, stored field is 0..1. 0 = no filter.
+        Integer minScore = aestheticMinSpinner.getValue();
+        if (minScore != null && minScore > 0) {
+            filters.put("aesthetic_score_min", minScore / 100.0);
+        }
+
         return filters;
     }
 
@@ -481,6 +499,7 @@ public class SearchPanel extends VBox {
         tagsSelect.clear();
         ratingCombo.getEditor().clear();
         ratingCombo.setValue(null);
+        aestheticMinSpinner.getValueFactory().setValue(0);
 
         // Restore full item lists after clearing
         for (ComboBox<String> combo : originalItems.keySet()) {
@@ -562,6 +581,15 @@ public class SearchPanel extends VBox {
                 break;
             case "rating":
                 ratingCombo.getEditor().setText(value);
+                break;
+            case "aesthetic":
+                // Range bucket label like "80-90", "90-100", or "0-60".
+                // We have a single min-score control, so set it to the bucket's
+                // lower bound (show everything at least that good).
+                try {
+                    String lower = value.contains("-") ? value.split("-")[0].trim() : value.trim();
+                    aestheticMinSpinner.getValueFactory().setValue(Integer.parseInt(lower));
+                } catch (Exception ignored) {}
                 break;
             case "on_this_day":
                 // Encoded as "MM-dd" or "MM-dd:N"

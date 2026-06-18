@@ -48,6 +48,7 @@ public class DetailPanel extends VBox {
     private TextField placeField;
     private TextField tagsField;
     private TextField ratingField;
+    private Label aestheticScoreValue;
     private Button saveMetadataButton;
     private Button copyMetadataButton;
     private Button pasteMetadataButton;
@@ -273,6 +274,15 @@ public class DetailPanel extends VBox {
         }));
         grid.add(ratingLabel, 0, row);
         grid.add(ratingField, 1, row++);
+
+        // Aesthetic score (read-only, AI-generated). Shown 0-100; blank if unscored.
+        Label aestheticLabel = new Label("Aesthetic:");
+        aestheticLabel.setStyle("-fx-font-weight: bold;");
+        aestheticScoreValue = new Label("");
+        aestheticScoreValue.setTooltip(new Tooltip(
+                "AI quality score 0-100 (read-only). Set via --score-aesthetics."));
+        grid.add(aestheticLabel, 0, row);
+        grid.add(aestheticScoreValue, 1, row++);
 
         // Buttons
         saveMetadataButton = new Button("Save");
@@ -514,6 +524,8 @@ public class DetailPanel extends VBox {
         placeField.setText(metadata.getPlace() != null ? metadata.getPlace() : "");
         tagsField.setText(metadata.getTagsString());
         ratingField.setText(metadata.getRating() != null ? metadata.getRating() : "");
+        Double score = metadata.getAestheticScore();
+        aestheticScoreValue.setText(score != null ? String.valueOf((int) Math.round(score * 100)) : "");
     }
 
     private void loadPreviewImage(String filePath) {
@@ -678,6 +690,7 @@ public class DetailPanel extends VBox {
         placeField.clear();
         tagsField.clear();
         ratingField.clear();
+        aestheticScoreValue.setText("");
         saveMetadataButton.setDisable(true);
         copyMetadataButton.setDisable(true);
         pasteMetadataButton.setDisable(true);
@@ -822,6 +835,7 @@ public class DetailPanel extends VBox {
         placeField.clear();
         tagsField.clear();
         ratingField.clear();
+        aestheticScoreValue.setText("");
     }
 
     private void openInMaps(double lat, double lon) {
