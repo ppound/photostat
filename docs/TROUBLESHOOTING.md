@@ -64,7 +64,7 @@ java -version
 
 **Solution:** Use the `-executable.jar` file which includes JavaFX:
 ```bash
-java -jar photostat-java-2.4.0-executable.jar
+java -jar photostat-java-2.4.1-executable.jar
 ```
 
 ### Error on Intel Mac: "no suitable pipeline found" or graphics errors
@@ -74,7 +74,7 @@ java -jar photostat-java-2.4.0-executable.jar
 **Solution:** Download the Intel Mac JAR instead:
 
 ```bash
-java -jar photostat-java-2.4.0-executable-mac-intel.jar
+java -jar photostat-java-2.4.1-executable-mac-intel.jar
 ```
 
 This JAR is built with `mvn package -Pmac-intel` and includes Intel Mac JavaFX natives alongside Windows and Linux natives.
@@ -87,7 +87,7 @@ If the Intel Mac JAR is not available for your version, you can download the Jav
 ```bash
 java --module-path /path/to/javafx-sdk-21/lib \
      --add-modules javafx.controls,javafx.fxml,javafx.swing \
-     -jar photostat-java-2.4.0-executable.jar
+     -jar photostat-java-2.4.1-executable.jar
 ```
 
 ---
@@ -381,7 +381,7 @@ You should see `Applied providers: ['CUDAExecutionProvider', 'CPUExecutionProvid
 - Confirm GPU is actually being used with the diagnostic command above
 - Use the CLI with parallel workers for large collections:
   ```bash
-  java -jar photostat-java-2.4.0-executable.jar --detect-faces --parallel 4
+  java -jar photostat-java-2.4.1-executable.jar --detect-faces --parallel 4
   ```
 - The InsightFace model (~350MB) downloads on first run — subsequent runs are faster
 
