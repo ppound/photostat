@@ -227,6 +227,54 @@ public class AestheticService {
         return scored;
     }
 
+    /**
+     * Score images already in hand (e.g. the current selection), writing the
+     * score onto each {@link ImageMetadata} object <em>and</em> back to OpenSearch.
+     * Mutating the provided objects lets the caller refresh its table without a
+     * re-fetch.
+     *
+     * @param images   images to score (their file_path must be readable on disk)
+     * @param force    if false, images that already have a score are skipped
+     * @param progress optional (processed, total) callback; may be null
+     * @return number of images successfully scored
+     */
+    public int scoreImages(List<ImageMetadata> images, boolean force,
+                           BiConsumer<Integer, Integer> progress) throws IOException {
+        String metric = configService.getAestheticMetric();
+        int total = images.size();
+        int processed = 0;
+        int scored = 0;
+
+        Map<String, byte[]> batchBytes = new LinkedHashMap<>();
+        Map<String, ImageMetadata> batchDocs = new LinkedHashMap<>();
+        final int batchSize = 16;
+
+        for (ImageMetadata doc : images) {
+            processed++;
+            try {
+                if (doc.getFilePath() == null
+                        || (!force && doc.getAestheticScore() != null)) {
+                    if (progress != null) progress.accept(processed, total);
+                    continue;
+                }
+                byte[] bytes = downsampleToJpeg(new File(doc.getFilePath()));
+                if (bytes != null) {
+                    batchBytes.put(doc.getFilePath(), bytes);
+                    batchDocs.put(doc.getFilePath(), doc);
+                }
+            } catch (Exception e) {
+                logger.warn("AestheticService", "Skipping " + doc.getFilePath() + ": " + e.getMessage());
+            }
+
+            if (batchBytes.size() >= batchSize) {
+                scored += flushBatch(batchBytes, batchDocs, metric);
+            }
+            if (progress != null) progress.accept(processed, total);
+        }
+        scored += flushBatch(batchBytes, batchDocs, metric);
+        return scored;
+    }
+
     /** Score the pending batch, write scores onto the docs, and bulk-update OpenSearch. */
     private int flushBatch(Map<String, byte[]> batchBytes, Map<String, ImageMetadata> batchDocs,
                            String metric) throws IOException {

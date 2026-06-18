@@ -1,6 +1,7 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.AestheticService;
 import com.photostat.services.ConfigService;
 import com.photostat.services.FileOperationsService;
 import com.photostat.services.ImageAnalysisService;
@@ -57,6 +58,7 @@ public class ResultsPanel extends VBox {
     private final RcloneService rcloneService;
     private final SidecarService sidecarService;
     private final IndexerService indexerService;
+    private final AestheticService aestheticService;
     private final LoggingService logger;
 
     private TableView<ImageMetadata> resultsTable;
@@ -77,6 +79,7 @@ public class ResultsPanel extends VBox {
     private BiConsumer<String, String> chipClickCallback;
 
     private MenuItem analyzeActionItem;
+    private MenuItem scoreActionItem;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -89,6 +92,7 @@ public class ResultsPanel extends VBox {
         this.rcloneService = RcloneService.getInstance();
         this.sidecarService = SidecarService.getInstance();
         this.indexerService = IndexerService.getInstance();
+        this.aestheticService = AestheticService.getInstance();
         this.logger = LoggingService.getInstance();
 
         initializeUI();
@@ -132,8 +136,11 @@ public class ResultsPanel extends VBox {
         analyzeActionItem.setOnAction(e -> analyzeSelectedImages());
         MenuItem generateActionItem = new MenuItem("Generate Image with Luma");
         generateActionItem.setOnAction(e -> generateFromSelectedImages());
-        MenuButton aiMenu = new MenuButton("AI", null, analyzeActionItem, generateActionItem);
-        aiMenu.setTooltip(new Tooltip("AI actions on the selection: analyze metadata, or generate a new image with Luma." + multiSelectHint));
+        scoreActionItem = new MenuItem("Score Selected (aesthetic)");
+        scoreActionItem.setOnAction(e -> scoreSelectedImages());
+        MenuButton aiMenu = new MenuButton("AI", null,
+                analyzeActionItem, generateActionItem, new SeparatorMenuItem(), scoreActionItem);
+        aiMenu.setTooltip(new Tooltip("AI actions on the selection: analyze metadata, generate a new image with Luma, or score aesthetic quality." + multiSelectHint));
 
         // File menu: copy / move / rename / upload / re-index, then delete.
         MenuItem copyActionItem = new MenuItem("Copy Selected...");
@@ -1446,6 +1453,80 @@ public class ResultsPanel extends VBox {
                 }
             });
         }).start();
+    }
+
+    /**
+     * Score the selected images for aesthetic quality via the Docker backend.
+     * Explicit selection = rescore even if already scored. Writes aesthetic_score
+     * to OpenSearch and updates the in-memory rows so the Score column refreshes.
+     */
+    private void scoreSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to score.");
+            return;
+        }
+
+        // Filter to formats the aesthetic backend can decode.
+        List<ImageMetadata> supported = selected.stream()
+                .filter(m -> {
+                    String p = m.getFilePath().toLowerCase();
+                    return p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".png")
+                            || p.endsWith(".webp") || p.endsWith(".bmp") || p.endsWith(".tiff")
+                            || p.endsWith(".tif") || p.endsWith(".gif");
+                })
+                .collect(Collectors.toList());
+
+        if (supported.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Supported Images",
+                    "None of the selected images are in a supported format (JPG, PNG, WebP, BMP, TIFF, GIF).");
+            return;
+        }
+
+        scoreImagesInBackground(supported);
+    }
+
+    private void scoreImagesInBackground(List<ImageMetadata> images) {
+        scoreActionItem.setDisable(true);
+        updateStatus("Scoring " + images.size() + " image(s)...");
+
+        new Thread(() -> {
+            try {
+                if (!aestheticService.isAvailable()) {
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "Aesthetic Backend Unavailable",
+                                "The aesthetic scoring service is not reachable at "
+                                        + configService.getAestheticEndpoint()
+                                        + ".\nStart the Docker backend (port 8003) and try again.");
+                        updateStatus("Scoring failed: backend unavailable");
+                        scoreActionItem.setDisable(false);
+                    });
+                    return;
+                }
+
+                // Explicit selection: force = true so re-selecting rescoring works.
+                int scored = aestheticService.scoreImages(images, true,
+                        (processed, total) -> Platform.runLater(() ->
+                                updateStatus("Scoring " + processed + " / " + total + "...")));
+
+                Platform.runLater(() -> {
+                    updateStatus("Scored " + scored + " image(s).");
+                    refreshTableDisplay();
+                    ImageMetadata selected = resultsTable.getSelectionModel().getSelectedItem();
+                    if (selected != null && selectionCallback != null) {
+                        selectionCallback.accept(selected);
+                    }
+                    scoreActionItem.setDisable(false);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    updateStatus("Scoring failed: " + ex.getMessage());
+                    showAlert(Alert.AlertType.ERROR, "Scoring Failed",
+                            ex.getMessage() != null ? ex.getMessage() : "Unknown error");
+                    scoreActionItem.setDisable(false);
+                });
+            }
+        }, "score-selected").start();
     }
 
     /**
