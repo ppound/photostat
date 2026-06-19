@@ -1,6 +1,7 @@
 package com.photostat.ui;
 
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.AestheticService;
 import com.photostat.services.ConfigService;
 import com.photostat.services.FileOperationsService;
 import com.photostat.services.ImageAnalysisService;
@@ -11,6 +12,7 @@ import com.photostat.services.LumaService;
 import com.photostat.services.RcloneService;
 import com.photostat.services.SidecarService;
 import com.photostat.services.ThumbnailService;
+import org.opensearch.client.opensearch._types.SortOrder;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -56,6 +58,7 @@ public class ResultsPanel extends VBox {
     private final RcloneService rcloneService;
     private final SidecarService sidecarService;
     private final IndexerService indexerService;
+    private final AestheticService aestheticService;
     private final LoggingService logger;
 
     private TableView<ImageMetadata> resultsTable;
@@ -64,6 +67,9 @@ public class ResultsPanel extends VBox {
 
     private String currentQuery = "";
     private Map<String, Object> currentFilters;
+    // Result ordering. Null sort field = default (date taken, newest first).
+    private String currentSortField = null;
+    private SortOrder currentSortOrder = null;
     private long totalResults = 0;
 
     private Consumer<ImageMetadata> selectionCallback;
@@ -72,7 +78,8 @@ public class ResultsPanel extends VBox {
     private Consumer<ImageMetadata> ratingChangedCallback;
     private BiConsumer<String, String> chipClickCallback;
 
-    private Button analyzeSelectedBtn;
+    private MenuItem analyzeActionItem;
+    private MenuItem scoreActionItem;
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -85,6 +92,7 @@ public class ResultsPanel extends VBox {
         this.rcloneService = RcloneService.getInstance();
         this.sidecarService = SidecarService.getInstance();
         this.indexerService = IndexerService.getInstance();
+        this.aestheticService = AestheticService.getInstance();
         this.logger = LoggingService.getInstance();
 
         initializeUI();
@@ -116,41 +124,74 @@ public class ResultsPanel extends VBox {
 
         String multiSelectHint = "\n\nCtrl+Click to select multiple, Shift+Click to select a range.";
 
-        // Toolbar for bulk operations
-        analyzeSelectedBtn = new Button("Analyze Selected");
-        analyzeSelectedBtn.setOnAction(e -> analyzeSelectedImages());
-        analyzeSelectedBtn.setTooltip(new Tooltip("Analyze selected images with AI to populate tags, persons, place, and rating." + multiSelectHint));
-
-        Button copySelectedBtn = new Button("Copy Selected...");
-        copySelectedBtn.setOnAction(e -> copySelectedImages());
-        copySelectedBtn.setTooltip(new Tooltip("Copy selected images to another directory." + multiSelectHint));
-
-        Button moveSelectedBtn = new Button("Move...");
-        moveSelectedBtn.setOnAction(e -> moveSelectedImages());
-        moveSelectedBtn.setTooltip(new Tooltip("Move images to another directory and update the index. Operates on the current selection or full result set." + multiSelectHint));
-
-        Button renameBtn = new Button("Rename...");
-        renameBtn.setOnAction(e -> batchRenameImages());
-        renameBtn.setTooltip(new Tooltip("Find/replace in filenames across the current selection or full result set." + multiSelectHint));
-
-        Button deleteSelectedBtn = new Button("Delete...");
-        deleteSelectedBtn.getStyleClass().add("delete-button");
-        deleteSelectedBtn.setOnAction(e -> deleteSelectedImages());
-        deleteSelectedBtn.setTooltip(new Tooltip("Permanently delete images from disk and remove from index. Operates on the current selection or full result set." + multiSelectHint));
-
-        Button uploadSelectedBtn = new Button("Upload Selected...");
-        uploadSelectedBtn.setOnAction(e -> uploadSelectedImages());
-        uploadSelectedBtn.setTooltip(new Tooltip("Upload selected images to a cloud remote via rclone. Already-uploaded files can be skipped." + multiSelectHint));
-
-        Button generateImageBtn = new Button("Generate Image");
-        generateImageBtn.setOnAction(e -> generateFromSelectedImages());
-        generateImageBtn.setTooltip(new Tooltip("Generate a new image with Luma AI using selected images as reference." + multiSelectHint));
-
+        // Toolbar for bulk operations. Actions are grouped into two dropdown
+        // menus to keep the bar readable; Slideshow and Sort stay visible.
         Button slideshowBtn = new Button("Slideshow");
         slideshowBtn.setOnAction(e -> launchSlideshow());
         slideshowBtn.setTooltip(new Tooltip("Full-screen slideshow starting from the selected image (F5).\nUse arrow keys to navigate, 1-5 to rate, 0 to clear rating."));
 
-        HBox toolbar = new HBox(10, slideshowBtn, analyzeSelectedBtn, generateImageBtn, copySelectedBtn, moveSelectedBtn, renameBtn, uploadSelectedBtn, deleteSelectedBtn);
+        // AI menu: analyze + generate. analyzeActionItem is a field because it's
+        // disabled while an analysis run is in progress.
+        analyzeActionItem = new MenuItem("Analyze Selected");
+        analyzeActionItem.setOnAction(e -> analyzeSelectedImages());
+        MenuItem generateActionItem = new MenuItem("Generate Image with Luma");
+        generateActionItem.setOnAction(e -> generateFromSelectedImages());
+        scoreActionItem = new MenuItem("Score Selected (aesthetic)");
+        scoreActionItem.setOnAction(e -> scoreSelectedImages());
+        MenuButton aiMenu = new MenuButton("AI", null,
+                analyzeActionItem, generateActionItem, new SeparatorMenuItem(), scoreActionItem);
+        aiMenu.setTooltip(new Tooltip("AI actions on the selection: analyze metadata, generate a new image with Luma, or score aesthetic quality." + multiSelectHint));
+
+        // File menu: copy / move / rename / upload / re-index, then delete.
+        MenuItem copyActionItem = new MenuItem("Copy Selected...");
+        copyActionItem.setOnAction(e -> copySelectedImages());
+        MenuItem moveActionItem = new MenuItem("Move...");
+        moveActionItem.setOnAction(e -> moveSelectedImages());
+        MenuItem renameActionItem = new MenuItem("Rename...");
+        renameActionItem.setOnAction(e -> batchRenameImages());
+        MenuItem uploadActionItem = new MenuItem("Upload Selected...");
+        uploadActionItem.setOnAction(e -> uploadSelectedImages());
+        MenuItem reindexActionItem = new MenuItem("Re-index Selected");
+        reindexActionItem.setOnAction(e -> reindexSelectedImages());
+        MenuItem deleteActionItem = new MenuItem("Delete...");
+        deleteActionItem.getStyleClass().add("delete-button");
+        deleteActionItem.setOnAction(e -> deleteSelectedImages());
+        MenuButton fileMenu = new MenuButton("File", null,
+                copyActionItem, moveActionItem, renameActionItem, uploadActionItem, reindexActionItem,
+                new SeparatorMenuItem(), deleteActionItem);
+        fileMenu.setTooltip(new Tooltip("File actions on the selection or full result set: copy, move, rename, upload, re-index, delete." + multiSelectHint));
+
+        // Sort controls: a field selector plus a direction toggle. Default is
+        // date taken, newest first. Ascending surfaces the lowest-rated/scored
+        // first (handy for culling); docs missing the sort field sort last in
+        // either direction.
+        Label sortLabel = new Label("Sort:");
+        ComboBox<String> sortFieldCombo = new ComboBox<>();
+        sortFieldCombo.getItems().addAll("Date taken", "Aesthetic score", "Rating");
+        sortFieldCombo.setValue("Date taken");
+        sortFieldCombo.setTooltip(new Tooltip("Field to sort results by. Rating/Aesthetic ascending shows the lowest first."));
+
+        ToggleButton sortDirToggle = new ToggleButton("↓"); // ↓ = descending (default)
+        sortDirToggle.setTooltip(new Tooltip(
+                "Toggle direction.\nDescending (↓): highest / newest first.\nAscending (↑): lowest / oldest first."));
+
+        Runnable applySort = () -> {
+            switch (sortFieldCombo.getValue()) {
+                case "Aesthetic score" -> currentSortField = "aesthetic_score";
+                case "Rating" -> currentSortField = "rating";
+                default -> currentSortField = "date_taken";
+            }
+            boolean asc = sortDirToggle.isSelected();
+            sortDirToggle.setText(asc ? "↑" : "↓");
+            currentSortOrder = asc ? SortOrder.Asc : SortOrder.Desc;
+            // Re-run the current search from page 1 with the new ordering.
+            pagination.setCurrentPageIndex(0);
+            loadPage(0);
+        };
+        sortFieldCombo.setOnAction(e -> applySort.run());
+        sortDirToggle.setOnAction(e -> applySort.run());
+
+        HBox toolbar = new HBox(10, slideshowBtn, aiMenu, fileMenu, sortLabel, sortFieldCombo, sortDirToggle);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
@@ -363,6 +404,17 @@ public class ResultsPanel extends VBox {
             return new SimpleStringProperty(rating.replace('*', '\u2605'));
         });
 
+        // Aesthetic score column (stored 0..1, shown as 0-100 integer)
+        TableColumn<ImageMetadata, String> scoreCol = new TableColumn<>("Score");
+        scoreCol.setPrefWidth(60);
+        scoreCol.setCellValueFactory(cellData -> {
+            Double score = cellData.getValue().getAestheticScore();
+            if (score == null) {
+                return new SimpleStringProperty("");
+            }
+            return new SimpleStringProperty(String.valueOf((int) Math.round(score * 100)));
+        });
+
         // Camera column
         TableColumn<ImageMetadata, String> cameraCol = new TableColumn<>("Camera");
         cameraCol.setPrefWidth(150);
@@ -424,7 +476,7 @@ public class ResultsPanel extends VBox {
         typeCol.setCellValueFactory(new PropertyValueFactory<>("fileType"));
 
         resultsTable.getColumns().addAll(
-                thumbnailCol, filenameCol, ratingCol, cameraCol, dateCol,
+                thumbnailCol, filenameCol, ratingCol, scoreCol, cameraCol, dateCol,
                 isoCol, apertureCol, shutterCol, focalCol, typeCol
         );
     }
@@ -455,7 +507,7 @@ public class ResultsPanel extends VBox {
             try {
                 logger.debug("ResultsPanel", "Calling openSearchService.search...");
                 OpenSearchService.SearchResult result = openSearchService.search(
-                        currentQuery, currentFilters, from, pageSize);
+                        currentQuery, currentFilters, from, pageSize, currentSortField, currentSortOrder);
                 logger.debug("ResultsPanel", "Search completed, got " + result.getResults().size() + " results");
 
                 Platform.runLater(() -> {
@@ -1219,7 +1271,7 @@ public class ResultsPanel extends VBox {
      * Analyze images in a background thread with progress dialog.
      */
     private void analyzeImagesInBackground(List<ImageMetadata> images) {
-        analyzeSelectedBtn.setDisable(true);
+        analyzeActionItem.setDisable(true);
         updateStatus("Analyzing " + images.size() + " image(s)...");
 
         // Create progress dialog
@@ -1372,7 +1424,7 @@ public class ResultsPanel extends VBox {
 
             Platform.runLater(() -> {
                 progressStage.close();
-                analyzeSelectedBtn.setDisable(false);
+                analyzeActionItem.setDisable(false);
 
                 String summary;
                 if (wasCancelled) {
@@ -1411,6 +1463,80 @@ public class ResultsPanel extends VBox {
                 }
             });
         }).start();
+    }
+
+    /**
+     * Score the selected images for aesthetic quality via the Docker backend.
+     * Explicit selection = rescore even if already scored. Writes aesthetic_score
+     * to OpenSearch and updates the in-memory rows so the Score column refreshes.
+     */
+    private void scoreSelectedImages() {
+        List<ImageMetadata> selected = new ArrayList<>(resultsTable.getSelectionModel().getSelectedItems());
+        if (selected.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Selection", "Please select one or more images to score.");
+            return;
+        }
+
+        // Filter to formats the aesthetic backend can decode.
+        List<ImageMetadata> supported = selected.stream()
+                .filter(m -> {
+                    String p = m.getFilePath().toLowerCase();
+                    return p.endsWith(".jpg") || p.endsWith(".jpeg") || p.endsWith(".png")
+                            || p.endsWith(".webp") || p.endsWith(".bmp") || p.endsWith(".tiff")
+                            || p.endsWith(".tif") || p.endsWith(".gif");
+                })
+                .collect(Collectors.toList());
+
+        if (supported.isEmpty()) {
+            showAlert(Alert.AlertType.WARNING, "No Supported Images",
+                    "None of the selected images are in a supported format (JPG, PNG, WebP, BMP, TIFF, GIF).");
+            return;
+        }
+
+        scoreImagesInBackground(supported);
+    }
+
+    private void scoreImagesInBackground(List<ImageMetadata> images) {
+        scoreActionItem.setDisable(true);
+        updateStatus("Scoring " + images.size() + " image(s)...");
+
+        new Thread(() -> {
+            try {
+                if (!aestheticService.isAvailable()) {
+                    Platform.runLater(() -> {
+                        showAlert(Alert.AlertType.ERROR, "Aesthetic Backend Unavailable",
+                                "The aesthetic scoring service is not reachable at "
+                                        + configService.getAestheticEndpoint()
+                                        + ".\nStart the Docker backend (port 8003) and try again.");
+                        updateStatus("Scoring failed: backend unavailable");
+                        scoreActionItem.setDisable(false);
+                    });
+                    return;
+                }
+
+                // Explicit selection: force = true so re-selecting rescoring works.
+                int scored = aestheticService.scoreImages(images, true,
+                        (processed, total) -> Platform.runLater(() ->
+                                updateStatus("Scoring " + processed + " / " + total + "...")));
+
+                Platform.runLater(() -> {
+                    updateStatus("Scored " + scored + " image(s).");
+                    refreshTableDisplay();
+                    ImageMetadata selected = resultsTable.getSelectionModel().getSelectedItem();
+                    if (selected != null && selectionCallback != null) {
+                        selectionCallback.accept(selected);
+                    }
+                    scoreActionItem.setDisable(false);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    updateStatus("Scoring failed: " + ex.getMessage());
+                    showAlert(Alert.AlertType.ERROR, "Scoring Failed",
+                            ex.getMessage() != null ? ex.getMessage() : "Unknown error");
+                    scoreActionItem.setDisable(false);
+                });
+            }
+        }, "score-selected").start();
     }
 
     /**

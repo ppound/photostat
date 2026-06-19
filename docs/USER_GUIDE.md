@@ -14,6 +14,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 - [Adding Custom Metadata](#adding-custom-metadata)
 - [Slideshow Mode](#slideshow-mode)
 - [AI Image Generation](#ai-image-generation)
+- [Aesthetic Scoring](#aesthetic-scoring)
 - [Managing Files](#managing-files)
 - [Finding Duplicates](#finding-duplicates)
 - [Face Recognition](#face-recognition)
@@ -170,6 +171,7 @@ The completion summary reports the orphan count (when greater than zero) alongsi
    | Place | Multi-select with chips - filter by location |
    | Tags | Multi-select with chips - filter by custom tags |
    | Rating | Filter by quality rating with autocomplete |
+   | Min Score | Minimum aesthetic score 0–100 (0 = no minimum) — see [Aesthetic Scoring](#aesthetic-scoring) |
 
    **Autocomplete**: Camera, lens, and rating fields support type-ahead filtering - start typing to narrow down options.
 
@@ -182,11 +184,14 @@ The completion summary reports the orphan count (when greater than zero) alongsi
 5. Results appear in the table below with:
    - Thumbnail preview
    - Filename
+   - Rating and aesthetic Score
    - Camera info
    - Date taken
    - Exposure settings
 
    ![Search Results](screenshots/search-results.png)
+
+6. **Sorting**: Use the **Sort** dropdown above the results to order by **Date taken**, **Aesthetic score**, or **Rating**, and the direction toggle (↓/↑) to switch between highest/newest first and lowest/oldest first. Photos missing the chosen field sort last. Sorting **Aesthetic score** or **Rating** ascending is a quick way to surface the weakest images for culling.
 
 ---
 
@@ -379,6 +384,35 @@ PhotoStat can generate new images from your photos using Luma AI. Select referen
 Generation typically takes 10-30 seconds. A preview is shown when complete.
 
 > See [AI Analysis - Image Generation](AI_ANALYSIS.md#ai-image-generation-luma) for full setup details, reference type explanations, and troubleshooting.
+
+---
+
+## Aesthetic Scoring
+
+PhotoStat can score photos for aesthetic/perceptual quality (0–100) using a
+local, free model that runs in a Docker container — handy for finding your best
+shots and culling weak ones. The score is stored separately from your manual
+star rating and never overwrites it.
+
+**Prerequisites:** Start the `aesthetic` Docker backend (port 8003) and confirm
+it in **Settings → AI Analysis → Aesthetic Scoring** with **Test Connection**.
+See [Docker Backends](../docker/README.md).
+
+**Three ways to score** (incremental — already-scored photos are skipped unless
+you force a rescore):
+
+- **Bulk** — **Index** tab → **Score Photos (aesthetic)…** scores your whole
+  indexed library with a progress bar.
+- **Selection** — select images in search results, then **AI ▾ → Score Selected
+  (aesthetic)** in the toolbar.
+- **CLI** — `--score-aesthetics` (see below).
+
+**Using scores:** a **Score** column appears in results, the **Sort** dropdown
+gains **Aesthetic score**, the search panel has a **Min Score** filter, and the
+facets panel has an **Aesthetic Score** band. To cull, sort by Aesthetic score
+ascending and delete the weakest via **File ▾ → Delete**.
+
+> Full details, metric options, and troubleshooting: [Aesthetic Scoring](AESTHETIC_SCORING.md).
 
 ---
 

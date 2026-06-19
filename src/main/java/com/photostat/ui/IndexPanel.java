@@ -1,5 +1,6 @@
 package com.photostat.ui;
 
+import com.photostat.services.AestheticService;
 import com.photostat.services.ConfigService;
 import com.photostat.services.ExifService;
 import com.photostat.services.IndexerService;
@@ -13,6 +14,7 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,6 +31,7 @@ public class IndexPanel extends BorderPane {
     private final ExifService exifService;
     private final OpenSearchService openSearchService;
     private final SidecarService sidecarService;
+    private final AestheticService aestheticService;
 
     private ListView<String> directoryList;
     private ProgressBar progressBar;
@@ -38,6 +41,11 @@ public class IndexPanel extends BorderPane {
     private Button stopButton;
     private Button reindexButton;
     private Button convertSidecarsButton;
+    private Button scorePhotosButton;
+
+    // Image formats the aesthetic backend (Pillow) can decode.
+    private static final String[] SCORABLE_EXTENSIONS =
+            {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".gif"};
 
     public IndexPanel() {
         this.configService = ConfigService.getInstance();
@@ -45,6 +53,7 @@ public class IndexPanel extends BorderPane {
         this.exifService = ExifService.getInstance();
         this.openSearchService = OpenSearchService.getInstance();
         this.sidecarService = SidecarService.getInstance();
+        this.aestheticService = AestheticService.getInstance();
 
         initializeUI();
         setupCallbacks();
@@ -188,6 +197,14 @@ public class IndexPanel extends BorderPane {
         convertSidecarsButton.setOnAction(e -> convertJsonSidecarsToXmp());
         convertSidecarsButton.setPrefWidth(260);
 
+        scorePhotosButton = new Button("Score Photos (aesthetic)…");
+        scorePhotosButton.setOnAction(e -> scorePhotos());
+        scorePhotosButton.setPrefWidth(260);
+        scorePhotosButton.setTooltip(new Tooltip(
+                "Score indexed photos for aesthetic/quality using the local Docker\n" +
+                "backend (port 8003). Writes the aesthetic_score field; your manual\n" +
+                "ratings are untouched. Incremental: already-scored photos are skipped."));
+
         HBox mainButtons = new HBox(10, startButton, stopButton);
         mainButtons.setAlignment(Pos.CENTER_LEFT);
 
@@ -237,6 +254,7 @@ public class IndexPanel extends BorderPane {
                 mainButtons,
                 reindexButton,
                 convertSidecarsButton,
+                scorePhotosButton,
                 sep,
                 optionsLabel,
                 deleteAllButton,
@@ -661,6 +679,120 @@ public class IndexPanel extends BorderPane {
         }));
 
         Thread thread = new Thread(task, "sidecar-conversion");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Bulk aesthetic scoring of indexed photos via the Docker backend. Confirms
+     * intent (with an optional rescore-all toggle), then runs a background pass
+     * that reuses {@link AestheticService#scoreCollection}.
+     */
+    private void scorePhotos() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Score Photos");
+        confirm.setHeaderText("Score indexed photos for aesthetic quality?");
+
+        Label intro = new Label(
+                "Scores every indexed photo using the local aesthetic backend " +
+                "(Docker, port 8003) and writes the aesthetic_score field. Your " +
+                "manual ratings are not affected. The backend must be running.");
+        intro.setWrapText(true);
+        intro.setMaxWidth(480);
+
+        CheckBox rescoreAll = new CheckBox("Rescore all (ignore existing scores)");
+        rescoreAll.setSelected(false);
+
+        Label note = new Label(
+                "Unchecked, only photos without a score are processed (incremental), " +
+                "so this is safe to re-run after indexing more photos.");
+        note.setWrapText(true);
+        note.setMaxWidth(480);
+        note.setStyle("-fx-text-fill: #666; -fx-font-size: 11px;");
+
+        VBox content = new VBox(10, intro, rescoreAll, note);
+        content.setPadding(new Insets(5, 0, 0, 0));
+        confirm.getDialogPane().setContent(content);
+
+        confirm.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                runScoringTask(rescoreAll.isSelected());
+            }
+        });
+    }
+
+    private void runScoringTask(boolean force) {
+        startButton.setDisable(true);
+        reindexButton.setDisable(true);
+        convertSidecarsButton.setDisable(true);
+        scorePhotosButton.setDisable(true);
+        progressBar.setProgress(0);
+
+        Task<int[]> task = new Task<>() {
+            @Override
+            protected int[] call() throws Exception {
+                if (!openSearchService.isConnected()) {
+                    openSearchService.connect();
+                }
+                if (!aestheticService.isAvailable()) {
+                    throw new IOException("Aesthetic backend not reachable at " +
+                            configService.getAestheticEndpoint() +
+                            ". Start it: docker compose ... up -d aesthetic");
+                }
+
+                updateMessage("Gathering indexed photos…");
+                List<String> paths = new ArrayList<>();
+                for (String p : openSearchService.searchAllFilePaths(1000)) {
+                    String lower = p.toLowerCase();
+                    for (String ext : SCORABLE_EXTENSIONS) {
+                        if (lower.endsWith(ext)) {
+                            paths.add(p);
+                            break;
+                        }
+                    }
+                }
+
+                int total = paths.size();
+                if (total == 0) {
+                    return new int[]{0, 0};
+                }
+
+                int scored = aestheticService.scoreCollection(paths, force, 16,
+                        (processed, t) -> {
+                            updateProgress(processed, t);
+                            updateMessage("Scoring " + processed + " / " + t + "…");
+                        });
+                return new int[]{scored, total};
+            }
+        };
+
+        task.messageProperty().addListener((obs, oldMsg, newMsg) ->
+                Platform.runLater(() -> statusLabel.setText(newMsg)));
+        task.progressProperty().addListener((obs, oldVal, newVal) ->
+                Platform.runLater(() -> progressBar.setProgress(newVal.doubleValue())));
+
+        task.setOnSucceeded(e -> Platform.runLater(() -> {
+            int[] stats = task.getValue();
+            statusLabel.setText(stats[1] == 0
+                    ? "No scorable indexed photos found."
+                    : String.format("Scored %,d of %,d photos.", stats[0], stats[1]));
+            startButton.setDisable(false);
+            reindexButton.setDisable(false);
+            scorePhotosButton.setDisable(false);
+            refreshSidecarConversionState();
+        }));
+
+        task.setOnFailed(e -> Platform.runLater(() -> {
+            Throwable ex = task.getException();
+            statusLabel.setText("Scoring failed: " +
+                    (ex != null ? ex.getMessage() : "unknown error"));
+            startButton.setDisable(false);
+            reindexButton.setDisable(false);
+            scorePhotosButton.setDisable(false);
+            refreshSidecarConversionState();
+        }));
+
+        Thread thread = new Thread(task, "aesthetic-scoring");
         thread.setDaemon(true);
         thread.start();
     }

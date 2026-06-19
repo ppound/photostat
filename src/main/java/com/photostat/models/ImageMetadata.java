@@ -97,6 +97,16 @@ public class ImageMetadata {
     @JsonProperty("rating")
     private String rating;
 
+    // AI-derived aesthetic/quality score (0..1, 1.0 = best). Distinct from the
+    // user-authored "rating" above — this is machine-generated and recomputable,
+    // and is NOT written to sidecars.
+    @JsonProperty("aesthetic_score")
+    private Double aestheticScore;
+
+    // Which IQA metric produced aestheticScore (e.g. "clipiqa+", "nima").
+    @JsonProperty("aesthetic_metric")
+    private String aestheticMetric;
+
     @JsonProperty("content_hash")
     private String contentHash;
 
@@ -373,6 +383,22 @@ public class ImageMetadata {
 
     public void setRating(String rating) {
         this.rating = rating;
+    }
+
+    public Double getAestheticScore() {
+        return aestheticScore;
+    }
+
+    public void setAestheticScore(Double aestheticScore) {
+        this.aestheticScore = aestheticScore;
+    }
+
+    public String getAestheticMetric() {
+        return aestheticMetric;
+    }
+
+    public void setAestheticMetric(String aestheticMetric) {
+        this.aestheticMetric = aestheticMetric;
     }
 
     public String getContentHash() {

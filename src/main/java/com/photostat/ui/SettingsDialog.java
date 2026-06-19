@@ -2,6 +2,7 @@ package com.photostat.ui;
 
 import com.photostat.App;
 import com.photostat.models.ImageMetadata;
+import com.photostat.services.AestheticService;
 import com.photostat.services.ConfigService;
 import com.photostat.services.ImageAnalysisService;
 import com.photostat.services.OpenSearchService;
@@ -87,6 +88,10 @@ public class SettingsDialog extends Dialog<Boolean> {
     private Label moondreamStatusLabel;
     private ComboBox<String> moondreamModeCombo;
     private TextField moondreamEndpointField;
+
+    // Aesthetic / quality scoring settings
+    private TextField aestheticEndpointField;
+    private Label aestheticStatusLabel;
 
     // Analysis prompt
     private TextArea analysisPromptArea;
@@ -722,6 +727,40 @@ public class SettingsDialog extends Dialog<Boolean> {
 
         moondreamSection.setContent(moondreamGrid);
 
+        // Aesthetic / quality scoring section (Docker backend, port 8003)
+        TitledPane aestheticSection = new TitledPane();
+        aestheticSection.setText("Aesthetic Scoring (Local, Docker)");
+        aestheticSection.setCollapsible(false);
+
+        GridPane aestheticGrid = new GridPane();
+        aestheticGrid.setHgap(10);
+        aestheticGrid.setVgap(10);
+        aestheticGrid.setPadding(new Insets(10));
+
+        aestheticGrid.add(new Label("Docker Endpoint:"), 0, 0);
+        aestheticEndpointField = new TextField();
+        aestheticEndpointField.setPromptText("http://localhost:8003");
+        aestheticEndpointField.setPrefWidth(250);
+        aestheticGrid.add(aestheticEndpointField, 1, 0);
+
+        Button testAestheticButton = new Button("Test");
+        aestheticStatusLabel = new Label("");
+        testAestheticButton.setOnAction(e -> testAestheticConnection());
+        HBox aestheticTestBox = new HBox(10, testAestheticButton, aestheticStatusLabel);
+        aestheticGrid.add(aestheticTestBox, 1, 1);
+
+        Label aestheticInfoLabel = new Label(
+            "Free local image-quality scoring (IQA-PyTorch). No API key needed.\n" +
+            "Run the aesthetic container (see docker/README.md) and point the endpoint at it.\n" +
+            "Writes a separate aesthetic_score field — your manual star ratings are left alone.\n" +
+            "Score the library from the CLI: java -jar photostat.jar --score-aesthetics"
+        );
+        aestheticInfoLabel.setWrapText(true);
+        aestheticInfoLabel.getStyleClass().add("info-label-small");
+        aestheticGrid.add(aestheticInfoLabel, 1, 2);
+
+        aestheticSection.setContent(aestheticGrid);
+
         // Cost comparison info
         Label costInfoLabel = new Label(
             "Cost Comparison (approximate per 1000 images):\n" +
@@ -751,7 +790,7 @@ public class SettingsDialog extends Dialog<Boolean> {
         promptContent.getChildren().addAll(analysisPromptArea, resetPromptButton);
         promptSection.setContent(promptContent);
 
-        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, ollamaSection, moondreamSection, new Separator(), costInfoLabel, promptSection);
+        pane.getChildren().addAll(providerGrid, new Separator(), claudeSection, geminiSection, ollamaSection, moondreamSection, aestheticSection, new Separator(), costInfoLabel, promptSection);
 
         // Wrap in ScrollPane for vertical scrolling
         ScrollPane scrollPane = new ScrollPane(pane);
@@ -1326,6 +1365,39 @@ public class SettingsDialog extends Dialog<Boolean> {
         }).start();
     }
 
+    private void testAestheticConnection() {
+        aestheticStatusLabel.setText("Checking...");
+        setStatusStyle(aestheticStatusLabel, "text-muted");
+
+        String endpoint = aestheticEndpointField.getText().trim();
+        if (endpoint.isEmpty()) endpoint = "http://localhost:8003";
+        final String finalEndpoint = endpoint;
+
+        new Thread(() -> {
+            // Temporarily apply the in-dialog endpoint for the check, then restore.
+            String origEndpoint = configService.getAestheticEndpoint();
+            try {
+                configService.setAestheticEndpoint(finalEndpoint);
+
+                AestheticService aestheticService = AestheticService.getInstance();
+                String health = aestheticService.getHealthInfo();
+                boolean gpu = health.replaceAll("\\s+", "").contains("\"device\":\"cuda\"");
+
+                Platform.runLater(() -> {
+                    aestheticStatusLabel.setText("Available - " + (gpu ? "GPU (CUDA)" : "CPU"));
+                    setStatusStyle(aestheticStatusLabel, "text-success");
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    aestheticStatusLabel.setText("Service not reachable at " + finalEndpoint);
+                    setStatusStyle(aestheticStatusLabel, "text-error");
+                });
+            } finally {
+                configService.setAestheticEndpoint(origEndpoint);
+            }
+        }).start();
+    }
+
     private void setStatusStyle(Label label, String styleClass) {
         label.getStyleClass().removeAll("text-muted", "text-error", "text-success");
         label.getStyleClass().add(styleClass);
@@ -1573,6 +1645,9 @@ public class SettingsDialog extends Dialog<Boolean> {
                 ? MODE_DOCKER_LABEL : MODE_LOCAL_LABEL);
         moondreamEndpointField.setText(configService.getMoondreamEndpoint());
 
+        // Aesthetic scoring settings
+        aestheticEndpointField.setText(configService.getAestheticEndpoint());
+
         // Luma AI settings
         lumaApiKeyField.setText(configService.getLumaApiKey());
         imgbbApiKeyField.setText(configService.getImgbbApiKey());
@@ -1702,6 +1777,12 @@ public class SettingsDialog extends Dialog<Boolean> {
         String moondreamEndpoint = moondreamEndpointField.getText().trim();
         if (!moondreamEndpoint.isEmpty()) {
             configService.setMoondreamEndpoint(moondreamEndpoint);
+        }
+
+        // Aesthetic scoring settings
+        String aestheticEndpoint = aestheticEndpointField.getText().trim();
+        if (!aestheticEndpoint.isEmpty()) {
+            configService.setAestheticEndpoint(aestheticEndpoint);
         }
 
         // Analysis prompt

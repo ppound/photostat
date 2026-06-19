@@ -28,3 +28,14 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+
+  aesthetic:
+    build:
+      dockerfile: docker/aesthetic/Dockerfile.gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

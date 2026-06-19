@@ -1,0 +1,11 @@
+# GPU build for the PhotoStat aesthetic-scoring service.
+# CUDA 12.4 torch wheels (matches the cuda:12.4-cudnn base in Dockerfile.gpu),
+# pinned to the same torch as the analysis GPU image for a consistent stack.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.5.1
+torchvision==0.20.1
+# pyiqa pulls in timm + open_clip_torch for the CLIP-IQA metrics.
+pyiqa==0.1.13
+Pillow==10.4.0
+fastapi==0.115.0
+uvicorn[standard]==0.30.6

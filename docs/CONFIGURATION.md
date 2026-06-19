@@ -68,6 +68,11 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "mode": "local",
     "endpoint": "http://localhost:8002"
   },
+  "aesthetic": {
+    "mode": "docker",
+    "endpoint": "http://localhost:8003",
+    "metric": "clipiqa+"
+  },
   "ai": {
     "provider": "claude"
   },
@@ -211,6 +216,16 @@ These settings can be configured via **Settings > Indexing > Sidecar Format** in
 **Prerequisites:** `pip install "transformers>=4.51,<5" torch Pillow accelerate`
 
 **Notes:** Moondream runs locally with no API key required. The model (~1.5 GB) is downloaded automatically on first use. GPU acceleration is **strongly recommended** — install PyTorch with CUDA support: `pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124`
+
+### Aesthetic Scoring Settings
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `aesthetic.mode` | string | `docker` | Backend mode (Docker HTTP service; no local-Python mode) |
+| `aesthetic.endpoint` | string | `http://localhost:8003` | Aesthetic scoring service URL |
+| `aesthetic.metric` | string | `clipiqa+` | Informational label of the IQA metric; the service's `PHOTOSTAT_IQA_METRIC` env var is authoritative |
+
+**Notes:** Aesthetic scoring is Docker-only and writes the `aesthetic_score` field (0–100), separate from your manual `rating`. See [AESTHETIC_SCORING.md](AESTHETIC_SCORING.md).
 
 ### Face Recognition Settings
 

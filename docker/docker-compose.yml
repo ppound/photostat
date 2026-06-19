@@ -49,7 +49,20 @@ services:
     volumes:
       - hf-cache:/models
 
+  aesthetic:
+    build:
+      context: ..
+      dockerfile: docker/aesthetic/Dockerfile
+    ports:
+      - "8003:8003"
+    # Override the IQA metric here if desired (default CLIP-IQA+):
+    #   environment:
+    #     - PHOTOSTAT_IQA_METRIC=nima
+    volumes:
+      - iqa-models:/models
+
 volumes:
   opensearch-data:
   faces-models:
   hf-cache:
+  iqa-models:
