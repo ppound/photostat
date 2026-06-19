@@ -19,6 +19,7 @@ After years of photography and using various software like Lightroom, Capture On
 - **Cloud Upload** - Upload photos to Google Photos, S3, or 70+ cloud providers via rclone
 - **Cross-Platform** - Native installers for Windows (.msi) and macOS (.dmg), plus a cross-platform JAR for Linux and other systems
 - **AI-Powered Organization** - Leverage Claude, Gemini, or Ollama-compatible local AI to automatically tag and categorize your photos
+- **Find Your Best — and Cull the Rest** - Score photos for aesthetic quality with a free local AI model, then sort or filter by that score or your own star ratings to surface keepers fast, or sort ascending to find and delete the weakest shots
 - **AI Image Generation** - Generate new images from your photos using Luma AI with text prompts and reference images
 
 ---
@@ -28,7 +29,7 @@ After years of photography and using various software like Lightroom, Capture On
 ### Core Capabilities
 - **Fast Full-Text Search** - Search across all EXIF metadata fields instantly
 - **Faceted Navigation** - Filter by camera, lens, file type, ISO, date, and more
-- **Flexible Sorting** - Sort results by date taken, aesthetic score, or rating, ascending or descending
+- **Flexible Sorting** - Sort results by date taken, aesthetic score, or rating, ascending or descending — put your best photos first, or sort ascending to surface the weakest for culling
 - **On This Day** - Revisit photos taken on this calendar day across all years, with an optional ± window for multi-day trips
 - **Thumbnail Preview** - Quick visual preview of search results
 - **Multi-Directory Indexing** - Index photos from multiple locations with selective directory choice
