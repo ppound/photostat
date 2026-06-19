@@ -161,27 +161,37 @@ public class ResultsPanel extends VBox {
                 new SeparatorMenuItem(), deleteActionItem);
         fileMenu.setTooltip(new Tooltip("File actions on the selection or full result set: copy, move, rename, upload, re-index, delete." + multiSelectHint));
 
-        // Sort control. Default order is date taken (newest first); "Aesthetic
-        // (best first)" sorts by the AI aesthetic_score descending.
+        // Sort controls: a field selector plus a direction toggle. Default is
+        // date taken, newest first. Ascending surfaces the lowest-rated/scored
+        // first (handy for culling); docs missing the sort field sort last in
+        // either direction.
         Label sortLabel = new Label("Sort:");
-        ComboBox<String> sortByCombo = new ComboBox<>();
-        sortByCombo.getItems().addAll("Date (newest)", "Aesthetic (best first)");
-        sortByCombo.setValue("Date (newest)");
-        sortByCombo.setTooltip(new Tooltip("Order results. Aesthetic uses the AI quality score (0-100)."));
-        sortByCombo.setOnAction(e -> {
-            if ("Aesthetic (best first)".equals(sortByCombo.getValue())) {
-                currentSortField = "aesthetic_score";
-                currentSortOrder = SortOrder.Desc;
-            } else {
-                currentSortField = null;
-                currentSortOrder = null;
+        ComboBox<String> sortFieldCombo = new ComboBox<>();
+        sortFieldCombo.getItems().addAll("Date taken", "Aesthetic score", "Rating");
+        sortFieldCombo.setValue("Date taken");
+        sortFieldCombo.setTooltip(new Tooltip("Field to sort results by. Rating/Aesthetic ascending shows the lowest first."));
+
+        ToggleButton sortDirToggle = new ToggleButton("↓"); // ↓ = descending (default)
+        sortDirToggle.setTooltip(new Tooltip(
+                "Toggle direction.\nDescending (↓): highest / newest first.\nAscending (↑): lowest / oldest first."));
+
+        Runnable applySort = () -> {
+            switch (sortFieldCombo.getValue()) {
+                case "Aesthetic score" -> currentSortField = "aesthetic_score";
+                case "Rating" -> currentSortField = "rating";
+                default -> currentSortField = "date_taken";
             }
+            boolean asc = sortDirToggle.isSelected();
+            sortDirToggle.setText(asc ? "↑" : "↓");
+            currentSortOrder = asc ? SortOrder.Asc : SortOrder.Desc;
             // Re-run the current search from page 1 with the new ordering.
             pagination.setCurrentPageIndex(0);
             loadPage(0);
-        });
+        };
+        sortFieldCombo.setOnAction(e -> applySort.run());
+        sortDirToggle.setOnAction(e -> applySort.run());
 
-        HBox toolbar = new HBox(10, slideshowBtn, aiMenu, fileMenu, sortLabel, sortByCombo);
+        HBox toolbar = new HBox(10, slideshowBtn, aiMenu, fileMenu, sortLabel, sortFieldCombo, sortDirToggle);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         // Double-click to open file
