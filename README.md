@@ -28,6 +28,7 @@ After years of photography and using various software like Lightroom, Capture On
 ### Core Capabilities
 - **Fast Full-Text Search** - Search across all EXIF metadata fields instantly
 - **Faceted Navigation** - Filter by camera, lens, file type, ISO, date, and more
+- **Flexible Sorting** - Sort results by date taken, aesthetic score, or rating, ascending or descending
 - **On This Day** - Revisit photos taken on this calendar day across all years, with an optional ± window for multi-day trips
 - **Thumbnail Preview** - Quick visual preview of search results
 - **Multi-Directory Indexing** - Index photos from multiple locations with selective directory choice
@@ -53,6 +54,15 @@ After years of photography and using various software like Lightroom, Capture On
 - **No-install Docker option** - Run Moondream as a container instead of a local Python setup (see [docker/README.md](docker/README.md))
 
 > See [docs/AI_ANALYSIS.md](docs/AI_ANALYSIS.md) for API key setup, CLI usage, cost tracking, and provider configuration.
+
+### Aesthetic Scoring
+- **Local Quality Scoring** - Score photos for aesthetic/perceptual quality (0–100) with a local, free IQA model — no API key
+- **Find Your Best (and Worst)** - Sort, filter, and facet on the score to surface top shots or find low-quality images to cull
+- **Separate from Ratings** - The AI score lives in its own field and never overwrites your manual star ratings
+- **GPU-Accelerated** - Uses your NVIDIA GPU when available; score a large library in minutes
+- **GUI & CLI** - Score in bulk (Index → Score Photos), per selection (AI → Score Selected), or via `--score-aesthetics`
+
+> See [docs/AESTHETIC_SCORING.md](docs/AESTHETIC_SCORING.md) for setup, scoring workflows, and metric options.
 
 ### AI Image Generation
 - **Luma AI Integration** - Generate new images using Luma's Photon model with text prompts
@@ -209,9 +219,10 @@ java -jar photostat-java-2.4.1-executable.jar
 |----------|-------------|
 | [User Guide](docs/USER_GUIDE.md) | Detailed usage instructions for all features |
 | [AI Analysis](docs/AI_ANALYSIS.md) | AI setup, CLI mode, and cost tracking |
+| [Aesthetic Scoring](docs/AESTHETIC_SCORING.md) | Local image-quality scoring: setup, workflows, and metrics |
 | [Face Recognition](docs/FACE_RECOGNITION.md) | Python setup, GPU acceleration, and face detection workflow |
 | [Configuration](docs/CONFIGURATION.md) | All settings and options explained |
-| [Docker Backends](docker/README.md) | Run faces/analysis as containers (CPU or GPU) instead of local Python |
+| [Docker Backends](docker/README.md) | Run faces/analysis/aesthetic as containers (CPU or GPU); start/stop individual services |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 | [Development](docs/DEVELOPMENT.md) | Building from source and project structure |
 
@@ -251,6 +262,12 @@ java -jar photostat-java-2.4.1-executable.jar --detect-faces --parallel 4
 
 # Face detection on a specific directory
 java -jar photostat-java-2.4.1-executable.jar --detect-faces --dir /path/to/photos
+
+# Score photos for aesthetic quality (requires the aesthetic Docker backend)
+java -jar photostat-java-2.4.1-executable.jar --score-aesthetics
+
+# Re-score everything, larger batches
+java -jar photostat-java-2.4.1-executable.jar --score-aesthetics --force --batch 32
 
 # Upload to cloud via rclone
 java -jar photostat-java-2.4.1-executable.jar --rclone-upload

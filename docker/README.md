@@ -69,12 +69,77 @@ curl localhost:8002/health   # expect "device": "cuda"
 > initialization error (e.g. `CUDA failure 500: named symbol not found`, which
 > usually means the host driver/runtime predates the image's CUDA version).
 
+## Running individual services (start only what you need)
+
+The four services are independent — you don't have to run all of them. The only
+one PhotoStat always needs is **`opensearch`** (the search index). `faces`,
+`analysis`, and `aesthetic` are optional and only needed when you use that
+feature, so you can start one or two and leave the rest stopped to save RAM and
+GPU memory.
+
+All commands run from the `docker/` directory. Append the service name(s) to act
+on just those; omit it to act on everything.
+
+```bash
+# Start just OpenSearch + the aesthetic scorer (CPU)
+docker compose up -d opensearch aesthetic
+
+# Same, on GPU
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d opensearch aesthetic
+
+# Start one more later (e.g. faces) without touching the others
+docker compose up -d faces
+
+# Stop a single service (keeps its container + downloaded models for a fast restart)
+docker compose stop aesthetic
+
+# Start it again
+docker compose start aesthetic
+
+# Restart one service (e.g. after changing PHOTOSTAT_IQA_METRIC)
+docker compose up -d --force-recreate aesthetic
+
+# See what's running and on which ports
+docker compose ps
+
+# Follow one service's logs (model download progress, errors, GPU/CPU device)
+docker compose logs -f aesthetic
+```
+
+> **`stop` vs `down`:** `docker compose stop <service>` pauses a container but
+> keeps it (and the named model-cache volume), so restarts are instant.
+> `docker compose down` stops and **removes all** containers for the project
+> (the model-cache volumes survive, so models are not re-downloaded). To remove
+> a single container, use `docker compose rm -s -f <service>`.
+
+> **GPU note:** to start a service on GPU you must include **both** compose files
+> (`-f docker-compose.yml -f docker-compose.gpu.yml`) on the `up` command. Plain
+> `docker compose up -d <service>` (one file) starts it on CPU. `stop`/`start`/
+> `ps`/`logs` don't need the `-f` flags.
+
+Typical setups:
+
+| You want to… | Run |
+|---|---|
+| Just search/index photos | `opensearch` |
+| Add aesthetic scoring | `opensearch aesthetic` |
+| Add local AI tagging (Moondream) | `opensearch analysis` |
+| Add face recognition | `opensearch faces` |
+| Everything | (omit the service name) |
+
 ## Connecting PhotoStat
 
-In **Settings**, point the face-recognition and analysis features at the Docker
-endpoints (`http://localhost:8001` and `http://localhost:8002`) instead of local
-Python. Use the **Test connection** button to confirm the device each service
-loaded on. (Wiring on the Java side is added in a later step.)
+In **Settings → AI Analysis**, point each feature at its Docker endpoint instead
+of local Python:
+
+- **Face recognition** → `http://localhost:8001`
+- **Moondream analysis** → `http://localhost:8002`
+- **Aesthetic scoring** → `http://localhost:8003`
+
+Use the **Test Connection** button next to each to confirm the service is up and
+whether it loaded on GPU (CUDA) or CPU. The aesthetic scorer has no local-Python
+mode — it's Docker-only; run aesthetic scoring from **Index → Score Photos**,
+the results **AI → Score Selected** menu, or the `--score-aesthetics` CLI.
 
 ## HTTP API
 
