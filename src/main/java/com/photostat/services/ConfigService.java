@@ -6,9 +6,11 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +49,51 @@ public class ConfigService {
         }
         this.configPath = configDir.resolve("config.json");
 
+        extractBundledComposeFiles(configDir);
         loadConfig();
+    }
+
+    /**
+     * Deploy the prebuilt-image Docker Compose files to ~/.photostat so users can
+     * run the backend services without cloning the repo.
+     *
+     * <p>Each file is written twice: a pristine {@code *.dist.yml} reference copy
+     * that is refreshed on every launch (so upgrades pick up new services/tags),
+     * and the live {@code *.yml} that is written only if it does not already
+     * exist — that way a user's local edits (GPU toggles, PHOTOSTAT_IQA_METRIC,
+     * port changes) are never clobbered.
+     */
+    private void extractBundledComposeFiles(Path configDir) {
+        String[][] files = {
+            {"/docker-compose.yml", "docker-compose.yml", "docker-compose.dist.yml"},
+            {"/docker-compose.gpu.yml", "docker-compose.gpu.yml", "docker-compose.gpu.dist.yml"},
+        };
+        for (String[] file : files) {
+            String resource = file[0];
+            Path live = configDir.resolve(file[1]);
+            Path dist = configDir.resolve(file[2]);
+
+            // Always refresh the pristine reference copy.
+            try (InputStream is = getClass().getResourceAsStream(resource)) {
+                if (is == null) {
+                    System.err.println("Bundled compose file not found in resources: " + resource);
+                    continue;
+                }
+                Files.copy(is, dist, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                System.err.println("Failed to extract " + file[2] + ": " + e.getMessage());
+                continue;
+            }
+
+            // Write the live copy only when absent, preserving any user edits.
+            if (!Files.exists(live)) {
+                try {
+                    Files.copy(dist, live, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    System.err.println("Failed to write " + file[1] + ": " + e.getMessage());
+                }
+            }
+        }
     }
 
     public static synchronized ConfigService getInstance() {

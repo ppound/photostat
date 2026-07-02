@@ -1,0 +1,70 @@
+name: Publish Docker images
+
+# Builds the PhotoStat backend images (faces, analysis, aesthetic) in both CPU
+# and GPU variants and pushes them to GitHub Container Registry (GHCR) so users
+# can pull prebuilt images instead of cloning the repo and building locally.
+#
+# Triggers on release tags (v*) and on-demand via the Actions tab.
+# The published packages must be made public once (Packages -> package
+# settings) so `docker pull` works without authentication.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [faces, analysis, aesthetic]
+        variant: [cpu, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # cpu -> Dockerfile, gpu -> Dockerfile.gpu
+      - name: Resolve Dockerfile
+        id: dockerfile
+        run: |
+          if [ "${{ matrix.variant }}" = "gpu" ]; then
+            echo "path=docker/${{ matrix.service }}/Dockerfile.gpu" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=docker/${{ matrix.service }}/Dockerfile" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute version tag
+        id: version
+        run: |
+          ref="${{ github.ref_name }}"
+          # Strip a leading v from release tags (v2.5.0 -> 2.5.0); fall back to the ref.
+          echo "value=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      # GHCR image names must be lowercase; the owner login is already lowercase.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ steps.dockerfile.outputs.path }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:${{ matrix.variant }}
+            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:${{ steps.version.outputs.value }}-${{ matrix.variant }}
+          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ matrix.variant }}

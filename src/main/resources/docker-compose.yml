@@ -1,0 +1,69 @@
+# PhotoStat backend services using PREBUILT images (no repo clone required).
+#
+# This file is deployed to ~/.photostat/docker-compose.yml by PhotoStat.
+# The images are published to GitHub Container Registry by CI, so you only need
+# Docker installed — not the PhotoStat source tree.
+#
+# CPU (default):
+#   docker compose -f ~/.photostat/docker-compose.yml up -d
+#
+# GPU (NVIDIA, optional):
+#   docker compose -f ~/.photostat/docker-compose.yml -f ~/.photostat/docker-compose.gpu.yml up -d
+#
+# Start only what you need (opensearch is the only always-required service):
+#   docker compose -f ~/.photostat/docker-compose.yml up -d opensearch aesthetic
+#
+# Model weights download on first start into the named volumes below, so the
+# containers need no access to your photo files.
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # PhotoStat defaults to host=localhost port=9200 ssl=false with no auth,
+      # so run the dev-friendly insecure single-node configuration.
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+
+  faces:
+    image: ghcr.io/ppound/photostat-faces:cpu
+    ports:
+      - "8001:8001"
+    volumes:
+      - faces-models:/models
+
+  analysis:
+    image: ghcr.io/ppound/photostat-analysis:cpu
+    ports:
+      - "8002:8002"
+    volumes:
+      - hf-cache:/models
+
+  aesthetic:
+    image: ghcr.io/ppound/photostat-aesthetic:cpu
+    ports:
+      - "8003:8003"
+    # Override the IQA metric here if desired (default CLIP-IQA+):
+    #   environment:
+    #     - PHOTOSTAT_IQA_METRIC=nima
+    volumes:
+      - iqa-models:/models
+
+volumes:
+  opensearch-data:
+  faces-models:
+  hf-cache:
+  iqa-models:

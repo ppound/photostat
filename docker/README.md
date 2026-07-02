@@ -19,6 +19,46 @@ servers (`docker/*/server.py`) are thin wrappers around those modules. Images
 are sent as base64 bytes, so the containers need **no access to your photo
 files** on disk.
 
+## Prebuilt images — no clone required (recommended)
+
+You don't need this repository to run the backends. PhotoStat ships image-based
+Compose files and deploys them to your config directory on first launch:
+
+- `~/.photostat/docker-compose.yml`
+- `~/.photostat/docker-compose.gpu.yml`
+
+These reference prebuilt images published to GitHub Container Registry
+(`ghcr.io/ppound/photostat-faces`, `-analysis`, `-aesthetic`), so `docker`
+pulls them for you:
+
+```bash
+# CPU
+docker compose -f ~/.photostat/docker-compose.yml up -d
+
+# GPU (NVIDIA)
+docker compose -f ~/.photostat/docker-compose.yml -f ~/.photostat/docker-compose.gpu.yml up -d
+
+# Start only what you need
+docker compose -f ~/.photostat/docker-compose.yml up -d opensearch aesthetic
+```
+
+A pristine reference copy is kept alongside each file as
+`docker-compose.dist.yml` / `docker-compose.gpu.dist.yml`; PhotoStat refreshes
+those on every launch but never overwrites your live `docker-compose.yml`, so
+local edits (GPU toggles, `PHOTOSTAT_IQA_METRIC`, port changes) are preserved.
+To reset to defaults, delete your edited file and relaunch (or copy the `.dist`
+copy over it).
+
+Everything below (compose subcommands, GPU notes, per-service control) works the
+same — just point `-f` at the files in `~/.photostat/`.
+
+## Build from source (power users)
+
+Prefer to build the images yourself, or hacking on the Python? Clone the repo
+and use the `build:`-based Compose files in this `docker/` directory instead.
+The build context is the parent directory (repo root) so the images can copy the
+shared Python sources from `src/main/resources`.
+
 ## Quick start (CPU)
 
 ```bash
