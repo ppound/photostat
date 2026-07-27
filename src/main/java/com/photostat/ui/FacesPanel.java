@@ -155,7 +155,10 @@ public class FacesPanel extends BorderPane {
         Thread thread = new Thread(() -> {
             boolean available = faceService.isPythonAvailable();
             String versionInfo = available ? faceService.getPythonVersionInfo() : "";
-            boolean gpuAvailable = versionInfo.contains("\"gpu_available\": true");
+            // Strip whitespace before matching: the local Python worker emits pretty
+            // JSON ("gpu_available": true) while the Docker FastAPI backend emits
+            // compact JSON ("gpu_available":true). Mirror FaceDetectCli's handling.
+            boolean gpuAvailable = versionInfo.replaceAll("\\s+", "").contains("\"gpu_available\":true");
             // gpu_error is set when CUDA was attempted but the provider DLL failed to load
             String gpuError = extractJsonString(versionInfo, "gpu_error");
             Platform.runLater(() -> {
