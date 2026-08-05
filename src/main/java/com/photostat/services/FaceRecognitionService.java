@@ -891,16 +891,23 @@ public class FaceRecognitionService {
             }
         }
 
-        // Update each image's persons field in OpenSearch and sidecar
+        // Update each image's persons field in OpenSearch and sidecar. Skip images
+        // that already carry this name so re-saving a mostly-named cluster doesn't
+        // re-write every OpenSearch doc and sidecar for no change.
         int total = imagePaths.size();
         int current = 0;
+        int updated = 0;
         for (String imagePath : imagePaths) {
             try {
                 var metadata = openSearchService.getDocumentByPath(imagePath);
                 if (metadata != null) {
-                    metadata.addPerson(name);
-                    openSearchService.updateDocument(metadata);
-                    sidecarService.writeSidecar(metadata);
+                    List<String> existing = metadata.getPersons();
+                    if (existing == null || !existing.contains(name)) {
+                        metadata.addPerson(name);
+                        openSearchService.updateDocument(metadata);
+                        sidecarService.writeSidecar(metadata);
+                        updated++;
+                    }
                 }
             } catch (Exception e) {
                 logger.error("FaceRecognitionService",
@@ -911,6 +918,9 @@ public class FaceRecognitionService {
                 progressCallback.accept(new double[]{current, total});
             }
         }
+
+        logger.info("FaceRecognitionService", "assignName '" + name + "': " + updated
+                + " of " + total + " images updated (" + (total - updated) + " already named)");
 
         saveState();
     }
