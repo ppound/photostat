@@ -128,6 +128,10 @@ public class MainWindow extends BorderPane {
                 onThisDayPanel.refresh();
             } else if (newTab == servicesTab) {
                 servicesPanel.refresh();
+            } else if (newTab == indexTab) {
+                // The count is first read at startup, when OpenSearch may not be
+                // up yet; re-read it so a stale failure message corrects itself.
+                indexPanel.refreshStats();
             }
             if (newTab != null && "lastused".equals(configService.getOpenTab())) {
                 Object key = newTab.getUserData();
