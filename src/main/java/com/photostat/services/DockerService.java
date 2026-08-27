@@ -65,17 +65,6 @@ public class DockerService {
     /** Cached result of {@link #resolveComposeCommand()}; null until first probe. */
     private volatile List<String> composeCommand;
 
-    /**
-     * Whether to apply the GPU overlay compose file.
-     *
-     * <p>Held in memory for now; phase 4 of the Docker onboarding work persists
-     * this to a {@code docker} section in {@link ConfigService}.
-     */
-    private volatile boolean gpuEnabled = false;
-
-    /** Path to the docker executable. Phase 4 makes this configurable. */
-    private volatile String dockerPath = "docker";
-
     private DockerService() {
         this.configService = ConfigService.getInstance();
         this.logger = LoggingService.getInstance();
@@ -174,14 +163,26 @@ public class DockerService {
     // Configuration
     // ------------------------------------------------------------------
 
-    public boolean isGpuEnabled() { return gpuEnabled; }
+    /** Whether to apply the GPU overlay compose file. Persisted in the config. */
+    public boolean isGpuEnabled() {
+        return configService.isDockerGpu();
+    }
 
-    public void setGpuEnabled(boolean gpuEnabled) { this.gpuEnabled = gpuEnabled; }
+    public void setGpuEnabled(boolean gpuEnabled) {
+        configService.setDockerGpu(gpuEnabled);
+        configService.saveConfig();
+    }
 
-    public String getDockerPath() { return dockerPath; }
+    /** Path to the docker executable, for installs that are not on PATH. */
+    public String getDockerPath() {
+        String path = configService.getDockerPath();
+        return (path == null || path.isBlank()) ? "docker" : path.trim();
+    }
 
     public void setDockerPath(String dockerPath) {
-        this.dockerPath = (dockerPath == null || dockerPath.isBlank()) ? "docker" : dockerPath.trim();
+        configService.setDockerPath((dockerPath == null || dockerPath.isBlank())
+                ? "docker" : dockerPath.trim());
+        configService.saveConfig();
         // A different binary may be a different compose generation.
         this.composeCommand = null;
     }
@@ -216,7 +217,7 @@ public class DockerService {
      * Does not require a running daemon.
      */
     public String getCliVersion() {
-        CommandResult result = run(List.of(dockerPath, "--version"), PROBE_TIMEOUT_SECONDS);
+        CommandResult result = run(List.of(getDockerPath(), "--version"), PROBE_TIMEOUT_SECONDS);
         if (!result.isSuccess()) {
             return null;
         }
@@ -235,7 +236,7 @@ public class DockerService {
      */
     public String getServerVersion() {
         CommandResult result = run(
-                List.of(dockerPath, "version", "--format", "{{.Server.Version}}"),
+                List.of(getDockerPath(), "version", "--format", "{{.Server.Version}}"),
                 PROBE_TIMEOUT_SECONDS);
         if (!result.isSuccess()) {
             return null;
@@ -271,9 +272,10 @@ public class DockerService {
             return cached.isEmpty() ? null : cached;
         }
 
+        String docker = getDockerPath();
         List<String> resolved = List.of();
-        if (run(List.of(dockerPath, "compose", "version"), PROBE_TIMEOUT_SECONDS).isSuccess()) {
-            resolved = List.of(dockerPath, "compose");
+        if (run(List.of(docker, "compose", "version"), PROBE_TIMEOUT_SECONDS).isSuccess()) {
+            resolved = List.of(docker, "compose");
         } else if (run(List.of("docker-compose", "--version"), PROBE_TIMEOUT_SECONDS).isSuccess()) {
             resolved = List.of("docker-compose");
         }
@@ -546,7 +548,7 @@ public class DockerService {
         }
 
         Path gpuOverlay = null;
-        if (gpuEnabled) {
+        if (isGpuEnabled()) {
             Path overlay = getGpuOverlayFile();
             if (Files.isRegularFile(overlay)) {
                 gpuOverlay = overlay;

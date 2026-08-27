@@ -112,6 +112,35 @@ Layout:
 
 All compose calls run on a JavaFX `Task`; UI updates via `Platform.runLater()`.
 
+## Phase 3 — First-run setup wizard (done)
+
+`SetupWizardDialog` (Welcome → Docker → Engine → Services → Download and start →
+Finished), shown from `App.start()` after the main window paints when
+`docker.setup_completed` is false, and reopenable from the Services tab's
+**Setup...** button. `DockerInstallService` handles detection and installation.
+
+Safety decisions from the risk review, all implemented:
+
+- **No silent install.** The Docker step lists every system change — WSL 2 and
+  Virtual Machine Platform, a SYSTEM service, `docker-users` membership,
+  login autostart — plus a licence link, and the install button stays disabled
+  until the user ticks an explicit consent box.
+- **Never reboots.** Nothing shells out to a restart; when one is needed the
+  wizard says so and tells the user to reopen it afterwards. A unit test asserts
+  the install commands contain no reboot or `sudo`.
+- **Conflict pre-flight.** VirtualBox and VMware Workstation are detected and
+  warned about before WSL 2 is enabled.
+- **Declining is free.** Plain Cancel leaves `setup_completed` false so the
+  wizard returns; only Finish, or an explicit "Don't show this again", suppresses
+  it. The welcome step says the containers are optional.
+
+The `docker` config section from phase 4 was added here, since the wizard needs
+`setup_completed`, `gpu` and `services` to persist. `DockerService` now reads
+`gpu` and `docker_path` from it rather than in-memory fields. Phase 4 is left
+with wiring `auto_start_on_launch` and `stop_on_exit` into the app lifecycle.
+
+### Original plan
+
 ## Phase 3 — First-run setup wizard (~1.5 days)
 
 New `src/main/java/com/photostat/ui/SetupWizardDialog.java`. Steps:

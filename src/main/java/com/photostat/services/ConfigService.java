@@ -35,6 +35,10 @@ public class ConfigService {
     private static final int DEFAULT_BATCH_SIZE = 50;
     private static final int DEFAULT_THUMBNAIL_SIZE = 200;
 
+    /** Backend containers PhotoStat manages by default. Mirrors the bundled compose file. */
+    private static final List<String> DEFAULT_DOCKER_SERVICES =
+            List.of("opensearch", "faces", "analysis", "aesthetic");
+
     private ConfigService() {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
@@ -285,6 +289,20 @@ public class ConfigService {
                 moondream.put("endpoint", "http://localhost:8002");
                 changed = true;
             }
+        }
+
+        // Ensure docker section exists (backend container management)
+        if (!config.containsKey("docker")) {
+            Map<String, Object> docker = new HashMap<>();
+            docker.put("setup_completed", false);
+            docker.put("manage_containers", true);
+            docker.put("auto_start_on_launch", false);
+            docker.put("stop_on_exit", false);
+            docker.put("gpu", false);
+            docker.put("services", new ArrayList<>(DEFAULT_DOCKER_SERVICES));
+            docker.put("docker_path", "docker");
+            config.put("docker", docker);
+            changed = true;
         }
 
         // Ensure faces section exists
@@ -850,6 +868,76 @@ public class ConfigService {
 
     public void setMoondreamEndpoint(String endpoint) {
         setNestedValue("moondream", "endpoint", endpoint);
+    }
+
+    // Docker backend management settings
+
+    /** True once the first-run setup wizard has been completed or dismissed. */
+    public boolean isDockerSetupCompleted() {
+        return getNestedBoolean("docker", "setup_completed", false);
+    }
+
+    public void setDockerSetupCompleted(boolean completed) {
+        setNestedValue("docker", "setup_completed", completed);
+    }
+
+    /** Master switch for PhotoStat starting and stopping the backend containers. */
+    public boolean isDockerManageContainers() {
+        return getNestedBoolean("docker", "manage_containers", true);
+    }
+
+    public void setDockerManageContainers(boolean manage) {
+        setNestedValue("docker", "manage_containers", manage);
+    }
+
+    /** Start the managed containers when PhotoStat launches. */
+    public boolean isDockerAutoStartOnLaunch() {
+        return getNestedBoolean("docker", "auto_start_on_launch", false);
+    }
+
+    public void setDockerAutoStartOnLaunch(boolean autoStart) {
+        setNestedValue("docker", "auto_start_on_launch", autoStart);
+    }
+
+    /** Stop the managed containers when PhotoStat exits. */
+    public boolean isDockerStopOnExit() {
+        return getNestedBoolean("docker", "stop_on_exit", false);
+    }
+
+    public void setDockerStopOnExit(boolean stopOnExit) {
+        setNestedValue("docker", "stop_on_exit", stopOnExit);
+    }
+
+    /** Apply the GPU overlay compose file (requires an NVIDIA GPU). */
+    public boolean isDockerGpu() {
+        return getNestedBoolean("docker", "gpu", false);
+    }
+
+    public void setDockerGpu(boolean gpu) {
+        setNestedValue("docker", "gpu", gpu);
+    }
+
+    /** Path to the docker executable, for installs that are not on PATH. */
+    public String getDockerPath() {
+        return getNestedString("docker", "docker_path", "docker");
+    }
+
+    public void setDockerPath(String path) {
+        setNestedValue("docker", "docker_path", path);
+    }
+
+    /** Which backend services PhotoStat manages. */
+    @SuppressWarnings("unchecked")
+    public synchronized List<String> getDockerServices() {
+        Map<String, Object> docker = (Map<String, Object>) config.get("docker");
+        if (docker != null && docker.get("services") instanceof List) {
+            return new ArrayList<>((List<String>) docker.get("services"));
+        }
+        return new ArrayList<>(DEFAULT_DOCKER_SERVICES);
+    }
+
+    public void setDockerServices(List<String> services) {
+        setNestedValue("docker", "services", new ArrayList<>(services));
     }
 
     // Face recognition settings

@@ -56,6 +56,7 @@ public class ServicesPanel extends BorderPane {
     private Button stopAllButton;
     private Button pullButton;
     private Button refreshButton;
+    private Button setupButton;
     private TextArea logArea;
 
     private final Map<String, ServiceRow> rows = new LinkedHashMap<>();
@@ -110,7 +111,14 @@ public class ServicesPanel extends BorderPane {
         refreshButton = new Button("Refresh");
         refreshButton.setOnAction(e -> refresh());
 
-        HBox actions = new HBox(10, startAllButton, stopAllButton, pullButton, refreshButton);
+        setupButton = new Button("Setup...");
+        setupButton.setTooltip(new Tooltip("Reopen the backend setup wizard"));
+        setupButton.setOnAction(e -> {
+            new SetupWizardDialog().showAndWait();
+            refresh();
+        });
+
+        HBox actions = new HBox(10, startAllButton, stopAllButton, pullButton, refreshButton, setupButton);
         actions.setAlignment(Pos.CENTER_LEFT);
 
         Label note = new Label(
@@ -455,6 +463,9 @@ public class ServicesPanel extends BorderPane {
             pullButton.setDisable(value);
             refreshButton.setDisable(value);
             startEngineButton.setDisable(value);
+            // Deliberately not gated on engine state: the wizard is how a user
+            // gets Docker installed in the first place.
+            setupButton.setDisable(value);
             for (ServiceRow row : rows.values()) {
                 row.action.setDisable(value);
             }

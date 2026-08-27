@@ -2,7 +2,9 @@ package com.photostat;
 
 import com.photostat.services.ConfigService;
 import com.photostat.ui.MainWindow;
+import com.photostat.ui.SetupWizardDialog;
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
@@ -86,6 +88,29 @@ public class App extends Application {
         });
 
         primaryStage.show();
+
+        maybeShowSetupWizard(configService);
+    }
+
+    /**
+     * Offer the Docker backend setup wizard on first run.
+     *
+     * <p>Shown after the main window so PhotoStat is usable behind it, and only
+     * when the user has not already completed or dismissed it. Everything the
+     * wizard sets up is optional, so declining leaves a working app.
+     */
+    private void maybeShowSetupWizard(ConfigService configService) {
+        if (configService.isDockerSetupCompleted() || !configService.isDockerManageContainers()) {
+            return;
+        }
+        // Defer so the main window paints first.
+        Platform.runLater(() -> {
+            try {
+                new SetupWizardDialog().showAndWait();
+            } catch (Exception e) {
+                System.err.println("Setup wizard failed to open: " + e.getMessage());
+            }
+        });
     }
 
     @Override
