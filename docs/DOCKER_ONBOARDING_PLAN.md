@@ -1,0 +1,162 @@
+# Docker Onboarding & One-Click Services — Implementation Plan
+
+Branch: `docker-setup-wizard`
+
+## Goal
+
+A user installs PhotoStat from the MSI/DMG and gets a working full stack —
+OpenSearch plus the faces/analysis/aesthetic backends — without reading
+`docker/README.md` or typing a compose command. After setup, the whole backend
+starts and stops from one button.
+
+## Scope decision
+
+We are **not** building a single installer binary that bundles Docker itself.
+That path is blocked by Docker Desktop redistribution terms, `jpackage`'s
+inability to chain installers or run custom actions, WSL 2 reboots on Windows,
+and macOS `.pkg` signing/notarization requirements.
+
+Instead the installers stay exactly as they are (they already bundle a JRE), and
+all orchestration moves *into the app*. "Install Docker" becomes a guided
+one-click action with a UAC prompt rather than a silent bundled install.
+
+## What already exists
+
+| Piece | Where |
+|---|---|
+| JRE bundled into MSI/DMG | `.github/workflows/release.yml` (`jpackage`) |
+| Prebuilt images on GHCR | `.github/workflows/docker-publish.yml` |
+| Compose file deployed to `~/.photostat` | `ConfigService.extractBundledComposeFiles()` (`ConfigService.java:67`) |
+| Per-service `/health` checks | `FaceRecognitionService:155`, `ImageAnalysisService:689`, `AestheticService:86` |
+| External-CLI wrapper pattern to copy | `RcloneService.java` |
+| OpenSearch reachability check | `OpenSearchService.isConnected()` (`:133`) |
+
+Nothing in the codebase currently shells out to `docker`. That is the gap.
+
+---
+
+## Phase 1 — `DockerService` (~1 day)
+
+New `src/main/java/com/photostat/services/DockerService.java`, singleton,
+modeled on `RcloneService`: `ProcessBuilder`, `Consumer<Progress>` callbacks,
+`volatile Process currentProcess` for cancellation, `LoggingService` for the
+command line.
+
+Detection:
+- `isCliInstalled()` — `docker --version`, exit 0
+- `isDaemonRunning()` — `docker info`, exit 0, short timeout
+- `resolveComposeCommand()` — prefer `docker compose` (v2 plugin), fall back to
+  `docker-compose` (v1 standalone), cache the result
+
+Compose operations, all against `~/.photostat/docker-compose.yml` and the GPU
+overlay when configured:
+- `composePull(services, progressCallback)` — line-parsed progress
+- `composeUp(services, progressCallback)` — `up -d`
+- `composeStop()` / `composeStart()` — the daily path; faster than `down`/`up`
+- `composeDown()` — teardown; named volumes survive, so model weights persist
+- `status()` — `docker compose ps --format json` parsed into per-service state
+
+Daemon startup:
+- `startEngine(progressCallback)` — launch Docker Desktop
+  (`C:\Program Files\Docker\Docker\Docker Desktop.exe` on Windows,
+  `open -a Docker` on macOS, `systemctl --user start docker` / instructions on
+  Linux), then poll `docker info` until ready or a 90s timeout
+
+Extract a small command-runner seam so command construction and `ps` JSON
+parsing are unit-testable without a Docker daemon present.
+
+## Phase 2 — Services tab (~1.5 days)
+
+New `src/main/java/com/photostat/ui/ServicesPanel.java`, added to the
+`MainWindow` TabPane (`MainWindow.java:96`) alongside the existing eight tabs,
+with `setUserData("services")` to match the existing convention.
+
+Layout:
+- Header: engine state (Docker not installed / stopped / running) + **Start All**,
+  **Stop All**, **Check for Image Updates**
+- One row per service (opensearch, faces, analysis, aesthetic): name, port,
+  state dot, individual Start/Stop, and a health indicator driven by the
+  *existing* `/health` methods rather than new HTTP code
+- Collapsible log area fed by the progress callbacks
+
+All compose calls run on a JavaFX `Task`; UI updates via `Platform.runLater()`.
+
+## Phase 3 — First-run setup wizard (~1.5 days)
+
+New `src/main/java/com/photostat/ui/SetupWizardDialog.java`. Steps:
+
+1. **Welcome** — what the backends do, and that they are optional
+2. **Docker check** — if missing, offer one-click install:
+   - Windows: `winget install --id Docker.DockerDesktop -e --accept-package-agreements --accept-source-agreements`
+   - macOS: `brew install --cask docker` when brew is present
+   - Fallback everywhere: open <https://www.docker.com/products/docker-desktop/>
+     using the existing open-external pattern at `SettingsDialog.java:1912`
+   - Handle "installed but needs a reboot" by saving state and resuming next launch
+3. **Engine start** — Start Docker Desktop, poll until ready
+4. **Profile** — CPU or GPU (NVIDIA), and which optional services to manage
+5. **Pull** — cancellable, with an explicit size warning (CPU images are several
+   GB; GPU images carry torch + CUDA and are far larger)
+6. **Start & verify** — `up -d`, then the existing `/health` checks
+7. **Done**
+
+Triggered from `App.start()` after `primaryStage.show()` when
+`docker.setupCompleted` is false. Re-openable from the Services tab.
+
+## Phase 4 — Config & lifecycle (~0.5 day)
+
+New `docker` section in `ConfigService`, following the existing
+`ensure<X>Section` migration pattern (`ConfigService.java:129-278`):
+
+| Key | Default | Purpose |
+|---|---|---|
+| `setupCompleted` | `false` | drives the first-run wizard |
+| `manageContainers` | `true` | master switch |
+| `autoStartOnLaunch` | `false` | start backends when PhotoStat opens |
+| `stopOnExit` | `false` | stop backends when PhotoStat closes |
+| `gpu` | `false` | apply the GPU overlay compose file |
+| `services` | all | which optional services to manage |
+| `dockerPath` | `docker` | override for non-PATH installs |
+
+Lifecycle wiring in `App.java`:
+- `start()` — wizard on first run; `autoStartOnLaunch` kicks off a background
+  start task
+- `setOnCloseRequest` (`App.java:82`) — honour `stopOnExit` here rather than in
+  `stop()`, so a brief progress dialog can still be shown before FX shuts down
+
+## Phase 5 — Docs, build, test (~0.5 day)
+
+- Rewrite the Docker section of `README.md:127` around the wizard, keeping the
+  manual compose instructions as the advanced path
+- Update `docker/README.md` and `docs/TROUBLESHOOTING.md`
+- Full `mvn package` + test run, then copy the JAR to `/mnt/c/Users/Paulp/` for
+  Windows verification (the real config/index lives there)
+
+**Total: ~5 days.**
+
+---
+
+## Risks and gotchas
+
+- **`docker compose` v2 vs `docker-compose` v1** — must detect, not assume.
+- **Docker Desktop startup is slow** (30–90s) and may show its own licence
+  dialog on first run. Never block the FX thread; always offer a timeout path.
+- **`winget` is absent on older Windows 10 builds** — the download-page fallback
+  is mandatory, not optional.
+- **Elevation cannot be avoided.** The winget install triggers UAC, and WSL 2
+  enablement may force a reboot. The wizard must survive being interrupted.
+- **User edits to `~/.photostat/docker-compose.yml` must be preserved.**
+  `extractBundledComposeFiles()` deliberately never clobbers the live file, so
+  the GPU toggle must apply the overlay `-f docker-compose.gpu.yml` rather than
+  rewriting the live compose file.
+- **Port conflicts** on 9200/8001/8002/8003 need a clear error, not a silent
+  failed start.
+- **Linux** needs Docker Engine via the distro package manager with sudo —
+  detect and instruct rather than attempting an install.
+- **Disk footprint** — worth surfacing before the pull, not after.
+
+## Testing
+
+- Unit: compose command construction, `docker compose ps --format json`
+  parsing, version/engine-state parsing, GPU overlay argument assembly.
+- Manual: Windows (primary target), with Docker absent, installed-but-stopped,
+  and running.
