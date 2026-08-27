@@ -35,6 +35,7 @@ public class MainWindow extends BorderPane {
     private TimelinePanel timelinePanel;
     private ChartsPanel chartsPanel;
     private OnThisDayPanel onThisDayPanel;
+    private ServicesPanel servicesPanel;
 
     private Label statusLabel;
     private Label connectionLabel;
@@ -93,7 +94,12 @@ public class MainWindow extends BorderPane {
         chartsPanel = new ChartsPanel();
         chartsTab.setContent(chartsPanel);
 
-        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, onThisDayTab, chartsTab);
+        // Create Services tab (Docker backends)
+        Tab servicesTab = new Tab("Services");
+        servicesPanel = new ServicesPanel();
+        servicesTab.setContent(servicesPanel);
+
+        tabPane.getTabs().addAll(searchTab, indexTab, duplicatesTab, facesTab, mapTab, timelineTab, onThisDayTab, chartsTab, servicesTab);
 
         // Tag each tab with a stable key used by the "Open to tab" setting so
         // tab labels can change without breaking persistence.
@@ -105,6 +111,7 @@ public class MainWindow extends BorderPane {
         timelineTab.setUserData("timeline");
         onThisDayTab.setUserData("ontheday");
         chartsTab.setUserData("charts");
+        servicesTab.setUserData("services");
 
         // Refresh panels when switching tabs; also persist last-used when the
         // user has chosen the "lastused" open-tab mode.
@@ -119,6 +126,8 @@ public class MainWindow extends BorderPane {
                 facesPanel.refresh();
             } else if (newTab == onThisDayTab) {
                 onThisDayPanel.refresh();
+            } else if (newTab == servicesTab) {
+                servicesPanel.refresh();
             }
             if (newTab != null && "lastused".equals(configService.getOpenTab())) {
                 Object key = newTab.getUserData();

@@ -85,11 +85,22 @@ configuration, not an exposed one. Both fixes benefit existing users too.
   matches the *previously shipped* dist copy — i.e. the user never edited it.
   Genuinely customised files are preserved, and warn per exposed port.
 
-## Phase 2 — Services tab (~1.5 days)
+## Phase 2 — Services tab (done)
 
-New `src/main/java/com/photostat/ui/ServicesPanel.java`, added to the
-`MainWindow` TabPane (`MainWindow.java:96`) alongside the existing eight tabs,
-with `setUserData("services")` to match the existing convention.
+`src/main/java/com/photostat/ui/ServicesPanel.java`, added to the `MainWindow`
+TabPane alongside the existing eight tabs, with `setUserData("services")` to
+match the existing convention and a `refresh()` on tab activation.
+
+Health probes reuse the existing `/health` code rather than adding HTTP calls.
+`FaceRecognitionService` and `ImageAnalysisService` gained small public
+`isDockerServiceHealthy()` wrappers over their existing private health fetches,
+so the panel can report on the *container* even when the app is configured for
+local Python — `isPythonAvailable()` / `isMoondreamAvailable()` branch on mode
+and would otherwise probe the wrong backend.
+
+Verified by driving the real panel through a full cycle against a scratch
+compose project: rows went `not created` → `Up` → `Exited` with the per-row
+buttons flipping `Start` → `Stop` → `Start`.
 
 Layout:
 - Header: engine state (Docker not installed / stopped / running) + **Start All**,
