@@ -162,6 +162,27 @@ New `src/main/java/com/photostat/ui/SetupWizardDialog.java`. Steps:
 Triggered from `App.start()` after `primaryStage.show()` when
 `docker.setupCompleted` is false. Re-openable from the Services tab.
 
+## Phase 4 — Config & lifecycle (done)
+
+The config section landed in phase 3, so this phase was only the lifecycle
+wiring and its two toggles, both on the Services tab.
+
+- **`auto_start_on_launch`** — starts the configured services on a daemon thread
+  after the main window paints, bringing up the Docker engine first if needed.
+  Failures are logged, not surfaced: the app works without the containers, and
+  an error dialog on every launch would be worse than a retry from the tab.
+- **`stop_on_exit`** — the close handler consumes the window event and shows a
+  small modal progress window, because `compose stop` sends SIGTERM and waits
+  before killing, which takes tens of seconds across four containers. A "Close
+  anyway" button abandons the wait, leaving the containers up, which is harmless.
+
+Verified end-to-end against the real `App` with a scratch home: with both flags
+on, launching started exactly the configured subset and a genuine window-close
+stopped them; with both off, the app left already-running containers untouched
+in either direction.
+
+### Original plan
+
 ## Phase 4 — Config & lifecycle (~0.5 day)
 
 New `docker` section in `ConfigService`, following the existing

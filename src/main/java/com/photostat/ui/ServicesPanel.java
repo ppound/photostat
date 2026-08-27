@@ -1,6 +1,7 @@
 package com.photostat.ui;
 
 import com.photostat.services.AestheticService;
+import com.photostat.services.ConfigService;
 import com.photostat.services.DockerService;
 import com.photostat.services.FaceRecognitionService;
 import com.photostat.services.ImageAnalysisService;
@@ -11,6 +12,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
@@ -49,7 +51,10 @@ public class ServicesPanel extends BorderPane {
             "aesthetic", "Image-quality scoring");
 
     private final DockerService dockerService;
+    private final ConfigService configService;
 
+    private CheckBox autoStartCheck;
+    private CheckBox stopOnExitCheck;
     private Label engineStateLabel;
     private Button startEngineButton;
     private Button startAllButton;
@@ -66,6 +71,7 @@ public class ServicesPanel extends BorderPane {
 
     public ServicesPanel() {
         this.dockerService = DockerService.getInstance();
+        this.configService = ConfigService.getInstance();
         initializeUI();
         refresh();
     }
@@ -121,12 +127,33 @@ public class ServicesPanel extends BorderPane {
         HBox actions = new HBox(10, startAllButton, stopAllButton, pullButton, refreshButton, setupButton);
         actions.setAlignment(Pos.CENTER_LEFT);
 
+        autoStartCheck = new CheckBox("Start these services when PhotoStat opens");
+        autoStartCheck.setSelected(configService.isDockerAutoStartOnLaunch());
+        autoStartCheck.setTooltip(new Tooltip(
+                "Also starts the Docker engine if it is not already running, which can take "
+                        + "up to a minute in the background."));
+        autoStartCheck.selectedProperty().addListener((obs, was, is) -> {
+            configService.setDockerAutoStartOnLaunch(is);
+            configService.saveConfig();
+        });
+
+        stopOnExitCheck = new CheckBox("Stop them when PhotoStat closes");
+        stopOnExitCheck.setSelected(configService.isDockerStopOnExit());
+        stopOnExitCheck.setTooltip(new Tooltip(
+                "Closing PhotoStat will wait for the containers to stop. Downloaded models and "
+                        + "the search index are kept."));
+        stopOnExitCheck.selectedProperty().addListener((obs, was, is) -> {
+            configService.setDockerStopOnExit(is);
+            configService.saveConfig();
+        });
+
         Label note = new Label(
                 "Services run in Docker and are published on 127.0.0.1, so only this machine can reach them.");
         note.getStyleClass().add("info-label-small");
         note.setWrapText(true);
 
-        VBox header = new VBox(8, engineBox, actions, note, new Separator());
+        VBox header = new VBox(8, engineBox, actions,
+                new VBox(4, autoStartCheck, stopOnExitCheck), note, new Separator());
         header.setPadding(new Insets(10));
         return header;
     }
