@@ -6,6 +6,7 @@ This guide covers common issues and their solutions.
 
 - [Application Won't Start](#application-wont-start)
   - [macOS: "PhotoStat is damaged" or "cannot be opened"](#macos-photostat-is-damaged-or-cannot-be-opened)
+- [Backend Services and Docker](#backend-services-and-docker)
 - [Can't Connect to OpenSearch](#cant-connect-to-opensearch)
 - [Images Not Appearing](#images-not-appearing)
 - [Thumbnails Not Showing](#thumbnails-not-showing)
@@ -92,7 +93,103 @@ java --module-path /path/to/javafx-sdk-21/lib \
 
 ---
 
+## Backend Services and Docker
+
+The **Services** tab shows the state of the Docker engine and each backend
+container. Most problems below show up there first.
+
+### Services tab says "Docker engine: Not installed"
+
+PhotoStat could not run `docker`. Either it isn't installed, or it isn't on the
+`PATH` PhotoStat inherits.
+
+- Click **Setup...** to run the wizard, which can install Docker Desktop for you.
+- If Docker *is* installed, check `docker --version` works in a terminal. If it
+  works there but not in PhotoStat, set the full path to the executable under
+  the `docker.docker_path` key in `~/.photostat/config.json`.
+- On Linux, PhotoStat cannot install Docker Engine for you — it needs root. Use
+  your package manager, then reopen the wizard.
+
+### Services tab says "Installed, but not running"
+
+The Docker CLI is present but the daemon isn't responding. Click **Start
+Docker**. A cold start takes 30–60 seconds, and Docker Desktop may ask you to
+accept its own terms the first time.
+
+If it never comes up:
+
+- **Windows:** Docker Desktop may still need a restart to finish enabling WSL 2.
+  PhotoStat will not restart your machine — restart when it suits you, then
+  reopen the wizard.
+- Check whether Docker Desktop starts on its own, outside PhotoStat. If it
+  doesn't, the problem is with Docker rather than PhotoStat.
+
+### Error: "A required port is already in use"
+
+PhotoStat's services need 9200, 8001, 8002 and 8003. Something else already has
+one of them — very often a previously created OpenSearch container from an
+older setup.
+
+```bash
+# See what's using the ports
+docker ps -a --format '{{.Names}}\t{{.Ports}}'
+
+# Stop an old container that is holding 9200
+docker stop opensearch
+```
+
+If you want to keep the other service, change the host-side port in
+`~/.photostat/docker-compose.yml` (the number *before* the second colon) and
+update the matching endpoint in **File > Settings**.
+
+### A service is "running" but health stays "starting..."
+
+Normal on first use. The AI containers download model weights the first time
+they're exercised, which can take several minutes. Watch progress with:
+
+```bash
+docker compose -f ~/.photostat/docker-compose.yml logs -f faces
+```
+
+If it never becomes healthy, check that container's logs for an error.
+
+### Images won't download
+
+The pull needs network access to `ghcr.io`. On a corporate network a proxy or
+firewall may block it. The images total several GB on CPU and considerably more
+on GPU, so also check free disk space — Docker reports "no space left on
+device" when it runs out.
+
+### Changing the compose file has no effect
+
+PhotoStat only rewrites `~/.photostat/docker-compose.yml` when it still matches
+the previously shipped defaults, so your edits are safe. But an edited file also
+stops receiving updates. Compare yours against `docker-compose.dist.yml` next to
+it, which always holds the current defaults. To start over, delete your file and
+relaunch PhotoStat.
+
+Note that changes only take effect once the containers are recreated —
+**Stop All** then **Start All** in the Services tab.
+
+### Removing everything
+
+Stop the services from the Services tab, then uninstall Docker Desktop the
+normal way for your platform. To also reclaim the disk used by the images and
+downloaded models:
+
+```bash
+docker compose -f ~/.photostat/docker-compose.yml down -v
+```
+
+The `-v` deletes the named volumes, which includes your OpenSearch index —
+you'd need to re-index afterwards. Leave `-v` off to keep it.
+
+---
+
 ## Can't Connect to OpenSearch
+
+> If you're running OpenSearch as one of PhotoStat's own containers, check the
+> **Services** tab first — the section above covers engine and container issues.
 
 ### Error: "Connection refused"
 

@@ -493,6 +493,17 @@ public class ConfigService {
         aesthetic.put("metric", "clipiqa+");
         defaultConfig.put("aesthetic", aesthetic);
 
+        // Docker backend management settings
+        Map<String, Object> docker = new HashMap<>();
+        docker.put("setup_completed", false);
+        docker.put("manage_containers", true);
+        docker.put("auto_start_on_launch", false);
+        docker.put("stop_on_exit", false);
+        docker.put("gpu", false);
+        docker.put("services", new ArrayList<>(DEFAULT_DOCKER_SERVICES));
+        docker.put("docker_path", "docker");
+        defaultConfig.put("docker", docker);
+
         // Face recognition settings
         Map<String, Object> faces = new HashMap<>();
         faces.put("python_path", "python3");

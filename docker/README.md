@@ -35,10 +35,34 @@ a reverse proxy with authentication. Don't simply drop the `127.0.0.1:` prefix.
 PhotoStat warns on startup if it finds an unbound port mapping in your
 `~/.photostat/docker-compose.yml`.
 
-## Prebuilt images — no clone required (recommended)
+## From inside PhotoStat (recommended)
 
-You don't need this repository to run the backends. PhotoStat ships image-based
-Compose files and deploys them to your config directory on first launch:
+You don't need this repository, a terminal, or any of the commands below.
+
+On first launch PhotoStat offers a **setup wizard** that checks for Docker,
+offers to install Docker Desktop, starts the engine, lets you pick a CPU or GPU
+profile and which services to run, then pulls the images and starts everything.
+Reopen it any time from **Services → Setup...**.
+
+The **Services** tab is the day-to-day control surface:
+
+- Docker engine state, with a button to start it
+- **Start All** / **Stop All**, and a Start/Stop button per service
+- Container state and health for each service
+- **Check for Image Updates** to pull newer images
+- Optional "start when PhotoStat opens" and "stop when PhotoStat closes"
+
+Installing Docker Desktop changes machine-wide settings, so the wizard lists
+exactly what it alters and requires explicit consent first. It never restarts
+your machine. See [Network exposure](#network-exposure) below for why the ports
+are bound the way they are.
+
+Everything below is for running the containers by hand instead.
+
+## Prebuilt images — no clone required
+
+PhotoStat ships image-based Compose files and deploys them to your config
+directory on first launch:
 
 - `~/.photostat/docker-compose.yml`
 - `~/.photostat/docker-compose.gpu.yml`
@@ -59,11 +83,16 @@ docker compose -f ~/.photostat/docker-compose.yml up -d opensearch aesthetic
 ```
 
 A pristine reference copy is kept alongside each file as
-`docker-compose.dist.yml` / `docker-compose.gpu.dist.yml`; PhotoStat refreshes
-those on every launch but never overwrites your live `docker-compose.yml`, so
-local edits (GPU toggles, `PHOTOSTAT_IQA_METRIC`, port changes) are preserved.
-To reset to defaults, delete your edited file and relaunch (or copy the `.dist`
-copy over it).
+`docker-compose.dist.yml` / `docker-compose.gpu.dist.yml`, refreshed on every
+launch.
+
+Your live `docker-compose.yml` is updated only when it still matches the
+previously shipped `.dist` copy — that is, when you have never edited it. That
+way upgrades deliver new image tags and security fixes to everyone who is
+running the defaults. If you *have* edited it (GPU toggles,
+`PHOTOSTAT_IQA_METRIC`, port changes), your version is kept as-is and PhotoStat
+logs a note pointing at the `.dist` file so you can merge in what's new. To
+reset to defaults, delete your edited file and relaunch.
 
 Everything below (compose subcommands, GPU notes, per-service control) works the
 same — just point `-f` at the files in `~/.photostat/`.

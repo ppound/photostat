@@ -204,6 +204,32 @@ Lifecycle wiring in `App.java`:
 - `setOnCloseRequest` (`App.java:82`) — honour `stopOnExit` here rather than in
   `stop()`, so a brief progress dialog can still be shown before FX shuts down
 
+## Phase 5 — Docs, build, test (done)
+
+- `README.md` — Quick Start restructured to install PhotoStat first and let the
+  wizard do the rest, with the manual Docker/OpenSearch route kept in a
+  collapsed "advanced" block. Added a Backend Services feature section. Fixed
+  the manual OpenSearch `docker run` snippet, which told users to publish 9200
+  on all interfaces with security disabled.
+- `docker/README.md` — leads with the Services tab and wizard; the compose
+  reference follows. Corrected the `.dist.yml` description, which still claimed
+  the live compose file is never overwritten (phase 1.5 changed that).
+- `docs/USER_GUIDE.md` — new Backend Services section, first-launch text covers
+  the wizard, tab list updated to nine.
+- `docs/CONFIGURATION.md` — the `docker` section documented and added to the
+  example config.
+- `docs/TROUBLESHOOTING.md` — new "Backend Services and Docker" section covering
+  engine not installed/not running, port conflicts, slow first-run health,
+  blocked pulls, edited compose files, and full removal.
+
+Verifying the config docs against a generated `config.json` surfaced a bug from
+phase 3: the `docker` section was added to the migration path but not to
+`createDefaultConfig()`, so a fresh install never wrote it. Behaviour was
+unaffected (the getters fall back to the same defaults) but the keys were
+undiscoverable. Fixed and verified on both the fresh-install and upgrade paths.
+
+### Original plan
+
 ## Phase 5 — Docs, build, test (~0.5 day)
 
 - Rewrite the Docker section of `README.md:127` around the wizard, keeping the
