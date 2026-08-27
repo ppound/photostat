@@ -27,7 +27,7 @@ services:
         soft: 65536
         hard: 65536
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
 
@@ -36,7 +36,7 @@ services:
       context: ..
       dockerfile: docker/faces/Dockerfile
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - faces-models:/models
 
@@ -45,7 +45,7 @@ services:
       context: ..
       dockerfile: docker/analysis/Dockerfile
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     volumes:
       - hf-cache:/models
 
@@ -54,7 +54,7 @@ services:
       context: ..
       dockerfile: docker/aesthetic/Dockerfile
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     # Override the IQA metric here if desired (default CLIP-IQA+):
     #   environment:
     #     - PHOTOSTAT_IQA_METRIC=nima

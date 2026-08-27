@@ -65,6 +65,26 @@ Daemon startup:
 Extract a small command-runner seam so command construction and `ps` JSON
 parsing are unit-testable without a Docker daemon present.
 
+## Phase 1.5 — Harden the compose defaults (done)
+
+Slotted in ahead of the UI work: automating setup should propagate a safe
+configuration, not an exposed one. Both fixes benefit existing users too.
+
+- **Loopback port binding.** Every published port in both compose files is now
+  `127.0.0.1:<port>:<port>`. Docker's default for `"9200:9200"` is `0.0.0.0`,
+  which put an unauthenticated OpenSearch — and the whole photo index — on the
+  user's local network. Verified: the daemon's own bind error reports
+  `0.0.0.0:9200`, and OpenSearch answered unauthenticated on a non-loopback
+  address before the change.
+- **Version-pinned image tags.** `:cpu`/`:gpu` floating tags meant a registry or
+  CI compromise could retroactively change what an installed version runs.
+  Pinned to `2.6.1-cpu` / `2.6.1-gpu`, both confirmed published on GHCR.
+- **Upgrade path.** `ConfigService.extractBundledComposeFiles()` previously
+  wrote the live compose file only when absent, so neither fix would ever have
+  reached an existing install. It now also rewrites the live file when it still
+  matches the *previously shipped* dist copy — i.e. the user never edited it.
+  Genuinely customised files are preserved, and warn per exposed port.
+
 ## Phase 2 — Services tab (~1.5 days)
 
 New `src/main/java/com/photostat/ui/ServicesPanel.java`, added to the

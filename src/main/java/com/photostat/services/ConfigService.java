@@ -7,6 +7,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -58,10 +59,15 @@ public class ConfigService {
      * run the backend services without cloning the repo.
      *
      * <p>Each file is written twice: a pristine {@code *.dist.yml} reference copy
-     * that is refreshed on every launch (so upgrades pick up new services/tags),
-     * and the live {@code *.yml} that is written only if it does not already
-     * exist — that way a user's local edits (GPU toggles, PHOTOSTAT_IQA_METRIC,
-     * port changes) are never clobbered.
+     * that is refreshed on every launch, and the live {@code *.yml} the user
+     * actually runs.
+     *
+     * <p>The live copy is updated when it is absent, or when it still matches the
+     * previously shipped {@code *.dist.yml} — meaning the user never edited it,
+     * so replacing it loses nothing and lets security and image-tag fixes reach
+     * existing installs. A live file that differs from the old dist has been
+     * customised (GPU toggles, PHOTOSTAT_IQA_METRIC, port changes) and is left
+     * alone, with a warning when it looks unsafe.
      */
     private void extractBundledComposeFiles(Path configDir) {
         String[][] files = {
@@ -73,27 +79,101 @@ public class ConfigService {
             Path live = configDir.resolve(file[1]);
             Path dist = configDir.resolve(file[2]);
 
-            // Always refresh the pristine reference copy.
+            String bundled;
             try (InputStream is = getClass().getResourceAsStream(resource)) {
                 if (is == null) {
                     System.err.println("Bundled compose file not found in resources: " + resource);
                     continue;
                 }
-                Files.copy(is, dist, StandardCopyOption.REPLACE_EXISTING);
+                bundled = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                System.err.println("Failed to read bundled " + resource + ": " + e.getMessage());
+                continue;
+            }
+
+            // The previously shipped reference copy, read before it is overwritten.
+            String previousDist = readIfPresent(dist);
+
+            try {
+                Files.writeString(dist, bundled, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 System.err.println("Failed to extract " + file[2] + ": " + e.getMessage());
                 continue;
             }
 
-            // Write the live copy only when absent, preserving any user edits.
-            if (!Files.exists(live)) {
+            String current = readIfPresent(live);
+            boolean unmodified = current != null && previousDist != null
+                    && sameContent(current, previousDist);
+
+            if (current == null || unmodified) {
                 try {
-                    Files.copy(dist, live, StandardCopyOption.REPLACE_EXISTING);
+                    Files.writeString(live, bundled, StandardCharsets.UTF_8);
                 } catch (IOException e) {
                     System.err.println("Failed to write " + file[1] + ": " + e.getMessage());
                 }
+            } else if (!sameContent(current, bundled)) {
+                System.out.println("Keeping your edited " + file[1]
+                        + "; see " + file[2] + " for the current defaults.");
+                warnIfPortsExposed(live, current);
             }
         }
+    }
+
+    /** File contents, or null when the file is absent or unreadable. */
+    private String readIfPresent(Path path) {
+        if (!Files.isRegularFile(path)) {
+            return null;
+        }
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** Compare ignoring line-ending differences, which editors introduce on Windows. */
+    private boolean sameContent(String a, String b) {
+        return a.replace("\r\n", "\n").equals(b.replace("\r\n", "\n"));
+    }
+
+    /**
+     * Warn when a user-edited compose file publishes a port on every interface.
+     *
+     * <p>OpenSearch runs here with authentication disabled and the AI services
+     * accept unauthenticated requests, so a bare {@code "9200:9200"} exposes the
+     * photo index to the whole network rather than just this machine.
+     */
+    private void warnIfPortsExposed(Path live, String content) {
+        for (String mapping : findUnboundPortPublishes(content)) {
+            System.err.println("WARNING: " + live + " publishes port " + mapping
+                    + " on all network interfaces. These services have no authentication."
+                    + " Prefix the mapping with 127.0.0.1: to restrict it to this machine.");
+        }
+    }
+
+    /**
+     * Port mappings in a compose file that publish on every interface.
+     *
+     * <p>{@code "9200:9200"} is host-wide; {@code "127.0.0.1:9200:9200"} is not.
+     * Container-only entries such as {@code 9300/tcp} and already-bound mappings
+     * are ignored.
+     */
+    static List<String> findUnboundPortPublishes(String content) {
+        List<String> exposed = new ArrayList<>();
+        if (content == null) {
+            return exposed;
+        }
+        for (String line : content.split("\\R")) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#") || !trimmed.startsWith("-")) {
+                continue;
+            }
+            String mapping = trimmed.substring(1).trim().replace("\"", "").replace("'", "");
+            if (mapping.matches("\\d+:\\d+")) {
+                exposed.add(mapping);
+            }
+        }
+        return exposed;
     }
 
     public static synchronized ConfigService getInstance() {

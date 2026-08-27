@@ -19,6 +19,22 @@ servers (`docker/*/server.py`) are thin wrappers around those modules. Images
 are sent as base64 bytes, so the containers need **no access to your photo
 files** on disk.
 
+## Network exposure
+
+All four ports are published on `127.0.0.1`, so the services are reachable only
+from the machine running them. This matters because **none of them are
+authenticated**: OpenSearch runs with `plugins.security.disabled=true`, and the
+three AI services accept any request they receive. A bare `"9200:9200"` mapping
+would publish on `0.0.0.0` — Docker's default — putting your entire photo index
+on the local network for anyone to read, modify, or delete.
+
+If you deliberately run the containers on a different machine from the PhotoStat
+GUI, widen the binding for the ports you need and put them behind a firewall or
+a reverse proxy with authentication. Don't simply drop the `127.0.0.1:` prefix.
+
+PhotoStat warns on startup if it finds an unbound port mapping in your
+`~/.photostat/docker-compose.yml`.
+
 ## Prebuilt images — no clone required (recommended)
 
 You don't need this repository to run the backends. PhotoStat ships image-based
