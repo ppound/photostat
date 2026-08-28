@@ -182,6 +182,58 @@ public class DockerServiceTest {
         assertEquals(DockerService.ServiceState.UNKNOWN, DockerService.parseServiceState(null));
     }
 
+    // --- candidateDockerPaths ---
+    //
+    // A macOS app launched from Finder inherits only /usr/bin:/bin:/usr/sbin:/sbin,
+    // so a bare "docker" is not found even when Docker Desktop is installed. These
+    // fallbacks are what stop the .dmg reporting "Docker is not installed".
+
+    @Test
+    void macCandidatesCoverDockerDesktopAndHomebrew() {
+        List<String> paths = DockerService.candidateDockerPaths("Mac OS X", "/Users/someone");
+
+        // Docker Desktop's symlink; the location missing from the Finder PATH.
+        assertTrue(paths.contains("/usr/local/bin/docker"), paths.toString());
+        // Apple Silicon Homebrew prefix.
+        assertTrue(paths.contains("/opt/homebrew/bin/docker"), paths.toString());
+        // Inside the app bundle, if the symlink was never created.
+        assertTrue(paths.stream().anyMatch(p -> p.contains("Docker.app")), paths.toString());
+        // Docker Desktop 4.x also installs a CLI under the user's home.
+        assertTrue(paths.contains("/Users/someone/.docker/bin/docker"), paths.toString());
+    }
+
+    @Test
+    void macCandidatesTolerateAnUnknownHome() {
+        assertFalse(DockerService.candidateDockerPaths("Mac OS X", "").isEmpty());
+        assertFalse(DockerService.candidateDockerPaths("Mac OS X", null).isEmpty());
+    }
+
+    @Test
+    void windowsCandidatesUseTheDesktopBinDirectory() {
+        List<String> paths = DockerService.candidateDockerPaths("Windows 11", "C:\\Users\\someone");
+
+        assertTrue(paths.stream().anyMatch(p -> p.endsWith("docker.exe")), paths.toString());
+        assertTrue(paths.stream().anyMatch(p -> p.contains("Docker")), paths.toString());
+    }
+
+    @Test
+    void linuxCandidatesCoverPackageAndSnapInstalls() {
+        List<String> paths = DockerService.candidateDockerPaths("Linux", "/home/someone");
+
+        assertTrue(paths.contains("/usr/bin/docker"), paths.toString());
+        assertTrue(paths.contains("/snap/bin/docker"), paths.toString());
+    }
+
+    @Test
+    void candidatesAreAbsoluteSoTheyDoNotDependOnPath() {
+        for (String os : List.of("Mac OS X", "Windows 11", "Linux")) {
+            for (String path : DockerService.candidateDockerPaths(os, "/home/someone")) {
+                assertTrue(path.startsWith("/") || path.contains(":\\"),
+                        "candidate must be absolute, got: " + path);
+            }
+        }
+    }
+
     // --- describeFailure ---
     //
     // These messages are the only explanation a user gets when a compose command

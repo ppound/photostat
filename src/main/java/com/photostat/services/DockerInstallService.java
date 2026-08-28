@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,10 +96,31 @@ public class DockerInstallService {
         if (isWindows() && commandSucceeds(List.of("winget", "--version"))) {
             return InstallMethod.WINGET;
         }
-        if (isMac() && commandSucceeds(List.of("brew", "--version"))) {
+        if (isMac() && findBrew() != null) {
             return InstallMethod.HOMEBREW;
         }
         return InstallMethod.MANUAL;
+    }
+
+    /**
+     * Locate the Homebrew executable, or null when it is not installed.
+     *
+     * <p>A macOS app launched from Finder gets only the minimal system PATH, so
+     * a bare {@code brew} is not found even when Homebrew is installed — hence
+     * the explicit locations. Apple Silicon installs to {@code /opt/homebrew},
+     * Intel to {@code /usr/local}.
+     */
+    String findBrew() {
+        if (commandSucceeds(List.of("brew", "--version"))) {
+            return "brew";
+        }
+        for (String candidate : List.of("/opt/homebrew/bin/brew", "/usr/local/bin/brew")) {
+            Path path = Paths.get(candidate);
+            if (Files.isRegularFile(path) && Files.isExecutable(path)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**
@@ -188,6 +210,15 @@ public class DockerInstallService {
         if (command == null) {
             return "No supported package manager was found. Download Docker Desktop from "
                     + DOWNLOAD_URL;
+        }
+        if (method == InstallMethod.HOMEBREW) {
+            // Use the resolved location, since a bare "brew" is not on the PATH
+            // of an app launched from Finder.
+            String brew = findBrew();
+            if (brew != null && !"brew".equals(brew)) {
+                command = new ArrayList<>(command);
+                command.set(0, brew);
+            }
         }
 
         logger.info("DockerInstallService", "Running: " + String.join(" ", command));

@@ -65,6 +65,9 @@ public class DockerService {
     /** Cached result of {@link #resolveComposeCommand()}; null until first probe. */
     private volatile List<String> composeCommand;
 
+    /** Cached docker executable location; null until first resolved. */
+    private volatile String resolvedDockerPath;
+
     private DockerService() {
         this.configService = ConfigService.getInstance();
         this.logger = LoggingService.getInstance();
@@ -173,18 +176,88 @@ public class DockerService {
         configService.saveConfig();
     }
 
-    /** Path to the docker executable, for installs that are not on PATH. */
+    /**
+     * Path to the docker executable.
+     *
+     * <p>An explicit {@code docker.docker_path} in the config always wins.
+     * Otherwise {@code docker} is looked up on PATH and, failing that, in the
+     * places the Docker installers actually put it.
+     *
+     * <p>That fallback matters because a macOS app launched from Finder does not
+     * inherit the user's shell PATH — it gets only {@code /usr/bin:/bin:/usr/sbin:/sbin},
+     * which excludes {@code /usr/local/bin} where Docker Desktop puts its CLI.
+     * Without this, PhotoStat reports "Docker is not installed" from the .dmg
+     * while working fine when launched from a terminal.
+     */
     public String getDockerPath() {
-        String path = configService.getDockerPath();
-        return (path == null || path.isBlank()) ? "docker" : path.trim();
+        String configured = configService.getDockerPath();
+        if (configured != null && !configured.isBlank() && !"docker".equals(configured.trim())) {
+            return configured.trim();
+        }
+        String cached = resolvedDockerPath;
+        if (cached != null) {
+            return cached;
+        }
+        String found = findDockerExecutable();
+        resolvedDockerPath = found;
+        return found;
+    }
+
+    /** Probe PATH first, then the known install locations. */
+    private String findDockerExecutable() {
+        // Literal "docker" here, never getDockerPath(), to avoid recursing.
+        if (run(List.of("docker", "--version"), PROBE_TIMEOUT_SECONDS).isSuccess()) {
+            return "docker";
+        }
+        for (String candidate : candidateDockerPaths(
+                System.getProperty("os.name", ""), System.getProperty("user.home", ""))) {
+            Path path = Paths.get(candidate);
+            if (Files.isRegularFile(path) && Files.isExecutable(path)) {
+                logger.info("DockerService", "docker not on PATH; using " + candidate);
+                return candidate;
+            }
+        }
+        // Nothing found. Return the bare name so error messages stay readable.
+        return "docker";
+    }
+
+    /**
+     * Where the Docker installers place the CLI on each platform, most likely
+     * first. Static and parameterised so it can be asserted in tests.
+     */
+    static List<String> candidateDockerPaths(String osName, String home) {
+        String os = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
+        List<String> candidates = new ArrayList<>();
+        if (os.contains("mac")) {
+            // Docker Desktop symlinks here; Apple Silicon Homebrew uses /opt/homebrew.
+            candidates.add("/usr/local/bin/docker");
+            candidates.add("/opt/homebrew/bin/docker");
+            candidates.add("/Applications/Docker.app/Contents/Resources/bin/docker");
+            if (home != null && !home.isBlank()) {
+                candidates.add(home + "/.docker/bin/docker");
+            }
+        } else if (os.contains("win")) {
+            String programFiles = System.getenv("ProgramFiles");
+            if (programFiles != null) {
+                candidates.add(programFiles + "\\Docker\\Docker\\resources\\bin\\docker.exe");
+            }
+            candidates.add("C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe");
+        } else {
+            candidates.add("/usr/bin/docker");
+            candidates.add("/usr/local/bin/docker");
+            candidates.add("/snap/bin/docker");
+        }
+        return candidates;
     }
 
     public void setDockerPath(String dockerPath) {
         configService.setDockerPath((dockerPath == null || dockerPath.isBlank())
                 ? "docker" : dockerPath.trim());
         configService.saveConfig();
-        // A different binary may be a different compose generation.
+        // A different binary may be a different compose generation, and the
+        // resolved location is no longer valid.
         this.composeCommand = null;
+        this.resolvedDockerPath = null;
     }
 
     /** Directory holding config.json and the deployed compose files ({@code ~/.photostat}). */
