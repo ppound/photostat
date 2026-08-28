@@ -10,7 +10,7 @@
 
 services:
   faces:
-    image: ghcr.io/ppound/photostat-faces:2.6.1-gpu
+    image: ghcr.io/ppound/photostat-faces:2.6.2-gpu
     deploy:
       resources:
         reservations:
@@ -20,7 +20,7 @@ services:
               capabilities: [gpu]
 
   analysis:
-    image: ghcr.io/ppound/photostat-analysis:2.6.1-gpu
+    image: ghcr.io/ppound/photostat-analysis:2.6.2-gpu
     deploy:
       resources:
         reservations:
@@ -30,7 +30,7 @@ services:
               capabilities: [gpu]
 
   aesthetic:
-    image: ghcr.io/ppound/photostat-aesthetic:2.6.1-gpu
+    image: ghcr.io/ppound/photostat-aesthetic:2.6.2-gpu
     deploy:
       resources:
         reservations:

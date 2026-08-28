@@ -92,16 +92,16 @@ the toolbar **AI ▾ → Score Selected (aesthetic)**. Selected images are alway
 
 ```bash
 # Score all indexed photos (incremental)
-java -jar photostat-java-2.6.1-executable.jar --score-aesthetics
+java -jar photostat-java-2.6.2-executable.jar --score-aesthetics
 
 # Preview without scoring
-java -jar photostat-java-2.6.1-executable.jar --score-aesthetics --dry-run
+java -jar photostat-java-2.6.2-executable.jar --score-aesthetics --dry-run
 
 # Re-score everything, larger batches
-java -jar photostat-java-2.6.1-executable.jar --score-aesthetics --force --batch 32
+java -jar photostat-java-2.6.2-executable.jar --score-aesthetics --force --batch 32
 
 # Only a subdirectory
-java -jar photostat-java-2.6.1-executable.jar --score-aesthetics --dir /path/to/photos
+java -jar photostat-java-2.6.2-executable.jar --score-aesthetics --dir /path/to/photos
 ```
 
 | Option | Description |
