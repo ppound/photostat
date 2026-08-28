@@ -246,7 +246,7 @@ The selected cluster absorbs all faces from the other cluster. After merging, cl
 ### Basic Usage
 
 ```bash
-java -jar photostat-java-2.6.2-executable.jar --detect-faces
+java -jar photostat-java-2.6.3-executable.jar --detect-faces
 ```
 
 This fetches image paths from OpenSearch, detects faces in any new images, clusters all faces, and prints a summary.
@@ -268,16 +268,16 @@ This fetches image paths from OpenSearch, detects faces in any new images, clust
 
 ```bash
 # Standard incremental scan
-java -jar photostat-java-2.6.2-executable.jar --detect-faces
+java -jar photostat-java-2.6.3-executable.jar --detect-faces
 
 # Parallel scan with 4 workers (faster on GPU systems)
-java -jar photostat-java-2.6.2-executable.jar --detect-faces --parallel 4
+java -jar photostat-java-2.6.3-executable.jar --detect-faces --parallel 4
 
 # Scan a specific directory
-java -jar photostat-java-2.6.2-executable.jar --detect-faces --dir /Volumes/Photos/2024
+java -jar photostat-java-2.6.3-executable.jar --detect-faces --dir /Volumes/Photos/2024
 
 # Re-cluster without re-scanning (useful after adjusting threshold)
-java -jar photostat-java-2.6.2-executable.jar --detect-faces --cluster-only
+java -jar photostat-java-2.6.3-executable.jar --detect-faces --cluster-only
 ```
 
 > **After a CLI scan:** If named clusters exist, the CLI prints a reminder that you need to open the GUI Faces tab and click **Save Name** on each named cluster to update the search index for any new photos.
