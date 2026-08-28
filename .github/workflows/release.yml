@@ -42,6 +42,29 @@ jobs:
           name: fat-jar-intel-mac
           path: target/photostat-java-${{ steps.version.outputs.version }}-executable-mac-intel.jar
 
+      # Pushing the tag triggers this workflow immediately, so the release may
+      # not exist yet -- `gh release upload` fails with "release not found" when
+      # the tag is pushed before the release is created. Create it on demand as
+      # a draft, using RELEASE_NOTES_<version>.md when that file is present.
+      - name: Ensure the release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "Release ${{ github.ref_name }} already exists."
+            exit 0
+          fi
+          version="${{ steps.version.outputs.version }}"
+          notes="RELEASE_NOTES_${version}.md"
+          title="PhotoStat ${version}"
+          if [ -f "$notes" ]; then
+            echo "Creating draft release from $notes"
+            gh release create "${{ github.ref_name }}" --draft --title "$title" --notes-file "$notes"
+          else
+            echo "No $notes found; generating notes automatically"
+            gh release create "${{ github.ref_name }}" --draft --title "$title" --generate-notes
+          fi
+
       - name: Upload JARs to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
