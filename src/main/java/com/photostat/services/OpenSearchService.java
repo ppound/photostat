@@ -144,6 +144,68 @@ public class OpenSearchService {
     }
 
     /**
+     * Turn an OpenSearch failure into something a user can act on.
+     *
+     * <p>The client's own messages describe the protocol rather than the
+     * situation — a disk that has filled up surfaces as
+     * {@code [TOO_MANY_REQUESTS/12/disk usage exceeded flood-stage watermark]},
+     * and a raw {@code getMessage()} can be as unhelpful as "Forbidden access".
+     *
+     * @return an explanation, or the original message when nothing is recognised
+     */
+    public static String describeError(Throwable error) {
+        if (error == null) {
+            return "Unknown error";
+        }
+
+        StringBuilder combined = new StringBuilder();
+        for (Throwable t = error; t != null && combined.length() < 4000; t = t.getCause()) {
+            if (t.getMessage() != null) {
+                combined.append(t.getMessage()).append(' ');
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        String raw = combined.toString().trim();
+        String lower = raw.toLowerCase(Locale.ROOT);
+
+        // OpenSearch turns every index read-only once the disk passes the
+        // flood-stage watermark (95% by default), and does not lift the block
+        // automatically when space is freed.
+        // OpenSearch spells this block two ways: the settings key uses
+        // underscores, the message text uses hyphens.
+        if (lower.contains("flood-stage watermark")
+                || lower.contains("read_only_allow_delete")
+                || lower.contains("read-only-allow-delete")
+                || lower.contains("index read-only")
+                || lower.contains("cluster_block_exception")) {
+            return "OpenSearch has stopped accepting writes: its disk is nearly full, so it "
+                    + "made the index read-only. Free space on the drive holding the OpenSearch "
+                    + "data — with Docker that is the Docker disk image, not your photo drive — "
+                    + "then clear the block. See Troubleshooting: \"OpenSearch is read-only\".";
+        }
+        if (lower.contains("circuit_breaking_exception")) {
+            return "OpenSearch ran out of memory for this request. Reduce the indexing batch "
+                    + "size in Settings, or give the OpenSearch container more memory.";
+        }
+        if (lower.contains("connection refused") || lower.contains("failed to connect")) {
+            return "Cannot reach OpenSearch. Check that it is running — the Services tab "
+                    + "shows its state — and that the host and port in Settings are correct.";
+        }
+        if (lower.contains("401") || lower.contains("unauthorized")
+                || lower.contains("authentication")) {
+            return "OpenSearch rejected the credentials. Check the username and password in "
+                    + "Settings.";
+        }
+        if (lower.contains("403") || lower.contains("forbidden")) {
+            return "OpenSearch refused the request. The account may lack permission to write "
+                    + "to this index, or the index may be read-only. See Troubleshooting.";
+        }
+        return raw.isEmpty() ? error.toString() : raw;
+    }
+
+    /**
      * Test connection to OpenSearch.
      */
     public synchronized boolean testConnection() {

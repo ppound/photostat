@@ -8,6 +8,7 @@ This guide covers common issues and their solutions.
   - [macOS: "PhotoStat is damaged" or "cannot be opened"](#macos-photostat-is-damaged-or-cannot-be-opened)
 - [Backend Services and Docker](#backend-services-and-docker)
 - [Can't Connect to OpenSearch](#cant-connect-to-opensearch)
+  - [OpenSearch is read-only / flood-stage watermark](#opensearch-is-read-only--disk-usage-exceeded-flood-stage-watermark)
 - [Images Not Appearing](#images-not-appearing)
 - [Thumbnails Not Showing](#thumbnails-not-showing)
 - [Application Freezes](#application-freezes)
@@ -234,6 +235,49 @@ you'd need to re-index afterwards. Leave `-v` off to keep it.
    - Port: `9200` (default)
 
 3. Check firewall settings if connecting to a remote server.
+
+### OpenSearch is read-only / "disk usage exceeded flood-stage watermark"
+
+Indexing fails while searching still works, and the error mentions a read-only
+index or a flood-stage watermark. Older builds reported this unhelpfully as
+`Indexing error: Forbidden access`.
+
+OpenSearch stops accepting writes when the disk holding its data passes **95%**
+full, and marks every index `read-only-allow-delete`. **It does not lift that
+block by itself when space is freed** — you have to clear it.
+
+**This is the disk OpenSearch runs on, not the drive holding your photos.** With
+the Docker backend that is Docker's own disk image, which is a fixed size and
+easy to fill with container images and model weights.
+
+Check it:
+
+```bash
+docker exec photostat-opensearch-1 df -h /usr/share/opensearch/data
+```
+
+Free space — this only removes images no container is using:
+
+```bash
+docker system df          # see what is using the space
+docker image prune -a
+docker builder prune
+```
+
+Old images are the usual culprit: superseded versions left behind by upgrades,
+and the GPU images if you ever selected that profile, which are 8-10 GB each.
+Docker Desktop can also grow its disk under **Settings → Resources**.
+
+Once you are back under 95%, clear the block:
+
+```bash
+curl -X PUT "http://localhost:9200/_all/_settings" \
+  -H 'Content-Type: application/json' \
+  -d '{"index.blocks.read_only_allow_delete": null}'
+```
+
+Indexing then works again. Clearing the block while still over the watermark
+will not help — OpenSearch simply re-applies it.
 
 ### Error: "Connection timed out"
 

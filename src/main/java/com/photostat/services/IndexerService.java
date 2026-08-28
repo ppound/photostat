@@ -356,7 +356,9 @@ public class IndexerService {
                     notifyCompletion(stats);
 
                 } catch (Exception e) {
-                    updateStatus("Indexing error: " + e.getMessage());
+                    // The raw client message describes the protocol rather than
+                    // the situation; a full disk arrives as "Forbidden access".
+                    updateStatus("Indexing error: " + OpenSearchService.describeError(e));
                     e.printStackTrace();
                 } finally {
                     isIndexing.set(false);
