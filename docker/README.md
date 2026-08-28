@@ -19,10 +19,79 @@ servers (`docker/*/server.py`) are thin wrappers around those modules. Images
 are sent as base64 bytes, so the containers need **no access to your photo
 files** on disk.
 
-## Prebuilt images — no clone required (recommended)
+## Network exposure
 
-You don't need this repository to run the backends. PhotoStat ships image-based
-Compose files and deploys them to your config directory on first launch:
+All four ports are published on `127.0.0.1`, so the services are reachable only
+from the machine running them. This matters because **none of them are
+authenticated**: OpenSearch runs with `plugins.security.disabled=true`, and the
+three AI services accept any request they receive. A bare `"9200:9200"` mapping
+would publish on `0.0.0.0` — Docker's default — putting your entire photo index
+on the local network for anyone to read, modify, or delete.
+
+If you deliberately run the containers on a different machine from the PhotoStat
+GUI, widen the binding for the ports you need and put them behind a firewall or
+a reverse proxy with authentication. Don't simply drop the `127.0.0.1:` prefix.
+
+PhotoStat warns on startup if it finds an unbound port mapping in your
+`~/.photostat/docker-compose.yml`.
+
+## From inside PhotoStat (recommended)
+
+You don't need this repository, a terminal, or any of the commands below.
+
+On first launch PhotoStat offers a **setup wizard** that checks for Docker,
+offers to install Docker Desktop, starts the engine, lets you pick a CPU or GPU
+profile and which services to run, then pulls the images and starts everything.
+Reopen it any time from **Services → Setup...**.
+
+The **Services** tab is the day-to-day control surface:
+
+- Docker engine state, with a button to start it
+- **Start All** / **Stop All**, and a Start/Stop button per service
+- Container state and health for each service
+- **Check for Image Updates** to pull newer images
+- Optional "start when PhotoStat opens" and "stop when PhotoStat closes"
+
+Installing Docker Desktop changes machine-wide settings, so the wizard lists
+exactly what it alters and requires explicit consent first. It never restarts
+your machine. See [Network exposure](#network-exposure) below for why the ports
+are bound the way they are.
+
+Everything below is for running the containers by hand instead.
+
+## Processor architectures
+
+The CPU images are published for both `linux/amd64` (Intel/AMD) and
+`linux/arm64` (Apple Silicon), so `docker pull` picks the right one
+automatically.
+
+The GPU images are **amd64 only**. They are built on CUDA base images, and CUDA
+does not exist on Apple Silicon — a Mac should use the CPU images.
+
+If a pull fails with:
+
+```
+no matching manifest for linux/arm64/v8 in the manifest list entries
+```
+
+then the image you are pulling predates multi-arch publishing (PhotoStat 2.6.1
+and earlier were amd64 only). Either upgrade to a release whose images are
+multi-arch, or run the Intel images under emulation by adding a `platform` line
+to each service in `~/.photostat/docker-compose.yml`:
+
+```yaml
+  faces:
+    image: ghcr.io/ppound/photostat-faces:2.6.1-cpu
+    platform: linux/amd64        # run under Rosetta on Apple Silicon
+```
+
+Emulation works, but PyTorch and InsightFace run considerably slower under it —
+fine for trying things out, not something to rely on day to day.
+
+## Prebuilt images — no clone required
+
+PhotoStat ships image-based Compose files and deploys them to your config
+directory on first launch:
 
 - `~/.photostat/docker-compose.yml`
 - `~/.photostat/docker-compose.gpu.yml`
@@ -43,11 +112,16 @@ docker compose -f ~/.photostat/docker-compose.yml up -d opensearch aesthetic
 ```
 
 A pristine reference copy is kept alongside each file as
-`docker-compose.dist.yml` / `docker-compose.gpu.dist.yml`; PhotoStat refreshes
-those on every launch but never overwrites your live `docker-compose.yml`, so
-local edits (GPU toggles, `PHOTOSTAT_IQA_METRIC`, port changes) are preserved.
-To reset to defaults, delete your edited file and relaunch (or copy the `.dist`
-copy over it).
+`docker-compose.dist.yml` / `docker-compose.gpu.dist.yml`, refreshed on every
+launch.
+
+Your live `docker-compose.yml` is updated only when it still matches the
+previously shipped `.dist` copy — that is, when you have never edited it. That
+way upgrades deliver new image tags and security fixes to everyone who is
+running the defaults. If you *have* edited it (GPU toggles,
+`PHOTOSTAT_IQA_METRIC`, port changes), your version is kept as-is and PhotoStat
+logs a note pointing at the `.dist` file so you can merge in what's new. To
+reset to defaults, delete your edited file and relaunch.
 
 Everything below (compose subcommands, GPU notes, per-service control) works the
 same — just point `-f` at the files in `~/.photostat/`.

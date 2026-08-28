@@ -15,6 +15,14 @@
 #
 # Model weights download on first start into the named volumes below, so the
 # containers need no access to your photo files.
+#
+# SECURITY: every port below is published on 127.0.0.1 so the services are
+# reachable only from this machine. OpenSearch runs with authentication
+# disabled and the AI services accept unauthenticated requests, so binding to
+# 0.0.0.0 (Docker's default for "9200:9200") would expose your photo index and
+# those services to everyone on your network. Only widen this if you are
+# running PhotoStat on a different machine from the containers, and put the
+# services behind a firewall or auth if you do.
 
 services:
   opensearch:
@@ -34,28 +42,28 @@ services:
         soft: 65536
         hard: 65536
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
 
   faces:
-    image: ghcr.io/ppound/photostat-faces:cpu
+    image: ghcr.io/ppound/photostat-faces:2.6.1-cpu
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     volumes:
       - faces-models:/models
 
   analysis:
-    image: ghcr.io/ppound/photostat-analysis:cpu
+    image: ghcr.io/ppound/photostat-analysis:2.6.1-cpu
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     volumes:
       - hf-cache:/models
 
   aesthetic:
-    image: ghcr.io/ppound/photostat-aesthetic:cpu
+    image: ghcr.io/ppound/photostat-aesthetic:2.6.1-cpu
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     # Override the IQA metric here if desired (default CLIP-IQA+):
     #   environment:
     #     - PHOTOSTAT_IQA_METRIC=nima

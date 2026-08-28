@@ -36,6 +36,15 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
     "thumbnail_size": 200,
     "results_per_page": 50
   },
+  "docker": {
+    "setup_completed": true,
+    "manage_containers": true,
+    "auto_start_on_launch": false,
+    "stop_on_exit": false,
+    "gpu": false,
+    "services": ["opensearch", "faces", "analysis", "aesthetic"],
+    "docker_path": "docker"
+  },
   "exiftool": {
     "path": "exiftool",
     "use_for_raw": true
@@ -108,6 +117,26 @@ PhotoStat stores its configuration in `~/.photostat/config.json`. This document 
 | `opensearch.index_name` | string | `photostat` | Name of the index to use |
 | `opensearch.username` | string | `""` | Username for authentication (optional) |
 | `opensearch.password` | string | `""` | Password for authentication (optional) |
+
+### Docker Backend Settings
+
+Managed from the **Services** tab and the first-run setup wizard; listed here for
+reference and for the keys that have no UI control.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `docker.setup_completed` | boolean | `false` | Set once the setup wizard is finished or dismissed. Set to `false` to make it appear again on next launch. |
+| `docker.manage_containers` | boolean | `true` | Master switch. When `false`, PhotoStat never starts, stops, or offers to set up the containers. No UI control. |
+| `docker.auto_start_on_launch` | boolean | `false` | Start the configured services when PhotoStat opens, starting the Docker engine first if needed |
+| `docker.stop_on_exit` | boolean | `false` | Stop the services when PhotoStat closes |
+| `docker.gpu` | boolean | `false` | Apply `docker-compose.gpu.yml` as an overlay. Requires an NVIDIA GPU and the container toolkit. |
+| `docker.services` | array | all four | Which services to manage: `opensearch`, `faces`, `analysis`, `aesthetic` |
+| `docker.docker_path` | string | `docker` | Path to the docker executable, for installs that aren't on `PATH`. No UI control. |
+
+The compose files themselves live next to `config.json` as
+`~/.photostat/docker-compose.yml` and `docker-compose.gpu.yml`. See
+[docker/README.md](../docker/README.md) for how they're updated and what the
+`.dist.yml` reference copies are for.
 
 ### Indexing Settings
 

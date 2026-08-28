@@ -712,6 +712,22 @@ public class ImageAnalysisService {
      * Check if the configured Moondream backend is available
      * (Python deps locally, or the Docker service over HTTP).
      */
+    /**
+     * True if the Dockerised Moondream analysis service answers its /health endpoint.
+     *
+     * <p>Unlike {@link #isMoondreamAvailable()} this ignores the configured
+     * backend mode, so the Services tab can report on the container itself even
+     * when the app is set to local Python.
+     */
+    public boolean isDockerServiceHealthy() {
+        try {
+            return fetchMoondreamHealth().contains("\"status\"");
+        } catch (IOException e) {
+            logger.debug("ImageAnalysisService", "Docker Moondream health check failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     public boolean isMoondreamAvailable() {
         if (isMoondreamDockerMode()) {
             try {

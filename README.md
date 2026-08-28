@@ -100,6 +100,13 @@ After years of photography and using various software like Lightroom, Capture On
 - **Incremental Uploads** - rclone only uploads new/changed files
 - **Sidecar Exclusion** - `.photostat.json` sidecar files are automatically excluded
 
+### Backend Services
+- **Guided Setup** - A first-run wizard installs Docker (with your consent), starts the engine, and brings up the backend containers
+- **One-Click Start/Stop** - Start and stop the whole backend from the **Services** tab, or one service at a time
+- **Live Status** - Container state and health for each service, with a log of what Docker is doing
+- **Optional Autostart** - Start the services when PhotoStat opens and stop them when it closes
+- **Local Only** - Every service port is bound to `127.0.0.1`, so nothing is exposed to your network
+
 ### Visualizations
 - **Camera Usage Charts** - See which cameras and lenses you use most
 - **Timeline View** - Visualize your collection over time
@@ -111,75 +118,9 @@ After years of photography and using various software like Lightroom, Capture On
 
 ## Quick Start
 
-### 1. Prerequisites
+Install PhotoStat, then let the built-in setup wizard handle everything else.
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| OpenSearch | 2.x | Required for all installation methods |
-| Java | 21 or later | Only needed for the cross-platform JAR — installers bundle their own runtime |
-
-### 2. Install Docker
-
-If you don't already have Docker installed:
-
-| Platform | Installation |
-|----------|-------------|
-| **Windows** | Download [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) — requires WSL 2 (the installer will guide you) |
-| **macOS** | Download [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) — choose Apple Silicon or Intel chip |
-| **Linux** | Install via your package manager (see below) |
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update
-sudo apt install docker.io
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER   # Log out and back in after this
-```
-
-**Linux (Fedora/RHEL):**
-```bash
-sudo dnf install docker
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER
-```
-
-Verify Docker is working:
-```bash
-docker --version
-docker run hello-world
-```
-
-### 3. Install OpenSearch
-
-**Docker (Recommended):**
-
-Pull the OpenSearch image:
-```bash
-docker pull opensearchproject/opensearch:2.11.0
-```
-
-Create a volume for persistent storage and run the container:
-```bash
-docker volume create opensearch-data
-
-docker run -d --name opensearch \
-  -p 9200:9200 \
-  -v opensearch-data:/usr/share/opensearch/data \
-  -e "discovery.type=single-node" \
-  -e "DISABLE_SECURITY_PLUGIN=true" \
-  opensearchproject/opensearch:2.11.0
-```
-
-This ensures your indexed data survives container restarts and removals. To manage the container:
-```bash
-docker stop opensearch     # Stop the container
-docker start opensearch    # Start it again (data is preserved)
-docker rm opensearch       # Remove the container (volume keeps data)
-```
-
-Or download from [opensearch.org](https://opensearch.org/downloads.html).
-
-### 4. Download & Install PhotoStat
+### 1. Download & Install PhotoStat
 
 Download the latest release from **[GitHub Releases](https://github.com/ppound/photostat/releases)**. Choose the option that fits your platform:
 
@@ -205,9 +146,89 @@ java -jar photostat-java-2.6.1-executable.jar
 
 **Intel Mac users:** Download the separate `photostat-java-2.6.1-executable-mac-intel.jar` which includes Intel (x86_64) macOS natives instead of Apple Silicon. See [Troubleshooting](docs/TROUBLESHOOTING.md#error-on-intel-mac-no-suitable-pipeline-found-or-graphics-errors).
 
-### 5. Get Started
+> Java is only needed for the cross-platform JAR. The `.msi` and `.dmg` installers bundle their own Java 21 runtime.
 
-1. Configure OpenSearch connection via **File > Settings**
+### 2. Run the setup wizard
+
+The first time PhotoStat starts it offers to set up its backend services. The wizard:
+
+1. Checks whether Docker is installed, and offers to install Docker Desktop if not
+2. Starts the Docker engine if it isn't already running
+3. Lets you choose a CPU or GPU profile and which services to run
+4. Downloads the container images and starts everything
+
+That gives you OpenSearch (the search index, required) plus the optional AI backends for face recognition, tagging/captioning, and aesthetic scoring — with no Python, PyTorch or InsightFace to install by hand.
+
+You can reopen the wizard at any time from **Services → Setup...**, and start or stop the services from that same tab.
+
+**Before it installs anything**, the wizard shows exactly what Docker Desktop changes on your machine — on Windows that includes enabling WSL 2, which puts Windows under a hypervisor and can affect other virtualisation software like VirtualBox or VMware. It also links Docker's licence terms, which require a paid subscription for commercial use in larger organisations. Nothing is installed until you tick the consent box, and PhotoStat never restarts your machine.
+
+**None of this is required.** PhotoStat works against an OpenSearch server you already run, with the AI features in local Python mode or switched off entirely. Click Cancel to skip the wizard and set things up yourself.
+
+### 3. Manual setup (advanced)
+
+<details>
+<summary>Set up Docker and OpenSearch yourself instead of using the wizard</summary>
+
+**Install Docker:**
+
+| Platform | Installation |
+|----------|-------------|
+| **Windows** | Download [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) — requires WSL 2 (the installer will guide you) |
+| **macOS** | Download [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) — choose Apple Silicon or Intel chip |
+| **Linux** | Install via your package manager (see below) |
+
+```bash
+# Ubuntu/Debian
+sudo apt update && sudo apt install docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER   # Log out and back in after this
+
+# Fedora/RHEL
+sudo dnf install docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+```
+
+Verify with `docker --version` and `docker run hello-world`.
+
+**Run the backend services** using the compose file PhotoStat deploys to `~/.photostat`:
+
+```bash
+# All services, CPU
+docker compose -f ~/.photostat/docker-compose.yml up -d
+
+# GPU (NVIDIA)
+docker compose -f ~/.photostat/docker-compose.yml -f ~/.photostat/docker-compose.gpu.yml up -d
+
+# Only what you need
+docker compose -f ~/.photostat/docker-compose.yml up -d opensearch aesthetic
+```
+
+See [docker/README.md](docker/README.md) for the full reference.
+
+**Or run OpenSearch alone**, without the AI backends:
+
+```bash
+docker volume create opensearch-data
+
+docker run -d --name opensearch \
+  -p 127.0.0.1:9200:9200 \
+  -v opensearch-data:/usr/share/opensearch/data \
+  -e "discovery.type=single-node" \
+  -e "DISABLE_SECURITY_PLUGIN=true" \
+  opensearchproject/opensearch:2.11.1
+```
+
+The `127.0.0.1:` prefix matters — security is disabled here, so without it your photo index would be readable and writable by anyone on your network. Data lives in the named volume, so it survives `docker stop`, `docker start` and `docker rm`.
+
+Or download OpenSearch from [opensearch.org](https://opensearch.org/downloads.html).
+
+</details>
+
+### 4. Get Started
+
+1. Check the OpenSearch connection via **File > Settings** (the wizard's defaults should already work)
 2. Add photo directories in the **Index** tab
 3. Click **Start Indexing**
 4. Search your photos in the **Search** tab
@@ -223,7 +244,7 @@ java -jar photostat-java-2.6.1-executable.jar
 | [Aesthetic Scoring](docs/AESTHETIC_SCORING.md) | Local image-quality scoring: setup, workflows, and metrics |
 | [Face Recognition](docs/FACE_RECOGNITION.md) | Python setup, GPU acceleration, and face detection workflow |
 | [Configuration](docs/CONFIGURATION.md) | All settings and options explained |
-| [Docker Backends](docker/README.md) | Run faces/analysis/aesthetic as containers (CPU or GPU); start/stop individual services |
+| [Docker Backends](docker/README.md) | The Services tab and setup wizard, plus running the containers by hand (CPU or GPU) |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
 | [Development](docs/DEVELOPMENT.md) | Building from source and project structure |
 

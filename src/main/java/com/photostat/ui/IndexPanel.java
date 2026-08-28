@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 /**
@@ -46,6 +47,15 @@ public class IndexPanel extends BorderPane {
     // Image formats the aesthetic backend (Pillow) can decode.
     private static final String[] SCORABLE_EXTENSIONS =
             {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".tif", ".gif"};
+
+    // The document count is read at startup, when OpenSearch may still be
+    // starting — PhotoStat can be bringing up its container at that moment — so
+    // retry for about a minute before reporting it as unreachable.
+    private static final int STATS_ATTEMPTS = 12;
+    private static final long STATS_RETRY_DELAY_MS = 5000;
+
+    /** Guards against overlapping stat refreshes. */
+    private final AtomicBoolean statsRefreshing = new AtomicBoolean(false);
 
     public IndexPanel() {
         this.configService = ConfigService.getInstance();
@@ -797,22 +807,87 @@ public class IndexPanel extends BorderPane {
         thread.start();
     }
 
+    /**
+     * Re-read the document count. Safe to call repeatedly; a refresh already in
+     * flight is left to finish rather than being duplicated.
+     *
+     * <p>Called when the Index tab is selected, so a count that could not be
+     * read at startup corrects itself as soon as the user looks at the tab.
+     */
+    public void refreshStats() {
+        updateStats();
+    }
+
+    /**
+     * True when a count failed only because the index has not been created yet,
+     * which is the normal state before the first indexing run.
+     */
+    private static boolean isIndexMissing(Throwable error) {
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message != null
+                    && (message.contains("index_not_found_exception")
+                        || message.contains("no such index"))) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
+    }
+
     private void updateStats() {
+        if (!statsRefreshing.compareAndSet(false, true)) {
+            return;
+        }
         Thread thread = new Thread(() -> {
             try {
-                if (!openSearchService.isConnected()) {
-                    openSearchService.connect();
+                for (int attempt = 1; attempt <= STATS_ATTEMPTS; attempt++) {
+                    boolean lastAttempt = attempt == STATS_ATTEMPTS;
+                    try {
+                        if (!openSearchService.isConnected()) {
+                            openSearchService.connect();
+                        }
+                        long count = openSearchService.getDocumentCount();
+                        Platform.runLater(() ->
+                                statsLabel.setText(String.format("Documents indexed: %,d", count))
+                        );
+                        return;
+                    } catch (Exception e) {
+                        // Nothing has been indexed yet, which is the normal
+                        // state on a fresh install rather than an error.
+                        if (isIndexMissing(e)) {
+                            Platform.runLater(() -> statsLabel.setText("Documents indexed: 0"));
+                            return;
+                        }
+                        // OpenSearch may still be starting — PhotoStat can be
+                        // bringing up its container right now — so keep trying
+                        // before declaring it unreachable. Distinguish the two
+                        // failures: a working connection whose count query fails
+                        // is not the same as no connection at all.
+                        boolean reachable = openSearchService.testConnection();
+                        String message = reachable
+                                ? "Connected, but could not read the document count"
+                                : lastAttempt
+                                        ? "Cannot connect to OpenSearch"
+                                        : "Waiting for OpenSearch...";
+                        Platform.runLater(() -> statsLabel.setText(message));
+                        if (reachable || lastAttempt) {
+                            return;
+                        }
+                        try {
+                            Thread.sleep(STATS_RETRY_DELAY_MS);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
                 }
-                long count = openSearchService.getDocumentCount();
-                Platform.runLater(() ->
-                        statsLabel.setText(String.format("Documents indexed: %,d", count))
-                );
-            } catch (Exception e) {
-                Platform.runLater(() ->
-                        statsLabel.setText("Cannot connect to OpenSearch")
-                );
+            } finally {
+                statsRefreshing.set(false);
             }
-        });
+        }, "index-stats");
         thread.setDaemon(true);
         thread.start();
     }

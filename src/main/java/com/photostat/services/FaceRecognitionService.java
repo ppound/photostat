@@ -178,6 +178,22 @@ public class FaceRecognitionService {
      * Check if the configured faces backend is available
      * (Python + InsightFace locally, or the Docker service over HTTP).
      */
+    /**
+     * True if the Dockerised faces service answers its /health endpoint.
+     *
+     * <p>Unlike {@link #isPythonAvailable()} this ignores the configured backend
+     * mode, so the Services tab can report on the container itself even when the
+     * app is set to local Python.
+     */
+    public boolean isDockerServiceHealthy() {
+        try {
+            return fetchDockerHealth().contains("\"status\"");
+        } catch (IOException e) {
+            logger.debug("FaceRecognitionService", "Docker faces health check failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     public boolean isPythonAvailable() {
         if (isDockerMode()) {
             try {

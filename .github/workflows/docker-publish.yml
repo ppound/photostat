@@ -1,8 +1,12 @@
 name: Publish Docker images
 
-# Builds the PhotoStat backend images (faces, analysis, aesthetic) in both CPU
-# and GPU variants and pushes them to GitHub Container Registry (GHCR) so users
-# can pull prebuilt images instead of cloning the repo and building locally.
+# Builds the PhotoStat backend images (faces, analysis, aesthetic) and pushes
+# them to GitHub Container Registry (GHCR) so users can pull prebuilt images
+# instead of cloning the repo and building locally.
+#
+# CPU images are multi-arch (linux/amd64 + linux/arm64) so they run natively on
+# Apple Silicon Macs as well as Intel/AMD machines. GPU images stay amd64-only:
+# they are built on CUDA base images, and CUDA does not exist on Apple Silicon.
 #
 # Triggers on release tags (v*) and on-demand via the Actions tab.
 # The published packages must be made public once (Packages -> package
@@ -19,13 +23,129 @@ permissions:
   packages: write
 
 jobs:
-  build-push:
+  # Each architecture builds on its own native runner and pushes an untagged
+  # image identified only by digest. Building arm64 under QEMU emulation would
+  # work but takes hours for these images (PyTorch, InsightFace native
+  # extensions), so native runners are used instead. arm64 runners are free for
+  # public repositories.
+  build-cpu:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [faces, analysis, aesthetic]
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      # "linux/amd64" -> "linux-amd64", for artifact and cache names.
+      - name: Prepare platform name
+        run: |
+          platform="${{ matrix.platform }}"
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR image names must be lowercase; the owner login is already lowercase.
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/${{ matrix.service }}/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.service }}-cpu-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-cpu-${{ env.PLATFORM_PAIR }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}-${{ env.PLATFORM_PAIR }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Combine the per-architecture digests into one multi-arch tag, so a single
+  # `docker pull` resolves to the right image on any machine.
+  merge-cpu:
+    needs: build-cpu
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         service: [faces, analysis, aesthetic]
-        variant: [cpu, gpu]
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digest-${{ matrix.service }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute version tag
+        id: version
+        run: |
+          ref="${{ github.ref_name }}"
+          # Strip a leading v from release tags (v2.5.0 -> 2.5.0); fall back to the ref.
+          echo "value=${ref#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push manifest list
+        working-directory: /tmp/digests
+        run: |
+          image="ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}"
+          docker buildx imagetools create \
+            -t "${image}:cpu" \
+            -t "${image}:${{ steps.version.outputs.value }}-cpu" \
+            $(printf "${image}@sha256:%s " *)
+
+      - name: Verify published architectures
+        run: |
+          image="ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:cpu"
+          docker buildx imagetools inspect "$image"
+          # Fail loudly if either architecture is missing, rather than shipping
+          # an image that Apple Silicon (or Intel) cannot pull.
+          for arch in linux/amd64 linux/arm64; do
+            docker buildx imagetools inspect "$image" | grep -q "$arch" \
+              || { echo "::error::${image} has no ${arch} manifest"; exit 1; }
+          done
+
+  # GPU images are CUDA-based and therefore amd64-only.
+  build-gpu:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [faces, analysis, aesthetic]
     steps:
       - uses: actions/checkout@v4
 
@@ -39,32 +159,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # cpu -> Dockerfile, gpu -> Dockerfile.gpu
-      - name: Resolve Dockerfile
-        id: dockerfile
-        run: |
-          if [ "${{ matrix.variant }}" = "gpu" ]; then
-            echo "path=docker/${{ matrix.service }}/Dockerfile.gpu" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=docker/${{ matrix.service }}/Dockerfile" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Compute version tag
         id: version
         run: |
           ref="${{ github.ref_name }}"
-          # Strip a leading v from release tags (v2.5.0 -> 2.5.0); fall back to the ref.
           echo "value=${ref#v}" >> "$GITHUB_OUTPUT"
 
-      # GHCR image names must be lowercase; the owner login is already lowercase.
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ steps.dockerfile.outputs.path }}
+          file: docker/${{ matrix.service }}/Dockerfile.gpu
+          platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:${{ matrix.variant }}
-            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:${{ steps.version.outputs.value }}-${{ matrix.variant }}
-          cache-from: type=gha,scope=${{ matrix.service }}-${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-${{ matrix.variant }}
+            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:gpu
+            ghcr.io/${{ github.repository_owner }}/photostat-${{ matrix.service }}:${{ steps.version.outputs.value }}-gpu
+          cache-from: type=gha,scope=${{ matrix.service }}-gpu
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}-gpu

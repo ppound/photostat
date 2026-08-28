@@ -5,6 +5,7 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 ## Table of Contents
 
 - [First Launch](#first-launch)
+- [Backend Services](#backend-services)
 - [Configuring OpenSearch](#configuring-opensearch)
 - [Adding Directories](#adding-directories)
 - [Indexing Images](#indexing-images)
@@ -32,7 +33,15 @@ This guide covers the day-to-day usage of PhotoStat for managing and searching y
 
 ## First Launch
 
-When you first launch PhotoStat, you'll see the main window with eight tabs:
+On the very first launch, PhotoStat offers a **setup wizard** for its backend
+services — OpenSearch plus the optional AI containers. It checks for Docker,
+offers to install Docker Desktop, starts the engine, and brings up the services
+you choose. See [Backend Services](#backend-services) below.
+
+The wizard is entirely optional. Click Cancel to configure things yourself; it
+will offer again next launch unless you tick "Don't show this again".
+
+Behind it is the main window with nine tabs:
 
 - **Search** - Find and browse your indexed photos
 - **Index** - Manage directories and run indexing
@@ -42,8 +51,51 @@ When you first launch PhotoStat, you'll see the main window with eight tabs:
 - **Timeline** - Photos arranged by year and month
 - **On This Day** - Photos taken on this calendar day across all years
 - **Charts** - View visualizations of your collection
+- **Services** - Start and stop the Docker backend services
 
 ![Application Tabs](screenshots/app-tabs.png)
+
+---
+
+## Backend Services
+
+The **Services** tab controls the Docker containers PhotoStat uses for search
+and its AI features. You never need to type a compose command.
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `opensearch` | 9200 | The search index. Required. |
+| `faces` | 8001 | Face detection and clustering |
+| `analysis` | 8002 | Local tagging and captioning |
+| `aesthetic` | 8003 | Image-quality scoring |
+
+The tab shows the Docker engine state at the top, with a **Start Docker** button
+when the engine isn't running. Below that:
+
+- **Start All** / **Stop All** — the whole backend in one click
+- **Check for Image Updates** — pull newer images (confirms first; the download
+  is several GB on CPU and larger on GPU)
+- **Setup...** — reopen the wizard
+- A row per service showing its container state and health, with its own
+  Start/Stop button so you can run only what you need
+
+Two optional settings live here:
+
+- **Start these services when PhotoStat opens** — also starts the Docker engine
+  if needed, in the background
+- **Stop them when PhotoStat closes** — closing PhotoStat waits for the
+  containers to stop, with a "Close anyway" button if you don't want to wait
+
+Both are off by default. Stopping services never deletes anything: downloaded
+model weights and your search index live in named Docker volumes and survive.
+
+Expand **Log** at the bottom to see exactly what Docker is doing — useful while
+images download.
+
+> **Security note:** every service port is published on `127.0.0.1`, so only
+> this machine can reach them. OpenSearch runs with authentication disabled and
+> the AI services accept unauthenticated requests, so don't widen that binding
+> without putting authentication in front of them.
 
 ---
 
