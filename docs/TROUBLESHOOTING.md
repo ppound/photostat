@@ -153,6 +153,30 @@ docker compose -f ~/.photostat/docker-compose.yml logs -f faces
 
 If it never becomes healthy, check that container's logs for an error.
 
+### Error: "no matching manifest for linux/arm64/v8"
+
+The images being pulled were built only for Intel/AMD processors, and this is an
+Apple Silicon Mac. PhotoStat reports this as "The backend images are not
+published for this computer's processor type".
+
+PhotoStat 2.6.1 and earlier published amd64-only images. Later releases publish
+the CPU images for both architectures, so upgrading is the real fix.
+
+To run the Intel images under Rosetta emulation in the meantime, add a
+`platform` line to each service in `~/.photostat/docker-compose.yml`:
+
+```yaml
+  faces:
+    image: ghcr.io/ppound/photostat-faces:2.6.1-cpu
+    platform: linux/amd64
+```
+
+Then **Stop All** and **Start All** from the Services tab. Expect the AI
+features to be noticeably slower under emulation.
+
+Note the GPU images are Intel-only by design — they are CUDA builds, and CUDA
+does not exist on Apple Silicon. Macs should use the CPU profile.
+
 ### Images won't download
 
 The pull needs network access to `ghcr.io`. On a corporate network a proxy or

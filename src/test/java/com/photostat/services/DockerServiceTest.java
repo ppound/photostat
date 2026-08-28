@@ -182,6 +182,65 @@ public class DockerServiceTest {
         assertEquals(DockerService.ServiceState.UNKNOWN, DockerService.parseServiceState(null));
     }
 
+    // --- describeFailure ---
+    //
+    // These messages are the only explanation a user gets when a compose command
+    // fails, so each recognised cause must produce something actionable rather
+    // than a bare exit code.
+
+    private static String failure(String output) {
+        return DockerService.describeFailure("pull", 18, output, COMPOSE_FILE);
+    }
+
+    @Test
+    void architectureMismatchIsExplained() {
+        // What an Apple Silicon Mac gets from amd64-only images.
+        String message = failure(
+                "no matching manifest for linux/arm64/v8 in the manifest list entries");
+
+        assertTrue(message.toLowerCase().contains("processor"),
+                "should explain this is a CPU architecture problem, got: " + message);
+        assertFalse(message.contains("exit code 18"),
+                "should not fall through to the bare exit code");
+    }
+
+    @Test
+    void daemonDownIsExplained() {
+        String message = failure("Cannot connect to the Docker daemon at unix:///var/run/docker.sock");
+        assertTrue(message.contains("Docker engine is not running"), message);
+    }
+
+    @Test
+    void portConflictNamesTheComposeFile() {
+        String message = failure("Bind for 0.0.0.0:9200 failed: port is already allocated");
+        assertTrue(message.contains("9200"), message);
+        assertTrue(message.contains(COMPOSE_FILE.toString()),
+                "should point at the file the user can edit");
+    }
+
+    @Test
+    void diskFullIsExplained() {
+        assertTrue(failure("write /var/lib/docker: no space left on device")
+                .contains("disk space"));
+    }
+
+    @Test
+    void missingImageAndBlockedRegistryAreDistinguished() {
+        String missing = failure("manifest unknown");
+        String blocked = failure("unauthorized: authentication required");
+
+        assertTrue(missing.contains("could not be found"), missing);
+        assertTrue(blocked.contains("ghcr.io"), blocked);
+        assertNotEquals(missing, blocked, "these are different problems");
+    }
+
+    @Test
+    void unrecognisedFailureStillReportsTheExitCode() {
+        String message = failure("something entirely unexpected happened");
+        assertTrue(message.contains("18"), message);
+        assertTrue(message.contains("pull"), message);
+    }
+
     // --- service lists ---
 
     @Test

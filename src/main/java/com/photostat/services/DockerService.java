@@ -616,7 +616,7 @@ public class DockerService {
                 return new CommandResult(true, 0, output.toString(), null);
             }
 
-            String error = describeFailure(label, exitCode, output.toString());
+            String error = describeFailure(label, exitCode, output.toString(), getComposeFile());
             emit(progressCallback, error, true, error);
             return new CommandResult(false, exitCode, output.toString(), error);
 
@@ -694,7 +694,7 @@ public class DockerService {
     }
 
     /** Turn a non-zero exit into something a user can act on. */
-    private String describeFailure(String label, int exitCode, String output) {
+    static String describeFailure(String label, int exitCode, String output, Path composeFile) {
         String lower = output.toLowerCase(Locale.ROOT);
         if (lower.contains("cannot connect to the docker daemon")
                 || lower.contains("is the docker daemon running")
@@ -703,10 +703,26 @@ public class DockerService {
         }
         if (lower.contains("port is already allocated") || lower.contains("address already in use")) {
             return "A required port is already in use (PhotoStat needs 9200, 8001, 8002 and 8003). "
-                    + "Stop whatever is using it, or change the ports in " + getComposeFile();
+                    + "Stop whatever is using it, or change the ports in " + composeFile;
         }
         if (lower.contains("no space left on device")) {
             return "Docker ran out of disk space while pulling images.";
+        }
+        if (lower.contains("no matching manifest")) {
+            // The image exists but was not built for this CPU architecture --
+            // the usual case is an Apple Silicon Mac against amd64-only images.
+            return "The backend images are not published for this computer's processor type ("
+                    + System.getProperty("os.arch", "unknown") + "). "
+                    + "See docker/README.md for how to run the Intel images under emulation "
+                    + "until a matching build is available.";
+        }
+        if (lower.contains("manifest unknown") || lower.contains("not found")) {
+            return "The backend images could not be found in the registry. They may not have "
+                    + "been published for this version of PhotoStat yet.";
+        }
+        if (lower.contains("unauthorized") || lower.contains("denied")) {
+            return "The registry refused the download. The PhotoStat images are public, so this "
+                    + "is usually a proxy or firewall blocking ghcr.io.";
         }
         return "docker compose " + label + " failed with exit code " + exitCode;
     }

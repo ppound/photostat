@@ -59,6 +59,35 @@ are bound the way they are.
 
 Everything below is for running the containers by hand instead.
 
+## Processor architectures
+
+The CPU images are published for both `linux/amd64` (Intel/AMD) and
+`linux/arm64` (Apple Silicon), so `docker pull` picks the right one
+automatically.
+
+The GPU images are **amd64 only**. They are built on CUDA base images, and CUDA
+does not exist on Apple Silicon — a Mac should use the CPU images.
+
+If a pull fails with:
+
+```
+no matching manifest for linux/arm64/v8 in the manifest list entries
+```
+
+then the image you are pulling predates multi-arch publishing (PhotoStat 2.6.1
+and earlier were amd64 only). Either upgrade to a release whose images are
+multi-arch, or run the Intel images under emulation by adding a `platform` line
+to each service in `~/.photostat/docker-compose.yml`:
+
+```yaml
+  faces:
+    image: ghcr.io/ppound/photostat-faces:2.6.1-cpu
+    platform: linux/amd64        # run under Rosetta on Apple Silicon
+```
+
+Emulation works, but PyTorch and InsightFace run considerably slower under it —
+fine for trying things out, not something to rely on day to day.
+
 ## Prebuilt images — no clone required
 
 PhotoStat ships image-based Compose files and deploys them to your config
